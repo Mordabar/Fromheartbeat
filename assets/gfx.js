@@ -59,7 +59,12 @@ export function fit(g, text, maxW, start, weight = 700, family = FONT.sans, min 
 export function wrap(g, text, maxW) {
   const words = String(text).split(/\s+/), lines = [];
   let row = '';
-  for (const word of words) {
+  for (let word of words) {
+    while (g.measureText(word).width > maxW && word.length > 1) {          // a word wider than the line is cut, never allowed to overflow
+      let n = word.length - 1; while (n > 1 && g.measureText(word.slice(0, n)).width > maxW) n--;
+      if (row) { lines.push(row); row = ''; }
+      lines.push(word.slice(0, n)); word = word.slice(n);
+    }
     const test = row ? row + ' ' + word : word;
     if (g.measureText(test).width > maxW && row) { lines.push(row); row = word; } else row = test;
   }

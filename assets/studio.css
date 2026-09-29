@@ -19,7 +19,7 @@ body{height:100dvh;overflow:hidden}
 .caption[hidden]{display:none}
 .cap-kicker{margin:0 0 4px;font-size:10px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:#dcc8f8}
 .cap-title{margin:0;font:500 clamp(24px,6.8vw,30px)/1.08 var(--serif);letter-spacing:-.4px;color:#fff}
-.reset-view{position:fixed;z-index:11;right:14px;top:calc(var(--header,60px) + 2px);display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 13px;border-radius:999px;background:#130d20e6;border:1px solid #d0b5f655;color:#eadcff;font-size:12px;font-weight:700;backdrop-filter:blur(12px)}
+.reset-view{position:fixed;z-index:11;right:14px;top:auto;bottom:calc(var(--journey-h,0px) + 12px + env(safe-area-inset-bottom,0px));display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 13px;border-radius:999px;background:#130d20e6;border:1px solid #d0b5f655;color:#eadcff;font-size:12px;font-weight:700;backdrop-filter:blur(12px)}
 .reset-view[hidden]{display:none}
 .lobby-hint{position:fixed;z-index:8;left:0;right:0;bottom:max(20px,env(safe-area-inset-bottom));margin:0;padding:0 20px;text-align:center;font-size:12px;line-height:1.5;color:#e2d6f6;pointer-events:none;text-shadow:0 2px 14px #000,0 0 3px #000c}
 .lobby-hint[hidden]{display:none}.lobby-hint b{color:#ff8de6;letter-spacing:.5px}
@@ -28,7 +28,7 @@ body{height:100dvh;overflow:hidden}
 .journey{position:fixed;z-index:12;left:50%;bottom:max(10px,env(safe-area-inset-bottom));transform:translateX(-50%);width:min(580px,calc(100% - 20px));display:flex;flex-direction:column;gap:9px}
 .journey[hidden]{display:none}
 .j-steps{display:flex;justify-content:center;gap:9px;list-style:none;margin:0;padding:0}
-.j-step{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;border:1px solid #cdb2f455;background:#120c1fd0;color:#bfa9de;backdrop-filter:blur(10px);transition:transform .15s,background .2s}
+.j-step{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;border:1px solid #cdb2f455;background:#120c1fd0;color:#bfa9de;backdrop-filter:blur(10px);transition:transform .15s,background .2s}
 .j-step svg{width:19px;height:19px}.j-step:active{transform:scale(.94)}
 .j-step.done{color:#3dffc5;border-color:#3dffc58c}
 .j-step.current{background:var(--grad);color:#fff;border-color:transparent;box-shadow:0 0 22px -3px #b05cff}
@@ -60,7 +60,7 @@ body{height:100dvh;overflow:hidden}
  #options-dialog.expanded .products{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
  .caption{left:38px;right:auto;top:calc(var(--header,86px) + 4px);max-width:460px;padding:0}
  .cap-title{font-size:40px}.cap-kicker{font-size:11px}
- .reset-view{right:30px;top:calc(var(--header,86px) - 6px)}
+ .reset-view{right:30px;bottom:auto;top:calc(var(--header,86px) - 6px)}
  .header nav .hud-link{width:auto;padding:0 16px}.header nav .nav-btn .lbl{display:inline}
  .journey{left:calc(50% - 20px);width:min(620px,calc(100% - 120px))}
  body.options-open .journey{left:calc(50% - 250px)}
@@ -153,7 +153,7 @@ body{height:100dvh;overflow:hidden}
 #options-dialog .track-meta small{font-size:11px;white-space:normal}
 #options-dialog .track-art{width:48px;height:48px}
 #options-dialog .legal p{font-size:14px}
-#options-dialog .recap-row{grid-template-columns:76px 1fr auto;gap:6px}
+#options-dialog .recap-row{grid-template-columns:100px 1fr auto;gap:8px}
 #options-dialog .recap-row strong{font-size:12px}
 #options-dialog .step-checkout .summary{display:none}
 
@@ -175,5 +175,16 @@ body .audio-dock{position:fixed;z-index:25;left:10px;right:10px;top:auto;bottom:
 }
 @media(max-height:520px) and (min-width:600px){
  #options-dialog[open]{inset:56px 8px 8px auto;left:auto;width:min(440px,50vw);height:auto;max-height:none}
- .reset-view{top:6px;right:120px}
+ .reset-view{top:6px;bottom:auto;right:120px}
 }
+
+/* Narrow phones: the header must fit at 320px. "Mi sesión" lives in the menu there. */
+@media(max-width:430px){.header nav .hud-link[data-go=recover]{display:none}.header nav{gap:6px;min-width:0}.header .wordmark{font-size:18px}}
+@media(max-width:340px){.header .wordmark{font-size:16px}.brand-icon{width:22px;height:26px}}
+@media(max-width:380px){.j-steps{gap:4px}}
+#options-dialog .icon-btn,#options-dialog .icon-spacer{width:44px;height:44px}
+
+/* Choosing (genre, mood, voice) in plain text keeps the studio visible: a lower sheet on phones. */
+@media(max-width:899px) and (min-height:521px){body[data-view=genre] #options-dialog[open],body[data-view=mood] #options-dialog[open],body[data-view=voice] #options-dialog[open]{height:min(46dvh,420px)}}
+#options-dialog .step-mood .opt-ic{width:24px;height:24px}#options-dialog .step-mood .opt-ic svg{width:100%;height:100%}
+.light-mode #close-options{display:none}

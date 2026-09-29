@@ -86,6 +86,8 @@ export class Studio {
     // Guard: a broken HUD measurement must never send the camera away. Keep at least 160px each way, inside the viewport.
     const W = innerWidth, H = innerHeight, c = (v, lo, hi) => Math.min(hi, Math.max(lo, Number.isFinite(v) ? v : lo));
     let [x0, y0, x1, y1] = rect; x0 = c(x0, 0, Math.max(0, W - 160)); x1 = c(x1, x0 + 160, W); y0 = c(y0, 0, Math.max(0, H - 160)); y1 = c(y1, y0 + 160, H);
+    if (x1 - x0 < Math.min(W * 0.4, 240)) { x0 = 0; x1 = W; }          // a sliver is a measurement accident, not a layout
+    if (y1 - y0 < Math.min(H * 0.25, 200)) { y0 = 0; y1 = H; }
     const next = [x0, y0, x1, y1].map(Math.round);
     if (this.free && next.every((v, i) => Math.abs(v - this.free[i]) < 2)) return;
     const first = !this.free; this.free = next;
@@ -118,7 +120,7 @@ export class Studio {
     const L = spec.limits || {};
     return {pos, yaw: az, pitch: p, fov, focus: spec.focus.clone(), dist, fwd,
       offset: new THREE.Vector2((W / 2 - (x0 + x1) / 2) / W, (H / 2 - (y0 + y1) / 2) / H),
-      limits: {yaw: (L.yaw ?? 30) * RAD, pitchMin: (L.pMin ?? -8) * RAD, pitchMax: (L.pMax ?? 14) * RAD}};
+      limits: {yaw: (L.yaw ?? 30) * (this.portrait && (L.yaw ?? 30) < 40 ? 0.55 : 1) * RAD, pitchMin: (L.pMin ?? -8) * RAD, pitchMax: (L.pMax ?? 14) * RAD}};
   }
 
   moveTo(view, snap = false, {intro = false} = {}) {
@@ -171,7 +173,10 @@ export class Studio {
     this.touch = matchMedia('(pointer: coarse)').matches;
     this.mobile = this.touch || innerWidth < 760;
     this.renderer.setPixelRatio(this.pixelRatio()); this.renderer.setSize(innerWidth, innerHeight, false);
-    this.relayout(); this.moveTo(this.view, true);
+    // A browser bar sliding in or out (height only, a few dozen px) must not cut the camera's journey short.
+    const small = this.lastSize && this.lastSize[0] === innerWidth && Math.abs(this.lastSize[1] - innerHeight) < 120;
+    this.lastSize = [innerWidth, innerHeight];
+    this.relayout(); this.moveTo(this.view, !small);
   }
   relayout() { for (const st of Object.values(this.stations)) st.relayout?.(this.portrait); }
 
@@ -256,7 +261,10 @@ export class Studio {
     // Mood colour, key light following the active station
     this.accent.lerp(this.accentTarget, Math.min(1, dt * 3));
     this.m.accent.color.copy(this.accent); this.accentLight.color.copy(this.accent);
-    this.accentLight.intensity = 50 + this.energy * 90;
+    this.accentLight.intensity = 85 + this.energy * 90;
+    // The mood tints the air of the room too, not just the neon: background and fog drift toward it.
+    this._bg ||= new THREE.Color(); this._bg.set(0x07040f).lerp(this.accent, 0.2).multiplyScalar(0.9);
+    this.scene.background.copy(this._bg); this.scene.fog.color.copy(this._bg);
     const target = this.cam.focus;
     this.keyLight.target.position.lerp(target, Math.min(1, dt * 4)); this.keyLight.target.updateMatrixWorld();
     const kp = target.clone().addScaledVector(this.cam.fwd, -Math.min(this.cam.dist, 16) * 0.8).add(new THREE.Vector3(0, 7, 0));

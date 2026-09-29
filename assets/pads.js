@@ -18,7 +18,7 @@ function drawPad(g, w, h, item) {
   else drawIcon(g, item.icon, w / 2, y, size, {color: accent, width: 1.9, glow: 12});
   if (hasLabel) {
     g.fillStyle = '#f4eeff'; g.textAlign = 'center'; g.textBaseline = 'middle';
-    fit(g, item.label, w - 34, Math.round(w * 0.135), 700, FONT.sans, 12);
+    fit(g, item.label, w - 20, Math.round(w * 0.165), 700, FONT.sans, 12);
     g.fillText(item.label, w / 2, h * 0.84);
   }
 }

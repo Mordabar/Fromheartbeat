@@ -57,6 +57,8 @@ export class StudioGesture {
     const tap = this.points.size === 1 && !this.dragged;
     const wasDragging = this.dragging;
     this.points.delete(id);
+    // A finger left over after a pinch continues from where it is now, never from where it first landed.
+    if (this.points.size) { this.start = {...[...this.points.values()][0]}; this.samples.length = 0; }
     if (tap) this.actions.pick(x, y);
     else if (wasDragging && !this.points.size) {
       // Release velocity from the last ~90 ms of movement; a finger that stopped before lifting does not fling.

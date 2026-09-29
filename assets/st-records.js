@@ -85,7 +85,7 @@ export function buildRecords(s) {
     st.backdrop.scale.y = wallH; st.backdrop.position.y = (wallTop + wallBottom) / 2;
     st.frame.scale.y = wallH; st.frame.position.set(0, (wallTop + wallBottom) / 2, -1.2);
     st.screen.group.position.set(0, top + 1.55, 0.05);
-    st.layout = {portrait, top: wallTop, bottom: 0.2};
+    st.layout = {portrait, top: wallTop, bottom: -1.3};
   };
   st.update = (dt, t, c) => {
     const spinning = st.playing >= 0 && c.playing;
@@ -103,7 +103,7 @@ export function buildRecords(s) {
     st.pill.update(dt, c.hovered);
   };
   st.shot = portrait => {
-    const L = st.layout || {top: portrait ? 18 : 16, bottom: 0.2}, mid = (L.top + L.bottom) / 2;
+    const L = st.layout || {top: portrait ? 18 : 16, bottom: -1.3}, mid = (L.top + L.bottom) / 2;
     return {focus: g.localToWorld(new THREE.Vector3(0, mid, 0.5)), az: AZIMUTH.samples, pitch: 0.03, w: portrait ? 9.6 : 14.4, h: L.top - L.bottom + 2.4, limits: {yaw: 28, pMin: -8, pMax: 12}};
   };
   s.stations.samples = st; s.updaters.push(st.update);

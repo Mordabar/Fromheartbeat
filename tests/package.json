@@ -3,7 +3,7 @@
   "type": "module",
   "scripts": {
     "test": "node check-rig.mjs",
-    "e2e": "node e2e-flow.mjs && node e2e-camera.mjs && node e2e-secondary.mjs",
+    "e2e": "for m in mobile desktop small tablet; do node e2e-flow.mjs $m && node e2e-camera.mjs $m && node e2e-secondary.mjs $m || exit 1; done",
     "e2e:headed": "HEADED=1 node e2e-flow.mjs"
   },
   "devDependencies": {

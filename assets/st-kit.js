@@ -40,8 +40,8 @@ export class Knob {
     this.ring = put(top, new THREE.TorusGeometry(r * 1.05, 0.05, 8, 48), new THREE.MeshBasicMaterial({color, transparent: true, opacity: 0, toneMapped: false, blending: THREE.AdditiveBlending}), 0, 0, 0.1);
     this.glow = glowSprite(color, r * 4.2, 0); this.glow.position.z = -0.2; g.add(this.glow);
     if (label) {
-      const t = textPlane(r * 2.9, r * 0.8, (c, w, h) => { c.fillStyle = '#e6dbff'; c.textAlign = 'center'; c.textBaseline = 'middle'; fit(c, label, w * 0.94, h * 0.62, 700); c.fillText(label, w / 2, h / 2); }, {px: 150});
-      t.mesh.position.set(0, -r * 1.55, 0.05); g.add(t.mesh);
+      const t = textPlane(r * 2.4, r * 0.8, (c, w, h) => { c.shadowColor = '#000'; c.shadowBlur = 8; c.fillStyle = '#f2eaff'; c.textAlign = 'center'; c.textBaseline = 'middle'; fit(c, label, w * 0.98, h * 0.72, 700); c.fillText(label, w / 2, h / 2); }, {px: 150});
+      t.mesh.position.set(0, -r * 1.6, 0.3); t.mesh.material.depthTest = false; t.mesh.renderOrder = 6; g.add(t.mesh);
     }
     base.userData = {kind, target: this, action: action || {type: 'pick', kind, value}, id: id || `${kind}:${value}`};
     s.pickables.push(base);
@@ -79,7 +79,7 @@ export class Pill {
     }, {px: 170});
     this.plane.surface.redraw(this.state);
     g.add(this.plane.mesh);
-    const hit = this.hit = new THREE.Mesh(new THREE.PlaneGeometry(w * 1.02, h * 1.15), s.m.hit);
+    const hit = this.hit = new THREE.Mesh(new THREE.PlaneGeometry(w * 1.08, h * 1.6), s.m.hit);
     hit.position.z = 0.03; hit.userData = {action, id, target: this}; g.add(hit); s.pickables.push(hit);
     this.hov = 0; this.hotSprite = glowSprite(color, w * 1.3, 0); this.hotSprite.scale.set(w * 1.35, h * 2.2, 1); this.hotSprite.position.z = -0.05; g.add(this.hotSprite);
   }

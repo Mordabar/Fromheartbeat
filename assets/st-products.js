@@ -82,14 +82,14 @@ export function buildProducts(s) {
       const cardHit = new THREE.Mesh(new THREE.PlaneGeometry(CARD.w, CARD.h), m.hit); cardHit.position.z = 0.13; cardHit.userData = {action: {type: 'product', index, choose: false}, id: `product:${index}`, target: card}; card.add(cardHit); s.pickables.push(cardHit);
       const specSurface = new Surface(740, 700, drawSpec); specSurface.redraw({product, color, focus: false});
       const spec = put(grp, new THREE.PlaneGeometry(SPEC.w, SPEC.h), new THREE.MeshBasicMaterial({map: specSurface.tex, transparent: true, toneMapped: false}));
-      const pill = new Pill(s, {w: 3.5, h: 0.92, label: 'Elegir esta experiencia', action: {type: 'product', index, choose: true}, id: `product-choose:${index}`, color});
+      const pill = new Pill(s, {w: 3.7, h: 1.08, label: 'Elegir esta experiencia', action: {type: 'product', index, choose: true}, id: `product-choose:${index}`, color});
       grp.add(pill.group);
       return {group: grp, card, face, front, spec, specSurface, pill, cardHit, product, color, index, glow, ring, x: 0, z: 0, rot: 0, sc: 1, specSc: 1, lift: 0, hov: 0, dim: 1};
     });
     // Portrait navigation: two round arrows flank the choose button.
-    st.prev?.group.parent?.remove(st.prev.group); st.next?.group.parent?.remove(st.next.group);
-    st.prev = new Knob(s, {kind: 'nav', value: 'prev', icon: 'back', color: '#c6a2ff', r: 0.52, action: {type: 'product-step', dir: -1}, id: 'product-prev'});
-    st.next = new Knob(s, {kind: 'nav', value: 'next', icon: 'arrow', color: '#c6a2ff', r: 0.52, action: {type: 'product-step', dir: 1}, id: 'product-next'});
+    for (const k of [st.prev, st.next]) if (k) { k.group.parent?.remove(k.group); for (const h of k.group.children) { const i = s.pickables.indexOf(h); if (i >= 0) s.pickables.splice(i, 1); } const j = s.pickables.findIndex(o => o.userData?.target === k); if (j >= 0) s.pickables.splice(j, 1); }
+    st.prev = new Knob(s, {kind: 'nav', value: 'prev', icon: 'back', color: '#c6a2ff', r: 0.66, action: {type: 'product-step', dir: -1}, id: 'product-prev'});
+    st.next = new Knob(s, {kind: 'nav', value: 'next', icon: 'arrow', color: '#c6a2ff', r: 0.66, action: {type: 'product-step', dir: 1}, id: 'product-next'});
     g.add(st.prev.group, st.next.group);
     st.focus = Math.max(0, st.items.findIndex(it => it.product.code === st.chosen)); if (st.focus < 0) st.focus = 0;
     st.sig = null; st.relayout(s.portrait); st.snapLayout();

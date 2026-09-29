@@ -32,7 +32,7 @@ const ZONES={lobby:'Tu estudio',samples:'La pared de vinilos',info:'Información
 const catalogPerson=()=>boot.catalog.filter(p=>p.audience==='person');
 const selectedProduct=()=>catalogPerson().find(p=>p.code===draft.product)||catalogPerson().find(p=>p.code==='personalizada');
 
-async function api(action,data,query=''){const res=await fetch(`api.php?action=${action}${query}`,{method:data?'POST':'GET',headers:data?{'Content-Type':'application/json','X-CSRF-Token':boot?.csrf??''}:{},body:data?JSON.stringify(data):undefined});let json;try{json=await res.json();}catch{throw Error('No pudimos conectar con el estudio. Inténtalo de nuevo.');}if(!res.ok)throw Error(json.error||'No se pudo completar la solicitud.');return json;}
+async function api(action,data,query=''){let res;try{res=await fetch(`api.php?action=${action}${query}`,{method:data?'POST':'GET',headers:data?{'Content-Type':'application/json','X-CSRF-Token':boot?.csrf??''}:{},body:data?JSON.stringify(data):undefined})}catch{throw new Error('No pudimos conectar con el estudio. Revisa tu conexión e inténtalo de nuevo.');}let json;try{json=await res.json();}catch{throw Error('No pudimos conectar con el estudio. Inténtalo de nuevo.');}if(!res.ok)throw Error(json.error||'No se pudo completar la solicitud.');return json;}
 function toast(text){$('#toast').textContent=text;$('#toast').classList.add('visible');clearTimeout(toast.timer);toast.timer=setTimeout(()=>$('#toast').classList.remove('visible'),5000);}
 const wave=()=>`<span class="mini-wave" aria-hidden="true">${Array.from({length:16},(_,i)=>`<i style="height:${4+Math.abs(Math.sin(i*1.78))*16}px"></i>`).join('')}</span>`;
 const hex=n=>'#'+n.toString(16).padStart(6,'0');
@@ -98,7 +98,7 @@ function sessionView(){const o=currentOrder;if(!o)return shell({head:simpleHead(
 function legalView(privacy){return shell({cls:'tall',head:simpleHead(privacy?'Tu historia es <em>privada.</em>':'Antes de crear <em>tu canción.</em>','Versión 11 de septiembre de 2026.',lastView),body:`<article class="legal">${privacy?`<h2>Datos que tratamos y finalidad</h2><p>Recibimos tu nombre, correo, teléfono, brief musical y archivos que decidas compartir. Los utilizamos para gestionar tu pedido, crear la canción, atender solicitudes y entregar el resultado. Los datos de pago se procesan en Wompi; Fromheartbeat no recibe el número completo de tu tarjeta ni su código de seguridad.</p><h2>Tu historia y tus archivos</h2><p>Comparte sólo información que tengas derecho a usar. Evita datos sensibles innecesarios o información de menores sin autorización de su representante. El acceso al brief y los entregables se limita al equipo que produce la sesión y a los proveedores necesarios para prestarte el servicio, incluido el procesamiento tecnológico indicado en el producto.</p><h2>Acceso, conservación y derechos</h2><p>Puedes solicitar conocer, actualizar, rectificar o suprimir tus datos y revocar la autorización cuando corresponda, sin afectar obligaciones de conservación aplicables. Las solicitudes se reciben en el canal de contacto indicado al final. Los datos se conservan mientras sea necesario para el servicio y las obligaciones contables y contractuales; las copias de respaldo siguen su ciclo de eliminación.</p><h2>Cookies y enlaces privados</h2><p>Usamos una cookie de sesión para proteger tu acceso y almacenamiento del navegador para conservar el borrador mientras trabajas. No incorporamos publicidad ni seguimiento publicitario. El enlace enviado por correo permite acceder a tu pedido: no lo publiques ni lo compartas.</p>`:`<h2>Lo que compras</h2><p>Creamos una canción a partir de tu brief. Dedicatoria Musical utiliza un flujo de creación digital con IA y entrega MP3 y portada. Canción Personalizada añade interpretación humana, MP3 y WAV, portada, Listening Room y una ronda de ajustes. Full Experience incluye además video vertical, edición y una ronda de ajustes de video. La duración y los contenidos incluidos se detallan en cada producto.</p><h2>Pedido, pago y tiempos</h2><p>Tu pedido se guarda antes del pago. La producción se inicia cuando Wompi confirma el cobro y contamos con el brief y los materiales necesarios. El plazo se acuerda con el equipo según el alcance y la agenda; no se garantiza una fecha urgente sin acuerdo previo. Los precios personales se presentan en COP y el total se muestra antes del checkout.</p><h2>Revisión y entrega</h2><p>Los ajustes incluidos corresponden al brief acordado. Una nueva historia, una dirección musical distinta o trabajos audiovisuales de mayor complejidad requieren un nuevo acuerdo de alcance y precio. Los archivos se entregan por acceso privado y se notifica al correo del pedido.</p><h2>Derechos y uso</h2><p>Debes contar con autorización para proporcionar textos, nombres, fotografías y clips. Las experiencias personales se destinan al uso personal y al regalo; cualquier explotación comercial requiere acuerdo expreso. No se promete exclusividad sobre recursos que por su naturaleza o licencia no la permitan.</p><h2>Cancelaciones y reclamaciones</h2><p>Contacta al equipo con tu referencia para solicitar cambios, cancelación, corrección de un cobro o una reclamación. La respuesta considera el estado real de producción, el carácter personalizado del servicio y los derechos del consumidor aplicables. Estas condiciones no limitan los derechos legales que te correspondan.</p>`}<h2>Contacto y responsable</h2><p>${boot.legal.name?esc(boot.legal.name):'Fromheartbeat'}${boot.legal.taxId?' · NIT '+esc(boot.legal.taxId):''}${boot.legal.address?'<br>'+esc(boot.legal.address):''}${boot.support?`<br><a href="mailto:${esc(boot.support)}">${esc(boot.support)}</a>`:''}</p></article>`});}
 
 // ===== The 3D studio is the interface. What follows connects it to the flow, the HUD and the plain-text drawer. =====
-const isMobile=()=>innerWidth<760;
+const isMobile=()=>innerWidth<900;
 const optionsDialog=$('#options-dialog'), STEP_ICON={genre:'sliders',mood:'sparkle',voice:'mic',story:'lines',products:'star',checkout:'lock'};
 const DRAWER_VIEWS=['about','terms','privacy','recover','session','checkout','story'];
 const announce=text=>{const l=$('#live');l.textContent='';requestAnimationFrame(()=>{l.textContent=text;});};
@@ -109,9 +109,37 @@ function openOptions(){mountOptions();if(!optionsDialog.open){modalReturnFocus=d
 function closeOptions(){if(optionsDialog.open)optionsDialog.close();document.body.classList.remove('options-open');optionsDialog.classList.remove('expanded');renderHud();frameStudio();}
 function hydrateIcons(){document.querySelectorAll('.ico[data-icon]').forEach(el=>{el.innerHTML=iconSvg(el.dataset.icon);});}
 
+
+// Keyboard and screen-reader mirror of what can be touched in the 3D right now (visually hidden; focusing one lights the object).
+const KEY_LABEL=a=>{
+ switch(a.type){
+  case'pick':return a.kind==='bank'?`Banco ${a.value}`:a.kind==='nav'?'':`${PICK_SAY[a.kind]||a.kind}: ${a.value}`;
+  case'product':return a.choose?`Elegir la experiencia ${a.index+1}`:`Ver la experiencia ${a.index+1}`;
+  case'product-step':return a.dir<0?'Experiencia anterior':'Experiencia siguiente';
+  case'track':return`Escuchar la canción ${a.index+1}`;
+  case'rec':return'Crear mi canción';case'listen':return'Escuchar canciones';case'library':return'Ver toda la colección';
+  case'go':return{recover:'Abrir mi sesión',mood:'Elegir la emoción',terms:'Leer los términos',privacy:'Leer la privacidad'}[a.view]||`Ir a ${a.view}`;
+  default:return'';
+ }};
+let keysTimer=0,keysSig='';
+function syncKeys(){
+ const host=$('#stage-keys');if(!studio||!host)return;
+ const live=studio.pickables.filter(o=>{for(let p=o;p;p=p.parent)if(!p.visible)return false;return o.userData?.action;});
+ const items=live.map(o=>({o,label:KEY_LABEL(o.userData.action)})).filter(x=>x.label);
+ const sig=items.map(x=>x.o.userData.id).join('|');
+ const pressed=x=>{const a=x.o.userData.action;return a.type==='pick'?draft[a.kind]===a.value:false;};
+ if(sig!==keysSig){keysSig=sig;host.replaceChildren(...items.map(x=>{const b=document.createElement('button');b.type='button';b.textContent=x.label;
+  if(x.o.userData.action.type==='pick')b.setAttribute('aria-pressed',String(pressed(x)));
+  b.addEventListener('click',()=>onAction(x.o.userData.action));
+  b.addEventListener('focus',()=>{studio.hovered=x.o.userData.target||null;});b.addEventListener('blur',()=>{studio.hovered=null;});return b;}));}
+ else items.forEach((x,i)=>{if(x.o.userData.action.type==='pick')host.children[i]?.setAttribute('aria-pressed',String(pressed(x)));});
+}
+const scheduleKeys=()=>{clearTimeout(keysTimer);keysTimer=setTimeout(()=>{syncKeys();keysTimer=setTimeout(syncKeys,1800);},350);};
+
 // Caption and journey bar: the only chrome that lives over the 3D. Everything else happens in the scene.
 function renderHud(){
  if(!boot)return;
+ scheduleKeys();
  const i=FLOW.indexOf(view),cap=$('#caption'),jr=$('#journey'),drawer=optionsDialog.open,flow=i>=0;
  let kicker='',title='';
  if(flow){kicker=`Paso ${i+1} de ${FLOW.length} · ${STEPS[view].zone}`;title=STEPS[view].title;}
@@ -139,10 +167,12 @@ function frameStudio(){
  const W=innerWidth,H=innerHeight,shown=e=>e&&!e.hidden&&getComputedStyle(e).display!=='none'?e.getBoundingClientRect():null;
  let top=$('.header').getBoundingClientRect().bottom+4,bottom=H-6,left=0,right=W;
  const cap=shown($('#caption')),jr=shown($('#journey')),dr=optionsDialog.open?optionsDialog.getBoundingClientRect():null;
- if(cap&&isMobile())top=Math.max(top,cap.bottom+4);
+ if(cap&&cap.width>W*0.7)top=Math.max(top,cap.bottom+4);
  document.documentElement.style.setProperty('--journey-h',(jr?Math.round(H-jr.top):0)+'px');
  if(jr)bottom=Math.min(bottom,jr.top-6);
- if(dr){if(isMobile())bottom=Math.min(bottom,dr.top-6);else right=Math.min(right,dr.left-12);}
+ // The drawer is a bottom sheet or a side panel depending on the CSS: read what is really there, not a breakpoint.
+ if(dr){if(dr.width>W*0.7)bottom=Math.min(bottom,dr.top-6);else if(dr.left>W/2)right=Math.min(right,dr.left-12);else left=Math.max(left,dr.right+12);}
+ const dock=shown($('#audio-dock'));if(dock&&dock.width>W*0.7&&dock.top>H/2)bottom=Math.min(bottom,dock.top-6);
  studio.setFree([left,top,right,Math.max(top+120,bottom)]);
  const off=Math.abs(studio.rig.yaw)+Math.abs(studio.rig.pitch)+Math.abs(studio.rig.zoom-1)>0.03;$('#reset-view').hidden=!off;
 }
@@ -179,7 +209,7 @@ function applyPick(name,value){
  draft[name]=value;save();
  if(name==='mood')studio?.tone(value);
  if(name==='occasion'){const input=root.querySelector('input[name=occasion]');if(input)input.value=value;}
- studio?.pulse(name==='voice'?1:.7);sync3D();refreshFoot();
+ studio?.pulse(name==='voice'?1:.7);sync3D();refreshFoot();syncKeys();
 }
 const PICK_VIEW={genre:'genre',mood:'mood',voice:'voice',language:'voice',tempo:'voice'};
 const PICK_SAY={genre:'Género',mood:'Emoción',voice:'Voz',language:'Idioma',tempo:'Ritmo'};
@@ -187,7 +217,7 @@ function chooseProduct(index){const p=catalogPerson()[index];if(!p)return;produc
 function onAction(a){
  if(!a||!studio)return;
  studio.burst(studio.lastHit,a.type==='rec'?0xff3d7f:a.type==='listen'?0x22e4ff:studio.accent);
- if(studio.handle(a))return;
+ if(studio.handle(a)){scheduleKeys();return;}
  if(a.type==='pick'){
   const target=PICK_VIEW[a.kind];if(target&&view!==target)go(target);
   applyPick(a.kind,a.value);announce(`${PICK_SAY[a.kind]}: ${a.value}`);if(!optionsDialog.open)render(false);
@@ -242,7 +272,11 @@ function paymentTab(){if(returnsHere())return null;const w=window.open('','_blan
 function openPayment(tab,url){if(tab&&!tab.closed){tab.location.href=url;toast('El pago se abrió en otra pestaña. Esta sesión se actualiza sola.');}else location.assign(url);}
 
 // Gestures: one finger looks around (exactly, with limits), two fingers pinch, a tap touches an object.
-const gesture=new StudioGesture({look:(dx,dy)=>{studio?.lookAround(dx,dy);},start:()=>studio?.beginLook(),end:(vx,vy)=>studio?.endLook(vx,vy),zoom:ratio=>studio?.zoomBy(ratio),pick:(x,y)=>onAction(studio?.pick(x,y)?.action)});
+// A tap on an object can change the screen under the finger (the journey bar appears, a drawer opens); the browser then
+// delivers the same tap as a click to whatever is there now. That ghost click must not press an unrelated button.
+let stageTap={t:-1e9,x:0,y:0};
+document.addEventListener('click',e=>{if(e.detail>0&&performance.now()-stageTap.t<450&&Math.hypot(e.clientX-stageTap.x,e.clientY-stageTap.y)<14&&e.target.closest?.('#journey,.header,#audio-dock,#options-dialog,#reset-view')){e.preventDefault();e.stopImmediatePropagation();}},true);
+const gesture=new StudioGesture({look:(dx,dy)=>{studio?.lookAround(dx,dy);},start:()=>studio?.beginLook(),end:(vx,vy)=>studio?.endLook(vx,vy),zoom:ratio=>studio?.zoomBy(ratio),pick:(x,y)=>{stageTap={t:performance.now(),x,y};onAction(studio?.pick(x,y)?.action);}});
 {const stage=$('#stage');let hoverRaf=0;
  stage.addEventListener('pointerdown',e=>{if(e.button>0)return;gesture.down(e.pointerId,e.clientX,e.clientY,e.pointerType);stage.setPointerCapture(e.pointerId);stage.classList.add('grabbing');});
  stage.addEventListener('pointermove',e=>{if(gesture.points.size){gesture.move(e.pointerId,e.clientX,e.clientY);return;}if(e.pointerType==='mouse'&&!hoverRaf){const x=e.clientX,y=e.clientY;hoverRaf=requestAnimationFrame(()=>{hoverRaf=0;stage.style.cursor=studio?.hover(x,y)?'pointer':'grab';});}});
@@ -304,7 +338,7 @@ $('#menu-toggle').onclick=()=>{menu.showModal();$('#menu-toggle').setAttribute('
 $('#menu-close').onclick=closeMenu;
 menu.addEventListener('close',()=>$('#menu-toggle').setAttribute('aria-expanded','false'));
 menu.addEventListener('click',e=>{if(e.target===menu)closeMenu();});
-$('#quality-toggle').onclick=()=>{if(!studio)return;studio.setLight(!studio.light);document.body.classList.toggle('light-mode',studio.light);if(studio.light)openOptions();else closeOptions();sync3D();$('#quality-toggle').textContent=studio.light?'Activar estudio 3D':'Usar modo ligero';requestAnimationFrame(frameStudio);};
+$('#quality-toggle').onclick=()=>{if(!studio)return;studio.setLight(!studio.light);document.body.classList.toggle('light-mode',studio.light);if(studio.light)openOptions();else closeOptions();sync3D();$('#quality-toggle').textContent=studio.light?'Activar estudio 3D':'Usar modo ligero';if(menu.open)menu.close();requestAnimationFrame(frameStudio);};
 new ResizeObserver(()=>requestAnimationFrame(frameStudio)).observe(optionsDialog);
 document.fonts?.ready?.then(()=>requestAnimationFrame(frameStudio));
 document.addEventListener('focusin',e=>{if(e.target.matches('input,textarea')){document.body.classList.add('editing');requestAnimationFrame(frameStudio);}});

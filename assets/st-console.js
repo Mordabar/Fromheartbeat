@@ -103,7 +103,7 @@ export function buildConsole(s) {
   };
   st.shot = portrait => {
     const {top = portrait ? 12 : 9.5, boardH = portrait ? 8.6 : 6.6} = st.layout || {};
-    const bottom = top - boardH - 1.7, topY = top + 2.6, mid = (bottom + topY) / 2;
+    const bottom = top - boardH - 2.7, topY = top + 2.6, mid = (bottom + topY) / 2;
     return {focus: g.localToWorld(new THREE.Vector3(0, mid, 0.3)), az: AZIMUTH.genre, pitch: 0.02, w: portrait ? 8.4 : 11.6, h: topY - bottom, limits: {yaw: 28, pMin: -9, pMax: 12}};
   };
   s.stations.genre = st; s.updaters.push(st.update);

@@ -48,7 +48,7 @@ export function buildLounge(s) {
       c.fillStyle = '#a992d9'; c.font = `700 ${h * 0.065}px ${FONT.sans}`; c.fillText('UNA CANCIÓN PARA', px, h * 0.21);
       neonText(c, d.recipient.trim(), px, h * 0.39, {size: h * 0.2, color: '#ff8de6', align: 'left', blur: 20, maxW: w * 0.9});
       if (d.occasion?.trim()) {
-        const occ = d.occasion.trim(); c.font = `700 ${h * 0.07}px ${FONT.sans}`;
+        const occ = d.occasion.trim().replace(/^(.{22}).+$/, '$1…'); c.font = `700 ${h * 0.07}px ${FONT.sans}`;
         const tw = Math.min(c.measureText(occ).width, w * 0.5) + h * 0.16 + h * 0.13;
         roundRect(c, px, h * 0.53, tw, h * 0.11, h * 0.055); c.fillStyle = 'rgba(255,141,230,.16)'; c.fill(); c.strokeStyle = '#ff8de6'; c.lineWidth = 3; c.stroke();
         drawIcon(c, iconFor('occasion', occ), px + h * 0.075, h * 0.585, h * 0.075, {color: '#ff8de6', width: 2});
@@ -56,8 +56,9 @@ export function buildLounge(s) {
       }
       const story = (d.story || '').trim();
       c.fillStyle = story ? '#efe6ff' : '#8f7cb8'; c.font = `italic 500 ${h * 0.078}px ${FONT.serif}`;
-      const lines = wrap(c, story ? `“${story}${story.length > 150 ? '' : '”'}` : 'Aquí aparecerá tu historia…', w * 0.9);
-      lines.slice(0, 2).forEach((l, i) => c.fillText(i === 1 && lines.length > 2 ? l.replace(/\s*\S*$/, '…') : l, px, h * 0.735 + i * h * 0.09));
+      const lines = wrap(c, story ? `“${story}”` : 'Aquí aparecerá tu historia…', w * 0.9), more = lines.length > 2;
+      // The plaque shows the last two lines: it keeps moving while you type.
+      lines.slice(-2).forEach((l, i) => c.fillText(more && i === 0 ? '… ' + l : l, px, h * 0.735 + i * h * 0.09));
     }
     const n = (d.story || '').trim().length, k = Math.min(1, n / MIN);
     roundRect(c, px, h * 0.905, w * 0.5, h * 0.03, h * 0.015); c.fillStyle = 'rgba(255,255,255,.12)'; c.fill();

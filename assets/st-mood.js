@@ -20,11 +20,11 @@ class Orb {
     const icon = new Surface(128, 128, c => drawIcon(c, iconFor('mood', mood) === 'sparkle' && mood !== 'Inspiradora' ? 'sparkle' : (MOOD_ICON_FOR(mood)), 64, 64, 86, {color: '#ffffff', width: 2.2, glow: 8}), {aniso: 2});
     this.icon = new THREE.Sprite(new THREE.SpriteMaterial({map: icon.tex, transparent: true, toneMapped: false, depthTest: false, opacity: 0.95}));
     this.icon.scale.setScalar(0.92); this.icon.renderOrder = 5; g.add(this.icon);
-    const tag = textPlane(1.95, 0.5, (c, w, h) => {
+    const tag = textPlane(2.4, 0.62, (c, w, h) => {
       roundRect(c, 4, 4, w - 8, h - 8, h * 0.4); c.fillStyle = 'rgba(12,6,28,.86)'; c.fill(); c.lineWidth = 3; c.strokeStyle = col; c.stroke();
-      c.fillStyle = '#f6efff'; c.textAlign = 'center'; c.textBaseline = 'middle'; fit(c, mood, w * 0.86, h * 0.52, 700); c.fillText(mood, w / 2, h / 2 + 1);
+      c.fillStyle = '#f6efff'; c.textAlign = 'center'; c.textBaseline = 'middle'; fit(c, mood, w * 0.9, h * 0.6, 700); c.fillText(mood, w / 2, h / 2 + 1);
     }, {px: 150});
-    tag.mesh.position.set(0, -1.18, 0.1); g.add(tag.mesh);
+    tag.mesh.position.set(0, -1.22, 0.1); g.add(tag.mesh);
     const hit = new THREE.Mesh(new THREE.SphereGeometry(1.05, 12, 10), s.m.hit);
     hit.userData = {action: {type: 'pick', kind: 'mood', value: mood}, id: `mood:${mood}`, target: this}; g.add(hit); s.pickables.push(hit);
     this.hit = hit; this.sel = 0; this.hov = 0; this.appear = 0; this.press = 0; this.selected = false;
@@ -47,7 +47,7 @@ export function buildMood(s) {
     st.relayout(s.portrait); st.setDraft(st.draft || {});
   };
   st.relayout = portrait => {
-    const n = st.orbs.length || 1, rx = portrait ? 4.5 : 5.7, ry = portrait ? 6.1 : 5.5;
+    const n = st.orbs.length || 1, rx = portrait ? 4.1 : 5.7, ry = portrait ? 6.1 : 5.5;
     st.orbs.forEach((o, i) => { const a = i / n * Math.PI * 2; o.base.set(Math.sin(a) * rx, Math.cos(a) * ry, 0); });
     st.portrait = portrait;
   };
@@ -69,14 +69,14 @@ export function buildMood(s) {
     const bg = c.createLinearGradient(0, 0, 0, h); bg.addColorStop(0, '#221244'); bg.addColorStop(1, '#0d0620');
     roundRect(c, 8, 8, w - 16, h - 16, 40); c.fillStyle = bg; c.fill(); c.lineWidth = 6; c.strokeStyle = '#c6a2ff'; c.shadowColor = '#c6a2ff'; c.shadowBlur = 18; c.stroke(); c.shadowBlur = 0;
     c.textAlign = 'left'; c.textBaseline = 'middle';
-    c.fillStyle = '#a992d9'; c.font = `700 ${w * 0.036}px ${FONT.sans}`; c.fillText('FROMHEARTBEAT · TU SESIÓN', w * 0.1, h * 0.075);
+    c.fillStyle = '#a992d9'; c.font = `700 ${w * 0.042}px ${FONT.sans}`; c.fillText('FROMHEARTBEAT · TU SESIÓN', w * 0.1, h * 0.075);
     c.setLineDash([10, 10]); c.strokeStyle = 'rgba(198,162,255,.4)'; c.lineWidth = 3; c.beginPath(); c.moveTo(w * 0.08, h * 0.115); c.lineTo(w * 0.92, h * 0.115); c.stroke(); c.setLineDash([]);
     const rows = [['icon:sliders', 'SONIDO', [d.genre, d.mood].filter(Boolean).join(' · ') || '—'], ['icon:mic', 'VOZ', [d.voice, d.language, d.tempo].filter(Boolean).join(' · ') || '—'], ['icon:heart', 'PARA', [d.recipient, d.occasion].filter(Boolean).join(' · ') || '—'], ['icon:star', 'EXPERIENCIA', p ? p.name : '—']];
     rows.forEach(([ic, label, value], i) => {
       const y = h * (0.19 + i * 0.145);
       drawIcon(c, ic.slice(5), w * 0.13, y + h * 0.01, w * 0.09, {color: '#c6a2ff', width: 1.9});
-      c.fillStyle = '#a992d9'; c.font = `700 ${w * 0.032}px ${FONT.sans}`; c.textAlign = 'left'; c.fillText(label, w * 0.22, y - h * 0.026);
-      c.fillStyle = '#f6efff'; fit(c, value, w * 0.68, w * 0.062, 700); c.fillText(value, w * 0.22, y + h * 0.03);
+      c.fillStyle = '#a992d9'; c.font = `700 ${w * 0.04}px ${FONT.sans}`; c.textAlign = 'left'; c.fillText(label, w * 0.22, y - h * 0.026);
+      c.fillStyle = '#f6efff'; fit(c, value, w * 0.7, w * 0.076, 700, FONT.sans, 20); c.fillText(value, w * 0.22, y + h * 0.03, w * 0.72);
     });
     c.setLineDash([10, 10]); c.strokeStyle = 'rgba(198,162,255,.4)'; c.beginPath(); c.moveTo(w * 0.08, h * 0.79); c.lineTo(w * 0.92, h * 0.79); c.stroke(); c.setLineDash([]);
     c.fillStyle = '#a992d9'; c.font = `700 ${w * 0.036}px ${FONT.sans}`; c.fillText('TOTAL', w * 0.1, h * 0.845);

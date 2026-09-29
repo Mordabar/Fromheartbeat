@@ -80,7 +80,10 @@ const settle = (rig, s = 3) => { for (let i = 0; i < s * 60; i++) rig.update(1 /
   assert.deepEqual(log.at(-1), ['end', 0, 0]); log.length = 0;
   // Pinch: zoom ratio from the two-finger span; the drag ends cleanly first.
   g.down(1, 100, 100, 'touch'); t = 10; g.move(1, 130, 100); g.down(2, 200, 100, 'touch'); g.move(2, 300, 100); g.up(2, 300, 100); g.up(1, 130, 100);
-  assert.ok(log.some(l => l[0] === 'zoom' && l[1] > 1)); assert.ok(!log.some(l => l[0] === 'pick'));
+  assert.ok(log.some(l => l[0] === 'zoom' && l[1] > 1)); assert.ok(!log.some(l => l[0] === 'pick')); log.length = 0;
+  // The finger left after a pinch continues from where it is now: 4 px of movement is 4 px of look, not the distance since it landed.
+  g.down(1, 50, 300, 'touch'); g.down(2, 300, 300, 'touch'); g.move(2, 340, 300); g.move(1, 30, 300); g.up(2, 340, 300); g.move(1, 34, 300);
+  assert.deepEqual(log.filter(l => l[0] === 'look'), [['look', 4, 0]]);
 }
 
 console.log('PASS: exact 1:1 drag on phone and desktop, hard limits with elastic return, capped inertia, glide buttons, bounded zoom, tap/drag/pinch separation.');

@@ -4,7 +4,7 @@
 
 | Lo que pediste | Cómo quedó |
 |---|---|
-| El giro era inexacto y sin límites | El arrastre es **1:1 con el dedo**: 1 px de dedo = 1 px de escena, calculado con el campo de visión (móvil y escritorio por igual). Un arrastre de 300 px gira ~17°, no 180°. Cada estación tiene **tope de giro** (±28° en la mayoría, ±75° en el lobby) con retorno elástico, inercia corta y pellizco/rueda acotados (×0,86 – ×1,4). Flechas del teclado giran 5°; `Inicio` centra. |
+| El giro era inexacto y sin límites | El arrastre es **1:1 con el dedo**: 1 px de dedo = 1 px de escena, calculado con el campo de visión (móvil y escritorio por igual). Un arrastre de 300 px gira ~17°, no 180°. Cada estación tiene **tope de giro** (±28° en escritorio y ±15° en móvil vertical; ±75° en el lobby) con retorno elástico, inercia corta y pellizco/rueda acotados (×0,86 – ×1,4). Flechas del teclado giran 5°; `Inicio` centra. |
 | Textos flotantes sobre el 3D | **Ya no hay etiquetas flotantes.** Las opciones son objetos del estudio con el nombre grabado. |
 | Género sin iconos representativos | 43 géneros con **iconos vectoriales propios** (maracas, acordeón, sombrero, disco-bola, saxo…), sin emojis (que cambian según el dispositivo). También emociones, voces, ritmos, ocasiones y paquetes. |
 | El modal tapaba el 3D | Elegir opciones **no abre ningún modal**. Solo los formularios (historia, datos y pago) usan un cajón lateral (escritorio) o inferior (móvil) que **no es modal**: el estudio sigue vivo y la cámara re-encuadra en el espacio libre. |
@@ -70,9 +70,26 @@ Sirve el sitio con `php -S 127.0.0.1:8090 -t .` (necesita `private/config/.env` 
 * Sin WebGL, con «ahorro de datos» o con el botón «Usar modo ligero» del menú se usan los formularios de siempre (cajón siempre abierto).
 * El botón «Ver en texto plano» ofrece cada paso como formulario accesible; los cambios se reflejan en el 3D y viceversa.
 * Cada selección se anuncia por una región `aria-live`. Navegación por teclado: `Tab`, flechas para mirar, `Inicio` para centrar, `Esc` cierra el cajón.
+* **Todo objeto 3D tiene un espejo para teclado y lector de pantalla** (botones invisibles, `#stage-keys`): con `Tab` se llega a cada pad, orbe, banco, disco o paquete; `Enter` lo elige y el objeto se ilumina en el estudio. Se actualiza solo al cambiar de paso.
 * Respeta `prefers-reduced-motion`.
 
+## Revisión adversarial (qué se corrigió)
+
+Un revisor independiente probó 8 tamaños de pantalla × 10 vistas y encontró fallos que se corrigieron:
+
+* Menú ☰ cortado en móviles ≤ 390 px → «Mi sesión» pasa al menú en pantallas estrechas; el encabezado cabe hasta en 320 px.
+* Tablet vertical (760–899 px) con la escena negra al abrir el cajón → el encuadre ahora **mide el cajón real** (hoja inferior o panel lateral) en vez de suponerlo por el ancho, y ignora mediciones absurdas.
+* El reproductor tapaba los bancos de género → la cámara descuenta el reproductor.
+* «Ver toda la colección» cortado, flechas y píldoras pequeñas → más margen de cámara y zonas táctiles mayores.
+* Salto de cámara tras pellizcar y mover un dedo → corregido (con prueba automática).
+* Etiquetas ilegibles (emociones, bancos, pads, ticket) → más grandes.
+* Sin acceso por teclado a las opciones 3D → espejo accesible (arriba).
+* Mensajes de error de red en inglés, placa de historia que no escribía lo último ni partía palabras largas, modo ligero sin salida, límite de giro demasiado amplio en móvil (ahora ±15° en vertical, como se indica arriba), color de la emoción más presente (fondo y niebla).
+
 ## Límites conocidos
+
+* El texto largo del panel «Qué incluye» sigue siendo pequeño en móvil (unos 9 px): es la consecuencia de tres paquetes con muchas ventajas; el botón «Ver en texto plano» ofrece el detalle legible.
+* En móvil apaisado el estudio es pequeño por falta de alto; se usa un panel lateral y la barra de recorrido compacta, pero es el modo menos cómodo.
 
 * No se ejecutó PHP + MySQL + Wompi + SMTP reales en el entorno de desarrollo: los pedidos, el pago, el correo y la persistencia del catálogo deben probarse en el hosting (ver «Prueba de aceptación» de `LEEME-V4.md`).
 * El aspecto se validó con WebGL por software; el rendimiento en dispositivos concretos conviene revisarlo en un teléfono real.

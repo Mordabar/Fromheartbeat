@@ -22,7 +22,7 @@ await step('tapping a record plays it and shows the mini player', async () => {
   const free = await F(() => window.__fhb.studio.free); expect(free[3] - free[1] > 300, 'framing collapsed: ' + free);
 });
 await step('the collection list opens in the drawer', async () => { await F(() => window.__fhb.onAction({type: 'library'})); await sleep(300); expect(await F(() => document.querySelectorAll('.track').length) >= 6, 'no tracks'); await page.click('#close-options'); });
-await step('Mi sesión lists the orders of this device', async () => { await page.click('.hud-link[data-go=recover]'); await t.settle(3); expect(await F(() => document.querySelectorAll('.my-order').length) === 1, 'no order'); await t.shot('b1-recover'); });
+await step('Mi sesión lists the orders of this device', async () => { if (t.width <= 430) { await page.click('#menu-toggle'); await sleep(200); await page.click('#studio-menu [data-go=recover]'); } else await page.click('.hud-link[data-go=recover]'); await t.settle(3); expect(await F(() => document.querySelectorAll('.my-order').length) === 1, 'no order'); await t.shot('b1-recover'); });
 await step('opening an order updates the 3D terminal', async () => { await page.click('.my-order'); await t.settle(3.5); expect(await F(() => !!window.__fhb.studio.stations.session.order?.statusLabel), 'terminal not updated'); await page.click('#close-options'); await t.settle(2); await t.shot('b2-terminal'); });
 await step('the information wall opens the legal pages', async () => { await F(() => window.__fhb.go('info')); await t.settle(3.5); await t.tap('info:terms'); await t.settle(3); expect((await t.state()).view === 'terms', 'not terms'); await t.shot('c1-terms'); await page.click('#close-options'); });
 await step('the menu opens and closes', async () => { await page.click('#menu-toggle'); await sleep(200); expect(await F(() => document.getElementById('studio-menu').open), 'menu closed'); await page.click('#menu-close'); });
@@ -31,6 +31,12 @@ await step('plain-text mode: a DOM option updates the 3D, and the mode persists'
   await page.click('.opt[data-value="Bachata"]'); await t.settle(1);
   expect(await F(() => window.__fhb.studio.stations.genre.board.selected === 'Bachata'), '3D did not follow the DOM');
   await page.click('#next'); await t.settle(3); expect(await F(() => document.getElementById('options-dialog').open), 'plain mode did not persist to the next step'); await page.click('#close-options');
+});
+await step('keyboard: every 3D option is reachable and selectable', async () => {
+  await F(() => window.__fhb.go('genre')); await t.settle(3); await sleep(2500);
+  const n = await F(() => document.querySelectorAll('#stage-keys button').length); expect(n >= 12, 'only ' + n + ' keyboard targets');
+  await page.focus('#stage-keys button:has-text("Género: Salsa")'); await page.keyboard.press('Enter'); await t.settle(1);
+  expect((await t.state()).draft.genre === 'Salsa', 'Enter did not choose'); expect(await F(() => document.querySelector('#stage-keys button[aria-pressed=true]')?.textContent === 'Género: Salsa'), 'aria-pressed not synced');
 });
 await step('checkout submits and lands in the session (mocked server)', async () => {
   await F(() => Object.assign(window.__fhb.draft(), {genre: 'Salsa', mood: 'Alegre', voice: 'Dúo', recipient: 'Luna', occasion: 'Boda', story: 'Una historia lo bastante larga para pasar la validación mínima.'}));
