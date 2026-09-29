@@ -1,1 +1,12 @@
-{"private":true,"type":"module","scripts":{"test":"node check-flow.mjs && node check-camera.mjs && node check-scene.mjs && node check-spatial-controls.mjs"},"devDependencies":{"linkedom":"0.18.12"}}
+{
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node check-rig.mjs",
+    "e2e": "node e2e-flow.mjs && node e2e-camera.mjs && node e2e-secondary.mjs",
+    "e2e:headed": "HEADED=1 node e2e-flow.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.56.1"
+  }
+}

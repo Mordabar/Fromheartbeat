@@ -164,4 +164,16 @@ body{height:100dvh;overflow:hidden}
 
 /* --- mini player: floats over the scene, above the journey bar (mobile) or in the corner (desktop) --- */
 body .audio-dock{position:fixed;z-index:25;left:10px;right:10px;top:auto;bottom:calc(var(--journey-h,0px) + 14px + env(safe-area-inset-bottom,0px));width:auto;padding:7px 9px 7px 7px;border-radius:18px;background:#140b28ee;backdrop-filter:blur(16px)}
-@media(min-width:900px){body .audio-dock{left:auto;right:28px;bottom:24px;width:min(460px,40vw)}body.options-open .audio-dock{right:auto;left:28px}}
+@media(min-width:900px){body .audio-dock{left:auto;right:28px;bottom:calc(var(--journey-h,0px) + 18px);width:min(460px,40vw)}body.options-open .audio-dock{right:auto;left:28px;bottom:24px}}
+
+/* --- phones held sideways: the HUD shrinks so the studio keeps the screen --- */
+@media(max-height:520px){
+ .j-steps,.caption{display:none}
+ .j-btn{flex-basis:46px;height:46px}.j-next{height:46px;min-height:46px;font-size:14px}
+ .journey{bottom:max(6px,env(safe-area-inset-bottom));width:min(520px,calc(100% - 20px))}
+ .lobby-hint{bottom:max(60px,calc(env(safe-area-inset-bottom) + 54px));font-size:11px}
+}
+@media(max-height:520px) and (min-width:600px){
+ #options-dialog[open]{inset:56px 8px 8px auto;left:auto;width:min(440px,50vw);height:auto;max-height:none}
+ .reset-view{top:6px;right:120px}
+}

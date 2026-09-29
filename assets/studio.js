@@ -3,6 +3,7 @@ import {LookRig} from './camera-rig.js';
 import {makeMaterials, buildWorld, MOODS} from './world.js';
 import {buildStations} from './stations.js';
 import {glowTexture, damp, easeInOut, shortestAngle} from './gfx.js';
+import {Bursts} from './fx.js';
 import {RAD, ROOM_RADIUS} from './layout.js';
 
 export {MOODS};
@@ -13,7 +14,8 @@ const STATION_OF = {lobby: 'stage', mood: 'stage', checkout: 'stage', genre: 'ge
 export class Studio {
   constructor(canvas) {
     this.canvas = canvas;
-    this.mobile = matchMedia('(pointer: coarse)').matches || innerWidth < 760;
+    this.touch = matchMedia('(pointer: coarse)').matches;
+    this.mobile = this.touch || innerWidth < 760;
     this.still = matchMedia('(prefers-reduced-motion: reduce)').matches;
     this.light = Boolean(navigator.connection?.saveData);
     this.view = 'lobby'; this.energy = 0; this.kick = 0; this.time = 0; this.last = 0;
@@ -26,7 +28,12 @@ export class Studio {
     if (!this.light) this.init();
   }
 
-  get portrait() { return innerWidth / innerHeight < 0.85; }
+  // Portrait layouts follow the device orientation on touch screens: a soft keyboard shrinks the viewport, and the
+  // studio must not flip to its landscape arrangement while somebody types. On desktop the window shape decides.
+  get portrait() {
+    const o = this.touch && screen.orientation?.type;
+    return o ? o.startsWith('portrait') && innerWidth < 900 : innerWidth / innerHeight < 0.85;
+  }
 
   init() {
     if (this.renderer) return;
@@ -44,6 +51,7 @@ export class Studio {
       this.m = makeMaterials(this);
       buildWorld(this);
       buildStations(this);
+      this.fx = new Bursts(this.scene, this.mobile ? 160 : 260);
       this.scene.updateMatrixWorld(true);
       addEventListener('resize', () => this.resize());
       addEventListener('pointermove', e => { if (e.pointerType === 'mouse') this.pointer.set(e.clientX / innerWidth * 2 - 1, e.clientY / innerHeight * 2 - 1); }, {passive: true});
@@ -64,6 +72,15 @@ export class Studio {
   setPlaying(index) { this.playingIndex = index; this.stations.samples?.setPlaying?.(index); }
   tone(mood) { this.accentTarget.set(MOODS[mood] || MOODS.Emotiva); }
   pulse(strength = 1) { this.kick = Math.max(this.kick, strength); }
+  // A few sparks where the visitor touched (accent colour unless told otherwise).
+  burst(point = this.lastHit, color = this.accent) { if (this.fx && point && !this.still) this.fx.emit(point, color, {count: this.mobile ? 20 : 30, speed: 3.8}); }
+  // The stage erupts: used when an order has been created or paid.
+  celebrate() { this.celebrating = true; this.pulse(1); }
+  fireCelebration() {
+    // Waits for the camera to arrive, then erupts where the visitor is looking (terminal in a session, the logo elsewhere).
+    const at = this.view === 'session' ? this.stations.session.group.localToWorld(new THREE.Vector3(0, 6.4, 0.5)) : this.stage.group.localToWorld(new THREE.Vector3(0, 8.6, 3));
+    for (const c of [this.accent, new THREE.Color(0xff4fd8), new THREE.Color(0x22e4ff), new THREE.Color(0xffd23f)]) this.fx.emit(at, c, {count: this.mobile ? 30 : 48, speed: 6.5, ring: true, up: 1.2});
+  }
   // The rectangle of the screen that is not covered by HUD or drawer: the subject is centred inside it.
   setFree(rect) {
     // Guard: a broken HUD measurement must never send the camera away. Keep at least 160px each way, inside the viewport.
@@ -72,7 +89,9 @@ export class Studio {
     const next = [x0, y0, x1, y1].map(Math.round);
     if (this.free && next.every((v, i) => Math.abs(v - this.free[i]) < 2)) return;
     const first = !this.free; this.free = next;
-    if (this.renderer) this.moveTo(this.view, first);
+    // The very first framing of the lobby is a slow fly-in (skipped for reduced motion, deep links and tests).
+    const intro = first && this.view === 'lobby' && !this.still && !this.snapCamera && !/[?&](session|e2e)/.test(location.search);
+    if (this.renderer) this.moveTo(this.view, first && !intro, {intro});
   }
   setLight(light) {
     this.light = light;
@@ -81,7 +100,7 @@ export class Studio {
 
   // ---- Camera ----------------------------------------------------------------------------------------------------
   pixelRatio() { return Math.min(devicePixelRatio || 1, this.mobile ? 1.75 : 2, Math.sqrt((this.mobile ? 3.0e6 : 4.6e6) / (innerWidth * innerHeight))); }
-  baseFov() { const w = innerWidth, h = innerHeight; return w / h < 0.85 ? (h < 640 ? 70 : 62) : (h < 520 ? 58 : w < 1100 ? 54 : 46); }
+  baseFov() { const w = innerWidth, h = innerHeight; return this.portrait ? (h < 640 ? 70 : 62) : (h < 520 ? 58 : w < 1100 ? 54 : 46); }
 
   // The camera state (position, heading, pitch, fov, view offset) that frames `view` inside the free rectangle.
   targetFor(view) {
@@ -102,19 +121,19 @@ export class Studio {
       limits: {yaw: (L.yaw ?? 30) * RAD, pitchMin: (L.pMin ?? -8) * RAD, pitchMax: (L.pMax ?? 14) * RAD}};
   }
 
-  moveTo(view, snap = false) {
+  moveTo(view, snap = false, {intro = false} = {}) {
     const changed = view !== this.view; this.view = view;
     if (!this.renderer) return;
     for (const st of Object.values(this.stations)) st.setView?.(view);
     const to = this.targetFor(view);
     // Whatever the visitor had rotated or zoomed becomes part of the starting pose, so nothing jumps.
-    const from = this.cam ? this.effectiveCamera() : to;
+    const from = intro ? {pos: to.pos.clone().add(new THREE.Vector3(0, 9, 14)), yaw: to.yaw + 0.6, pitch: to.pitch - 0.32, fov: to.fov + 10, offset: to.offset.clone()} : this.cam ? this.effectiveCamera() : to;
     this.rig.setLimits({yaw: to.limits.yaw, pitchMin: to.limits.pitchMin, pitchMax: to.limits.pitchMax});
     this.rig.vYaw = this.rig.vPitch = 0; this.rig.yaw = this.rig.pitch = 0; this.rig.setZoom(1); this.rig.homing = false;
     this.cam = to;
     if (snap || this.still || this.snapCamera) { this.tween = null; this.shown = {pos: to.pos.clone(), yaw: to.yaw, pitch: to.pitch, fov: to.fov, offset: to.offset.clone()}; this.applyCamera(); return; }
     const dist = from.pos.distanceTo(to.pos), turn = Math.abs(shortestAngle(to.yaw - from.yaw));
-    this.tween = {t: 0, dur: changed ? Math.min(2.4, 1.05 + dist * 0.028 + turn * 0.32) : 0.7, from, lift: changed ? Math.min(2.4, dist * 0.06 + turn * 0.6) : 0};
+    this.tween = {t: 0, dur: intro ? 3.6 : changed ? Math.min(2.4, 1.05 + dist * 0.028 + turn * 0.32) : 0.7, from, lift: intro ? 0 : changed ? Math.min(2.4, dist * 0.06 + turn * 0.6) : 0};
   }
 
   // Current pose including the visitor's own look offsets.
@@ -149,7 +168,8 @@ export class Studio {
 
   resize() {
     if (!this.renderer) return;
-    this.mobile = matchMedia('(pointer: coarse)').matches || innerWidth < 760;
+    this.touch = matchMedia('(pointer: coarse)').matches;
+    this.mobile = this.touch || innerWidth < 760;
     this.renderer.setPixelRatio(this.pixelRatio()); this.renderer.setSize(innerWidth, innerHeight, false);
     this.relayout(); this.moveTo(this.view, true);
   }
@@ -161,6 +181,7 @@ export class Studio {
     this.raycaster.setFromCamera(new THREE.Vector2(x / innerWidth * 2 - 1, -(y / innerHeight) * 2 + 1), this.camera);
     const live = this.pickables.filter(o => { for (let p = o; p; p = p.parent) if (!p.visible) return false; return true; });
     const hit = this.raycaster.intersectObjects(live, false)[0];
+    if (hit) this.lastHit = hit.point.clone();
     return hit ? hit.object.userData : null;
   }
   hover(x, y) { const h = this.pick(x, y); this.hovered = h?.action ? h.target : null; return !!h?.action; }
@@ -243,5 +264,7 @@ export class Studio {
 
     const ctx = {playing, data: this.data, beat, energy: this.energy, accent: this.accent, view: this.view, hovered: this.hovered};
     for (const u of this.updaters) u(dt, t, ctx);
+    if (this.celebrating && !this.tween && this.fx && !this.still) { this.celebrating = false; this.fireCelebration(); }
+    this.fx?.update(dt);
   }
 }

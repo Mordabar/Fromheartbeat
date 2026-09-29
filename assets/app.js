@@ -186,6 +186,7 @@ const PICK_SAY={genre:'Género',mood:'Emoción',voice:'Voz',language:'Idioma',te
 function chooseProduct(index){const p=catalogPerson()[index];if(!p)return;productPreview=index;applyPick('product',p.code);announce(`Experiencia elegida: ${p.name}`);if(!optionsDialog.open)render(false);}
 function onAction(a){
  if(!a||!studio)return;
+ studio.burst(studio.lastHit,a.type==='rec'?0xff3d7f:a.type==='listen'?0x22e4ff:studio.accent);
  if(studio.handle(a))return;
  if(a.type==='pick'){
   const target=PICK_VIEW[a.kind];if(target&&view!==target)go(target);
@@ -228,7 +229,7 @@ document.addEventListener('submit',async e=>{e.preventDefault();const form=e.tar
    // The song is saved: start a clean draft for a future one, keeping the buyer's contact details.
    draft={...draft,genre:'',mood:'',voice:'',recipient:'',occasion:'',story:'',details:'',consent:false,key:crypto.randomUUID()};flowView=null;trail.length=0;save();
    if(boot.commerceReady){try{openPayment(tab,(await api('checkout',{reference:order.reference})).url);}catch(err){tab?.close();await loadOrder(order.reference);$('#payment-error').textContent=err.message;return;}}
-   await loadOrder(order.reference);return;}
+   await loadOrder(order.reference);studio?.celebrate();return;}
   if(form.id==='recover-form'){const data=await api('recover',{email:form.elements.email.value});$('#recover-result').textContent=data.message;}
   if(form.id==='feedback-form'){await api('feedback',{reference:currentOrder.reference,message:form.elements.message.value});await loadOrder(currentOrder.reference);toast('Tu comentario llegó al estudio.');}
   if(form.id==='source-form'){const data=new FormData(form);data.append('reference',currentOrder.reference);const res=await fetch('api.php?action=upload',{method:'POST',headers:{'X-CSRF-Token':boot.csrf},body:data});const json=await res.json();if(!res.ok)throw Error(json.error);await loadOrder(currentOrder.reference);toast('Archivo guardado en tu sesión.');}
@@ -293,7 +294,7 @@ async function start(){try{boot=await api('bootstrap');if(Array.isArray(boot.tra
 start();
 // While a payment is open, check its result often (the server asks Wompi) and celebrate when it is approved.
 let lastOrderPoll=0;
-const pollOrder=async()=>{if(view!=='session'||!currentOrder||document.hidden||document.activeElement?.matches('input,textarea')||[...root.querySelectorAll('audio')].some(a=>!a.paused))return;const pending=['created','payment_pending'].includes(currentOrder.status);if(Date.now()-lastOrderPoll<(pending?4000:20000))return;lastOrderPoll=Date.now();const signature=o=>JSON.stringify([o.status,o.production_stage,o.files,o.history]);const before=currentOrder;try{const o=(await api('order',null,'&reference='+encodeURIComponent(currentOrder.reference))).order;if(signature(o)!==signature(before)){currentOrder=o;render(false);if(o.status==='paid'&&before.status!=='paid'){toast('¡Pago confirmado! Tu canción entra a producción.');studio?.pulse(1);}}}catch{}};
+const pollOrder=async()=>{if(view!=='session'||!currentOrder||document.hidden||document.activeElement?.matches('input,textarea')||[...root.querySelectorAll('audio')].some(a=>!a.paused))return;const pending=['created','payment_pending'].includes(currentOrder.status);if(Date.now()-lastOrderPoll<(pending?4000:20000))return;lastOrderPoll=Date.now();const signature=o=>JSON.stringify([o.status,o.production_stage,o.files,o.history]);const before=currentOrder;try{const o=(await api('order',null,'&reference='+encodeURIComponent(currentOrder.reference))).order;if(signature(o)!==signature(before)){currentOrder=o;render(false);if(o.status==='paid'&&before.status!=='paid'){toast('¡Pago confirmado! Tu canción entra a producción.');studio?.celebrate();}}}catch{}};
 setInterval(pollOrder,5000);addEventListener('focus',pollOrder);
 
 // Compact application navigation, with native modal focus containment and Escape support.
