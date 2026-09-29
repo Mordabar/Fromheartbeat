@@ -1,0 +1,1 @@
+{"private":true,"type":"module","scripts":{"test":"node check-flow.mjs && node check-camera.mjs && node check-scene.mjs && node check-spatial-controls.mjs"},"devDependencies":{"linkedom":"0.18.12"}}

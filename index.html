@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="es">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"><meta name="theme-color" content="#07040f"><meta name="description" content="Convierte tu historia en una canción personalizada. Entra al estudio Fromheartbeat, elige tu sonido tocando el estudio y crea un regalo que se queda."><title>Fromheartbeat — Cada historia tiene una canción</title><link rel="icon" href="assets/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="assets/style.css"><link rel="preload" as="image" href="assets/images/icono-logo-png-fromheartbeat.png"><link rel="stylesheet" href="assets/experience.css"><link rel="stylesheet" href="assets/studio.css"></head>
+<body>
+<a class="skip" href="#content">Saltar al contenido</a>
+<div id="environment" aria-hidden="true"><div class="studio-photo"></div><canvas id="studio"></canvas><div class="shade"></div></div>
+<div id="stage" class="stage" role="group" aria-label="Estudio interactivo en 3D. Arrastra para mirar, pellizca para acercar y toca los objetos para elegir. Con teclado usa las flechas para mirar; el botón «Ver en texto plano» ofrece la misma información en formularios."></div>
+<header class="header"><a class="wordmark" href="./" aria-label="Fromheartbeat, inicio"><img class="brand-icon" src="assets/images/icono-logo-png-fromheartbeat.png" alt="">from<span>heart</span>beat</a><nav aria-label="Estudio">
+ <button class="nav-btn hud-link" data-go="samples" aria-label="Escuchar canciones"><span class="ico" data-icon="headphones"></span><span class="lbl">Escuchar</span></button>
+ <button class="nav-btn hud-link" data-go="recover" aria-label="Mi sesión"><span class="ico" data-icon="user"></span><span class="lbl">Mi sesión</span></button>
+ <button class="nav-btn sound-toggle" id="sound-toggle" aria-label="Reproducir una canción" aria-pressed="false"><span class="equalizer"><i></i><i></i><i></i><i></i></span></button>
+ <button id="menu-toggle" aria-label="Abrir menú" aria-haspopup="dialog" aria-expanded="false"><span></span><span></span></button>
+</nav></header>
+<section id="caption" class="caption" hidden></section>
+<button id="reset-view" class="reset-view" hidden aria-label="Centrar la vista del estudio"><span class="ico" data-icon="refresh"></span><span>Centrar vista</span></button>
+<nav id="journey" class="journey" aria-label="Recorrido para crear tu canción" hidden></nav>
+<p id="lobby-hint" class="lobby-hint">Toca <b>CREAR</b> para empezar · Arrastra para mirar alrededor</p>
+<dialog id="studio-menu" aria-labelledby="menu-title"><div class="menu-heading"><span id="menu-title">Dentro del estudio</span><button id="menu-close" aria-label="Cerrar menú">×</button></div><button data-go="resume">Crear mi canción <span>↗</span></button><button data-go="samples">Escucha nuestras canciones <span>↗</span></button><button data-go="products">Conoce los tres paquetes <span>↗</span></button><button data-go="recover">Recupera tu sesión <span>↗</span></button><button data-go="info">Información, términos y privacidad <span>↗</span></button><button id="quality-toggle">Usar modo ligero</button><div class="menu-legal"><button data-go="terms">Términos</button><button data-go="privacy">Privacidad</button></div></dialog>
+<div id="desktop-content"><main id="content" tabindex="-1"></main></div>
+<dialog id="options-dialog" aria-labelledby="panel-title"><button id="expand-options" aria-label="Ampliar ventana" aria-pressed="false">⤢</button><button id="close-options" aria-label="Cerrar y volver al estudio">×</button><div id="mobile-content"></div></dialog>
+<div class="audio-dock" id="audio-dock" hidden>
+ <button class="dock-cover" id="player-library" aria-label="Abrir colección musical"><i></i></button>
+ <div class="dock-main">
+  <div class="dock-top">
+   <div class="dock-meta"><strong id="track-name"></strong><small id="track-genre"></small></div>
+   <div class="dock-controls">
+    <button id="player-prev" aria-label="Canción anterior"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 20 9 12l10-8z" fill="currentColor"/><path d="M5 5v14"/></svg></button>
+    <button id="player-toggle" aria-label="Pausar canción"></button>
+    <button id="player-next" aria-label="Siguiente canción"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 4 10 8-10 8z" fill="currentColor"/><path d="M19 5v14"/></svg></button>
+   </div>
+   <label class="volume-control">Volumen<input id="player-volume" aria-label="Volumen" type="range" min="0" max="1" step="0.05" value="1"></label><button id="player-close" aria-label="Cerrar reproductor"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+  </div>
+  <div class="dock-progress"><span id="audio-time">0:00</span><div id="audio-seek" class="seek" role="slider" tabindex="0" aria-label="Posición de reproducción" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="seek-buffer"></div><div class="seek-fill"></div><div class="seek-thumb"></div></div><span id="audio-duration">0:00</span></div>
+ </div>
+</div>
+<audio id="sample-audio" preload="none"></audio><div id="toast" role="status" aria-live="polite"></div><p id="live" class="sr-only" role="status" aria-live="polite"></p>
+<script type="module" src="assets/app.js"></script>
+</body></html>
