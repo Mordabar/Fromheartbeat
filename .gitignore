@@ -6,3 +6,4 @@ tests/node_modules/
 node_modules/
 *.log
 # NOTE: do NOT ignore any "vendor/" folder. assets/vendor (three.js) and private/vendor (PHPMailer) are part of the deployable site.
+tests/shots/
