@@ -50,7 +50,8 @@ try {
  if($action==='logout'&&$method==='POST'){$_SESSION=[];session_destroy();jsonResponse(['ok'=>true]);}
  if($action==='admin-orders'&&$method==='GET') {
   admin();$q=trim((string)($_GET['q']??''));$status=(string)($_GET['status']??'');
-  $rows=sql('SELECT o.id,o.reference,o.product_name,o.amount_in_cents,o.status,o.production_stage,o.requires_attention,o.created_at,c.name,c.email FROM orders o JOIN customers c ON c.id=o.customer_id WHERE (o.reference LIKE ? OR c.email LIKE ? OR c.name LIKE ?) AND (?=\'\' OR o.status=?) ORDER BY o.id DESC LIMIT 200',['%'.$q.'%','%'.$q.'%','%'.$q.'%',$status,$status])->fetchAll();jsonResponse(['orders'=>$rows]);
+  $params=['%'.$q.'%','%'.$q.'%','%'.$q.'%'];$statusSql='';if($status!==''){$statusSql=' AND o.status=?';$params[]=$status;}
+  $rows=sql('SELECT o.id,o.reference,o.product_name,o.amount_in_cents,o.status,o.production_stage,o.requires_attention,o.created_at,c.name,c.email FROM orders o JOIN customers c ON c.id=o.customer_id WHERE (o.reference LIKE ? OR c.email LIKE ? OR c.name LIKE ?)'.$statusSql.' ORDER BY o.id DESC LIMIT 200',$params)->fetchAll();jsonResponse(['orders'=>$rows]);
  }
  if($action==='admin-order'&&$method==='GET'){admin();$o=orderView(accessOrder((string)($_GET['reference']??'')),true);if(testMode()){$o['testLink']=appUrl('/?session='.$o['reference'].'#token='.privateLink($o));$o['mails']=sql('SELECT recipient,subject,body,created_at FROM mail_queue WHERE dedupe_key LIKE ? ORDER BY id DESC',['%'.$o['reference'].'%'])->fetchAll();}jsonResponse(['order'=>$o]);}
  if($action==='admin-sync'&&$method==='POST'){admin();$o=syncPayments(accessOrder(field(input(),'reference',1,40)));jsonResponse(['status'=>$o['status']]);}
