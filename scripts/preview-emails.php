@@ -62,6 +62,11 @@ $cases=[
  'hostile-shout'=>['received',sample('full'),['name'=>'JUAN PABLO','email'=>'j@example.com','phone'=>'1'],[]],
  'hostile-punct'=>['received',sample('full'),['name'=>'---','email'=>'j@example.com','phone'=>'1'],[]],
  'hostile-invisible'=>['update',sample('full',['status'=>'in_production','production_stage'=>2,'brief'=>json_encode(['recipient'=>"Ma\u{2060}má\u{061C}\u{00AD} Luz",'occasion'=>'x','genre'=>'Bolero','mood'=>'Nostálgica','voice'=>'Femenina','language'=>'Español','story'=>'x'])]),['name'=>"Ana\u{200B}",'email'=>'a@example.com','phone'=>'1'],['note'=>"Hola\u{2060} \u{061C}mundo \u{0085}fin"]],
+ 'quote-nopay'=>['quote',sample('jingle',['status'=>'created','amount_in_cents'=>64500000]),$cust,['_nopay'=>true]],
+ 'update-cancelled'=>['update',sample('personalizada',['status'=>'cancelled']),$cust,['note'=>'Dejamos la sesión cancelada como pediste.']],
+ 'hostile-url'=>['received',sample('full',['brief'=>json_encode(['recipient'=>'http://evil.example/cobra-ya www.evil.com','occasion'=>'x','genre'=>'Bolero','mood'=>'Nostálgica','voice'=>'Femenina','language'=>'Español','story'=>'x'])]),$cust,[]],
+ 'hostile-casing'=>['received',sample('full'),['name'=>'JUAN-CARLOS','email'=>'j@example.com','phone'=>'1'],[]],
+ 'hostile-filler'=>['received',sample('full'),['name'=>"\u{3164}\u{2800}",'email'=>'j@example.com','phone'=>'1'],[]],
  // adversarial
  'hostile-manyfiles'=>['completed',sample('full',['status'=>'completed','production_stage'=>5]),$cust,['files'=>array_map(fn($i)=>['original_name'=>"Cancion-v$i-<b>x</b>.mp3",'mime'=>'audio/mpeg'],range(1,120)),'note'=>str_repeat('&',2000)]],
  'hostile-bidi'=>['received',sample('full'),['name'=>"\u{202E}evil Eva",'email'=>'e@example.com','phone'=>'1'],[]],

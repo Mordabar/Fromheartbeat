@@ -24,10 +24,19 @@ $matrix=[
  'revisión -> completado'=>[['review',4,'completed',5],'completed'],
  'completado -> revisión (reabrir)'=>[['completed',5,'review',4],'review'],
  'revisión -> producción'=>[['review',4,'in_production',3],'production'],
+ 'etapa que retrocede 3 -> 2 (no es avance)'=>[['in_production',3,'in_production',2],'update'],
  'creado -> cancelado'=>[['created',0,'cancelled',0],'cancelled'],
  'pago pendiente -> cancelado'=>[['payment_pending',0,'cancelled',0],'cancelled'],
  'cancelado sin cambios'=>[['cancelled',0,'cancelled',0],'update'],
 ];
-$fail=[];foreach($matrix as $name=>[$args,$want]){$got=$kind(...$args);if($got!==$want)$fail[]="$name: esperaba '$want' y salió '$got'";}
+$fail=[];
+// order guards: the previous state must be captured BEFORE the UPDATE, the decision must happen BEFORE the call, and internal notes must never be mailed
+$posPrev=strpos($src,'$prevStatus=$o[\'status\']');$posUpd=strpos($src,"UPDATE orders SET status=?,production_stage=?");$posChg=strpos($src,'$changed=');$posCall=strpos($src,'notifyJourney($o,$changed?');
+if($posPrev===false||$posUpd===false||$posPrev>$posUpd)$fail[]='$prevStatus debe leerse antes del UPDATE de orders';
+if($posChg===false||$posCall===false||$posChg>$posCall||$posChg<$posUpd)$fail[]='$changed debe calcularse después del UPDATE y antes de notifyJourney';
+if(substr_count($src,'$changed=')!==1)$fail[]='$changed no debe reasignarse';
+if(!str_contains($src,'$visible=($in[\'visible\']??true)===true;need(!(($in[\'notify\']??false)===true&&!$visible)'))$fail[]='falta la guarda: una nota interna (visible distinto de true) no puede enviarse al cliente';
+if(!str_contains($src,'history($o,$note,\'admin:\'.$aid,$visible)'))$fail[]='history() y la guarda deben usar la misma variable $visible';
+foreach($matrix as $name=>[$args,$want]){$got=$kind(...$args);if($got!==$want)$fail[]="$name: esperaba '$want' y salió '$got'";}
 echo $fail?"FALLAS:\n - ".implode("\n - ",$fail)."\n":"OK: ".count($matrix)." combinaciones de estado/evento.\n";
 exit($fail?1:0);

@@ -91,6 +91,13 @@ for (const f of files) {
     const fg = (m[1].match(/(?<![-\w])color:(#[0-9a-fA-F]{6})/) || [])[1], bg = (m[1].match(/background-color:(#[0-9a-fA-F]{6})/) || [])[1];
     if (fg && bg && ratio(fg, bg) < 4.5) fail(f, `texto ${fg} sobre ${bg} = ${ratio(fg, bg).toFixed(2)}`);
   }
+
+  // --- round-3 additions ---
+  if (/[‪-‮⁦-⁩​‎‏؜⁠-⁤­\u0085ㅤ⠀]/.test(html.replace(/&[a-z#0-9]+;/g, '')) && !/www​|:​\//.test(html)) fail(f, 'el HTML contiene caracteres invisibles o bidireccionales');
+  if (/[‪-‮⁦-⁩؜⁠-⁤­\u0085ㅤ⠀]/.test(fs.readFileSync(txtPath, 'utf8'))) fail(f, 'el texto plano contiene caracteres invisibles o bidireccionales');
+  if ((vml.match(/fillcolor="([^"]*)"/) || [, ''])[1].toLowerCase() !== C.btn.toLowerCase()) fail(f, 'el fillcolor del botón VML no es el color del botón');
+  if (!new RegExp('<center style="color:' + C.btnInk + ';', 'i').test(html)) fail(f, 'el texto del botón VML no usa btnInk (ilegible en Outlook)');
+  for (const m of html.matchAll(/@media[^{]*\{([^@]*?)\}\s*(?=@media|<\/style>|$)/g)) for (const n of m[1].matchAll(/font-size:(\d+)px/g)) if (+n[1] < 9) fail(f, 'media query con texto menor a 9px: ' + n[1]);
   // --- content safety ---
   const visible = noCond.replace(/<style[\s\S]*?<\/style>/g, '').replace(/<[^>]+>/g, ' ').replace(/&[a-z#0-9]+;/g, ' ');
   if (!hostile && /\b(Array|NaN|undefined|null|Warning|Notice|Deprecated)\b|\{\{|\}\}/.test(visible)) fail(f, 'marcador de plantilla o error filtrado en el texto visible: ' + (visible.match(/\b(Array|NaN|undefined|null|Warning|Notice|Deprecated)\b|\{\{/) || [''])[0]);
@@ -108,6 +115,29 @@ for (const f of files) {
   const pre = ((html.match(/mso-hide:all;">([\s\S]*?)<\/div>/) || [, ''])[1].split('&#8199;')[0]).replace(/&[a-z#0-9]+;/g, 'x').trim();
   if (pre.length < 25 || pre.length > 140) fail(f, `preheader de ${pre.length} caracteres (ideal 40-110)`);
 }
+
+// --- content contracts: copy rules that must never regress (each one was a real defect in an audit round) ---
+const read = n => { const p = path.join(dir, n + '.html'); return fs.existsSync(p) ? fs.readFileSync(p, 'utf8') + '\n' + fs.readFileSync(path.join(dir, n + '.txt'), 'utf8') : null; };
+const must = (n, re, why) => { const t = read(n); if (t === null) return; if (!re.test(t)) failures.push(`${n}: contrato roto, debe contener ${re}: ${why}`); };
+const mustNot = (n, re, why) => { const t = read(n); if (t === null) return; if (re.test(t)) failures.push(`${n}: contrato roto, NO debe contener ${re}: ${why}`); };
+const AI_PROMISES = /cantante|dirección humana|mezcla y master|masterizamos|master final|revisado por el equipo|sin plantillas|ronda de ajustes|rondas de ajustes|qué cambiarías/i;
+for (const n of ['received-dedicatoria', 'paid-dedicatoria', 'production-ai-2', 'production-ai-4', 'review-dedicatoria', 'completed-dedicatoria']) mustNot(n, AI_PROMISES, 'Dedicatoria es el producto con IA: no promete cantante, master ni cambios');
+must('production-ai-2', /con IA/, 'transparencia: es un flujo con IA');
+must('review-full', /1 ronda de ajustes para la canción y 1 para el video/, 'Full tiene dos rondas');
+must('production-full-nosources', /Aún falta tu material para el video[\s\S]*Subir mis fotos y clips/, 'sin material, Full lo pide');
+mustNot('production-full-sources', /Aún falta tu material/, 'con material no se vuelve a pedir');
+must('production-full-sources', /Ya recibimos tu material para el video/, 'confirma que llegó el material');
+must('paid-full', /Subir mis fotos y clips/, 'el pago de Full lleva al material');
+must('received', /Ir al pago seguro/, 'con pagos habilitados ofrece pagar');
+for (const n of ['received-nopay', 'quote-nopay']) { mustNot(n, /Ir al pago seguro|Revisar y pagar|Pago seguro con Wompi/, 'con COMMERCE_READY apagado no ofrece pagar'); }
+must('update-question', /Responder en mi sesión/, 'en producción se puede responder en la sesión');
+mustNot('update-question-prepay', /Responder en mi sesión/, 'antes de producción el formulario rechaza comentarios');
+mustNot('update-cancelled', /Paso \d de \d/, 'una sesión cancelada no muestra progreso');
+for (const n of ['paid-business', 'payment-failed-business', 'production-business-2', 'review-business', 'completed-business']) mustNot(n, /tu canción|tu historia/i, 'empresas: "pieza"/"marca", no lenguaje de regalo');
+must('completed-listening', /Ver y descargar mi Full Experience/, 'Full entrega canción y video');
+must('hostile-url', /:​\/\/|www​\./, 'las URLs del cliente se neutralizan');
+mustNot('hostile-casing', /Juan-carlos/, 'nombres compuestos en mayúsculas');
+mustNot('hostile-filler', /^[\s\S]*Hola/, 'un nombre sin letras no genera saludo');
 const total = files.length;
 if (failures.length) { console.log(`FALLAS (${failures.length}) en ${total} correos:\n - ` + failures.join('\n - ')); process.exit(1); }
 console.log(`OK: ${total} correos pasan todas las reglas (${banned.length} patrones prohibidos + comprobaciones estructurales) y ${pairs.length} pares de contraste.`);

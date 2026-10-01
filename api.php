@@ -74,7 +74,7 @@ try {
    if($status==='completed')$stage=5;
    $prevStatus=$o['status'];$prevStage=(int)$o['production_stage'];
    sql('UPDATE orders SET status=?,production_stage=?,requires_attention=? WHERE id=?',[$status,$stage,($in['attention']??false)?1:0,$o['id']]);$o['status']=$status;$o['production_stage']=$stage;history($o,$note,'admin:'.$aid,$visible);
-   $changed=$status!==$prevStatus||($status==='in_production'&&$stage!==$prevStage);
+   $changed=$status!==$prevStatus||($status==='in_production'&&$stage>$prevStage);
    if(($in['notify']??false)===true)notifyJourney($o,$changed?(['in_production'=>'production','review'=>'review','completed'=>'completed','cancelled'=>'cancelled'][$status]??'update'):'update',['note'=>$note],'update:'.$ref.':'.bin2hex(random_bytes(6)),'Novedad enviada al cliente',$note);
    db()->commit();jsonResponse(['ok'=>true]);
   }catch(Throwable $e){if(db()->inTransaction())db()->rollBack();throw $e;}

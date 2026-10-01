@@ -33,7 +33,9 @@ function mailDate(?string $utc=null): string {
  return $d->format('j').' de '.$months[(int)$d->format('n')-1].' de '.$d->format('Y');
 }
 /** Strips bidi overrides, zero-width and control characters (keeps \n and \t): customer text lands in emails sent under our brand. */
-function mailClean(string $s): string { return preg_replace('/[\x{202A}-\x{202E}\x{2066}-\x{2069}\x{200B}\x{200E}\x{200F}\x{061C}\x{2060}-\x{2064}\x{206A}-\x{206F}\x{00AD}\x{180E}\x{FFF9}-\x{FFFB}\x{E0000}-\x{E007F}\x{2028}\x{2029}\x{FEFF}]|[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/u','',$s)??''; }
+function mailClean(string $s): string { return preg_replace('/[\x{202A}-\x{202E}\x{2066}-\x{2069}\x{200B}\x{200E}\x{200F}\x{061C}\x{2060}-\x{2064}\x{206A}-\x{206F}\x{00AD}\x{180E}\x{FFF9}-\x{FFFB}\x{E0000}-\x{E007F}\x{3164}\x{2800}\x{115F}\x{1160}\x{2028}\x{2029}\x{FEFF}]|[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/u','',$s)??''; }
+/** Customer text is repeated under our brand: stop mail clients from turning it into a clickable link (anti-phishing). */
+function mailNoLink(string $s): string { return (string)preg_replace(['~(?<=[a-z]):(?=//)~i','~\bwww\.~i'],[":\u{200B}","www\u{200B}."],$s); }
 function mailClip(string $s,int $n): string { $s=trim((string)preg_replace('/\s+/u',' ',mailClean($s))); return mb_strlen($s)>$n?rtrim(mb_substr($s,0,$n-1)).'…':$s; }
 function mailAsset(string $file): string { return appUrl('/assets/email/'.$file); }
 function mailHasAsset(string $file): bool { return is_file(dirname(BASE).'/assets/email/'.$file); }
@@ -43,7 +45,7 @@ function mailSessionUrl(array $o): string { return appUrl('/?session='.$o['refer
 function mailFirstName(array $c): string {
  $n=trim(explode(' ',trim(mailClean((string)($c['name']??''))))[0]);
  if(!preg_match('/^[\p{L}\p{M}\'’-]{1,24}$/u',$n)||!preg_match('/\p{L}/u',$n))return '';
- if(mb_strlen($n)>1&&mb_strtoupper($n,'UTF-8')===$n)$n=mb_strtolower($n,'UTF-8'); // "JUAN" -> "Juan"
+ if(mb_strlen($n)>1&&mb_strtoupper($n,'UTF-8')===$n)return mb_convert_case($n,MB_CASE_TITLE,'UTF-8'); // "JUAN-CARLOS" -> "Juan-Carlos"
  return mb_strtoupper(mb_substr($n,0,1)).mb_substr($n,1);
 }
 /** "Tu historia *ya está aquí.*" -> [[text,false],[text,true]] ; the starred part becomes the italic accent. */
@@ -217,7 +219,7 @@ function mailLayoutHtml(array $m): string {
   .'<!--[if mso]><noscript><xml><o:OfficeDocumentSettings><o:AllowPNG/><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml></noscript><style>td,p,a,span,div{font-family:Arial,Helvetica,sans-serif!important}h1,em{font-family:Georgia,\'Times New Roman\',serif!important}</style><![endif]-->'
   .$fontCss
   .'<style>body,table,td,a{-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%}table,td{mso-table-lspace:0;mso-table-rspace:0}img{-ms-interpolation-mode:bicubic;border:0;outline:none;text-decoration:none}body{margin:0!important;padding:0!important;width:100%!important;background-color:'.$C['bg'].'}td,p,h1,a{overflow-wrap:anywhere;word-break:break-word}a[x-apple-data-detectors]{color:inherit!important;text-decoration:none!important}u+#body a{color:inherit}'
-  .'@media only screen and (max-width:620px){.wrap{width:100%!important}.px{padding-left:22px!important;padding-right:22px!important}.h1{font-size:34px!important;line-height:39px!important}.btn-wrap{width:100%!important}.btn-a{display:block!important;padding:18px 14px!important}.lbl{font-size:10px!important;letter-spacing:0!important}.lbl6{font-size:9px!important}.logo{width:190px!important;height:auto!important}.hd{padding:18px 16px 16px!important}.k{width:42%!important;letter-spacing:.6px!important}.tag{font-size:19px!important;line-height:25px!important}}'
+  .'@media only screen and (max-width:620px){.wrap{width:100%!important}.px{padding-left:22px!important;padding-right:22px!important}.h1{font-size:34px!important;line-height:39px!important}.btn-wrap{width:100%!important}.btn-a{display:block!important;padding:18px 14px!important}.lbl{font-size:10px!important;letter-spacing:0!important}.lbl6{font-size:10px!important}.logo{width:190px!important;height:auto!important}.hd{padding:18px 16px 16px!important}.k{width:36%!important;letter-spacing:.5px!important}.tag{font-size:19px!important;line-height:25px!important}}'
   .'@media only screen and (max-width:340px){.eb{letter-spacing:1.4px!important}.lbl{font-size:9px!important}.h1{font-size:30px!important;line-height:35px!important}}'
   .'</style></head><body id="body" bgcolor="'.$C['bg'].'" style="margin:0;padding:0;background-color:'.$C['bg'].';">'
   .'<div style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;">'.mh($m['preheader']).implode("\n",array_fill(0,4,str_repeat('&#8199;&#847;',10))).'</div>'
@@ -266,7 +268,7 @@ function mailLayoutText(array $m): string {
 // ---------------------------------------------------------------- content: customer journey
 function mailBriefRows(array $o): array {
  $b=is_array($o['brief']??null)?$o['brief']:(json_decode((string)($o['brief']??''),true)?:[]);$rows=[];if(!is_array($b))return [];
- $take=fn($k)=>isset($b[$k])&&is_scalar($b[$k])&&trim((string)$b[$k])!==''?mailClip((string)$b[$k],70):null;
+ $take=fn($k)=>isset($b[$k])&&is_scalar($b[$k])&&trim((string)$b[$k])!==''?mailNoLink(mailClip((string)$b[$k],70)):null;
  if(($o['audience']??'')==='business'){foreach(['brand'=>'Marca','campaign'=>'Campaña','channels'=>'Canales','license_scope'=>'Licencia'] as $k=>$l)if(($v=$take($k))!==null)$rows[]=[$l,$v];return $rows;}
  foreach(['recipient'=>'Para','occasion'=>'Ocasión','genre'=>'Género','mood'=>'Emoción','voice'=>'Voz','language'=>'Idioma'] as $k=>$l)if(($v=$take($k))!==null)$rows[]=[$l,$v];
  return $rows;
@@ -274,7 +276,7 @@ function mailBriefRows(array $o): array {
 function mailRecapLine(array $o): string {
  $b=is_array($o['brief']??null)?$o['brief']:(json_decode((string)($o['brief']??''),true)?:[]);if(!is_array($b))return '';
  $k=($o['audience']??'')==='business'?['brand','campaign']:['recipient','genre','mood'];$p=[];
- foreach($k as $f)if(isset($b[$f])&&is_scalar($b[$f])&&trim((string)$b[$f])!=='')$p[]=mailClip((string)$b[$f],40);
+ foreach($k as $f)if(isset($b[$f])&&is_scalar($b[$f])&&trim((string)$b[$f])!=='')$p[]=mailNoLink(mailClip((string)$b[$f],40));
  return implode(' · ',$p);
 }
 /** Builds the customer-facing model for one journey step. $kind: received|received_business|quote|payment_failed|paid|production|review|completed|cancelled|update|recover */
@@ -283,18 +285,18 @@ function mailModel(string $kind,array $o,array $c,array $ctx=[]): array {
  $lead=function(string $t)use($hi):string{$t=mb_strtolower(mb_substr($t,0,1)).mb_substr($t,1);return $hi!==''?$hi.$t:mb_strtoupper(mb_substr($t,0,1)).mb_substr($t,1);};
  $support=mailSupport();$stage=(int)($o['production_stage']??0);$note=trim(mailClean((string)($ctx['note']??'')));
  $prod=$biz?3:2;$rev=$biz?4:3;$last=count($j)-1;$rounds=mailRounds($o);$listening=!empty($o['product']['listening']);
+ $pay=env('COMMERCE_READY')==='true';
  $m=['kind'=>$kind,'reference'=>$ref,'sessionUrl'=>$url,'blocks'=>[],'eyebrow'=>'Tu sesión · '.$ref];
  $summary=fn(string $title,array $rows)=>['summary'=>['title'=>$title,'rows'=>$rows]];
  $tracker=function(int $i,bool $done=false,?array $sub=null,string $extra='')use($j){$cap='Paso '.($i+1).' de '.count($j).' · '.$j[$i];return ['tracker'=>['steps'=>$j,'active'=>$i,'complete'=>$done,'caption'=>$cap.($extra!==''?"\n".ltrim($extra,' ·'):''),'sub'=>$sub]];};
  $trust=['trust'=>['Pago seguro con Wompi','Sin cuenta ni contraseña','Enlace privado y personal']];
  switch($kind){
   case 'received':
-   $pay=env('COMMERCE_READY')==='true';
    $craft=$pk==='ai'?'Letra y música con nuestro flujo de creación digital con IA.':'Letra, voces, producción y mezcla, con dirección humana en cada paso.';
    if(($o['product_code']??'')==='full')$craft.=' Para tu video emocional, sube tus fotos y clips desde tu sesión.';
    $step1=$pay?['Completa el pago seguro','Con Wompi: tarjeta, PSE, Nequi y más. Tu historia queda guardada mientras tanto.']:['Te avisamos cuando abramos los pagos','Tu historia queda guardada. Te escribiremos apenas puedas completar el pago.'];
    $m+=['subject'=>'Tu historia ya está en el estudio · '.$ref,'preheader'=>$pay?'Guardamos tu sesión. Completa el pago para empezar a producir tu canción.':'Guardamos tu sesión. Te avisaremos cuando puedas completar el pago.','title'=>'Tu historia ya *está en el estudio.*'];
-   $m['blocks']=array_values(array_filter([['lead'=>$lead('recibimos tu historia y la guardamos en una sesión privada. Solo se abre con tu enlace personal.')],$tracker(0),
+   $m['blocks']=array_values(array_filter([['lead'=>$lead('recibimos tu historia y la guardamos en una sesión privada. Solo se abre con tu enlace personal.')],$tracker($pay?1:0),
     ['cta'=>$pay?['label'=>'Ir al pago seguro','url'=>$url,'hint'=>'Si ya pagaste, ignora este aviso: te confirmaremos en otro correo.']:['label'=>'Ver mi sesión','url'=>$url]],
     $summary('Lo que nos contaste',array_merge(mailBriefRows($o),[['Experiencia',$o['product_name']],['Total',mailMoney((int)$o['amount_in_cents'])]])),
     ['steps'=>['title'=>'Qué sigue','items'=>[$step1,['Empezamos a producir',$craft],['Sigue cada etapa','Ves el avance en tu sesión y recibes tu canción ahí, sin crear una cuenta.']]]],
@@ -305,20 +307,20 @@ function mailModel(string $kind,array $o,array $c,array $ctx=[]): array {
    $m['blocks']=[['lead'=>$lead('gracias por confiarnos la voz de tu marca. Antes de cualquier pago, revisaremos tu brief y acordaremos contigo el alcance y la licencia.')],$tracker(0),
     $summary('Tu brief',array_merge(mailBriefRows($o),[['Experiencia',$o['product_name']]])),
     ['steps'=>['title'=>'Qué sigue','items'=>[['Revisamos tu brief','Nuestro equipo lo lee completo y puede escribirte con preguntas.'],['Recibes una propuesta','Con alcance, licencia comercial y precio final, en tu sesión privada.'],['Pagas y comenzamos','Solo cuando estés de acuerdo con la propuesta.']]]],
-    $trust,['cta'=>['label'=>'Abrir mi sesión','url'=>$url,'hint'=>'Te avisaremos por correo apenas tu propuesta esté lista.']]];
+    ['trust'=>['Sin pago hasta aceptar la propuesta','Sin cuenta ni contraseña','Enlace privado y personal']],['cta'=>['label'=>'Abrir mi sesión','url'=>$url,'hint'=>'Te avisaremos por correo apenas tu propuesta esté lista.']]];
    break;
   case 'quote':
    $b=json_decode((string)($o['brief']??''),true);$scope=is_array($b)&&isset($b['agreed_scope'])&&is_scalar($b['agreed_scope'])?mailClean((string)$b['agreed_scope']):'Consulta el detalle completo en tu sesión privada.';
    $m+=['subject'=>'Tu propuesta musical está lista · '.$ref,'preheader'=>'Revisa el alcance, la licencia y el precio antes de pagar.','title'=>'Tu propuesta *está lista.*'];
-   $m['blocks']=[['lead'=>$lead('preparamos una propuesta a la medida de tu marca. Léela con calma: el pago solo se habilita cuando tú decides avanzar.')],$tracker(1),
+   $m['blocks']=array_values(array_filter([['lead'=>$lead('preparamos una propuesta a la medida de tu marca. Léela con calma: el pago solo se habilita cuando tú decides avanzar.')],$tracker(1),
     $summary('Propuesta',[['Experiencia',$o['product_name']],['Total',mailMoney((int)$o['amount_in_cents'])]]),
     ['note'=>['label'=>'Alcance y licencia acordados','text'=>$scope,'plain'=>true]],
-    $trust,['cta'=>['label'=>'Revisar y pagar','url'=>$url,'hint'=>'¿Quieres ajustar algo? Escríbenos y lo conversamos.']]];
+    $pay?$trust:null,['cta'=>['label'=>$pay?'Revisar y pagar':'Ver mi propuesta','url'=>$url,'link'=>['¿Quieres ajustar algo? Escríbenos','mailto:'.$support.'?subject='.rawurlencode('Sobre mi propuesta · '.$ref)],'hint'=>$pay?null:'Te avisaremos cuando puedas completar el pago.']]]));
    break;
   case 'payment_failed':
    $err=($ctx['payment']??'DECLINED')==='ERROR';
-   $m+=['subject'=>'Tu pago no se completó · '.$ref,'preheader'=>'Tu historia sigue guardada. Puedes intentarlo de nuevo cuando quieras.','title'=>'Tu pago *no se completó.*'];
-   $m['blocks']=[['lead'=>$lead('tu historia sigue guardada y a salvo. Solo falta completar el pago para empezar a producirla.')],
+   $m+=['subject'=>'Tu pago no se completó · '.$ref,'preheader'=>$biz?'Tu propuesta sigue guardada. Puedes intentarlo de nuevo cuando quieras.':'Tu historia sigue guardada. Puedes intentarlo de nuevo cuando quieras.','title'=>'Tu pago *no se completó.*'];
+   $m['blocks']=[['lead'=>$lead($biz?'tu propuesta sigue guardada y a salvo. Solo falta completar el pago para empezar a producir tu pieza.':'tu historia sigue guardada y a salvo. Solo falta completar el pago para empezar a producirla.')],
     ['callout'=>['tone'=>'warn','title'=>$err?'No pudimos procesar la transacción':'Tu medio de pago no aprobó la transacción','text'=>$err?'Si notas algún cargo en tu cuenta, escríbenos con tu referencia y lo revisamos de inmediato.':'No se realizó ningún cobro. Suele pasar por datos incorrectos, cupo insuficiente o una validación de seguridad.']],
     ['cta'=>['label'=>'Intentar el pago de nuevo','url'=>$url,'link'=>['Escribir al estudio','mailto:'.$support.'?subject='.rawurlencode('Ayuda con mi pago · '.$ref)]]],
     $tracker($biz?2:1),
@@ -333,50 +335,52 @@ function mailModel(string $kind,array $o,array $c,array $ctx=[]): array {
     default=>array_merge($full?[['Sube tus fotos y clips','Desde tu sesión, para que armemos el video emocional de tu Full Experience.']]:[],[['Escribimos tu letra','Con lo que nos contaste, a tu medida.'],['Producimos tu canción','Voces, arreglos, mezcla y master, con dirección humana.'],['Te avisamos en cada etapa','Y cuando esté lista para escuchar, te escribimos aquí.']])
    };
    $rows=[['Referencia',$ref],['Experiencia',$o['product_name']],['Total pagado',mailMoney((int)$o['amount_in_cents'])],['Fecha',mailDate($ctx['at']??null)]];if(!empty($ctx['transaction']))$rows[]=['Transacción',mailClip((string)$ctx['transaction'],40)];
-   $m+=['subject'=>'Pago confirmado: empezamos con tu canción · '.$ref,'preheader'=>'Confirmamos tu pago. Comenzamos a trabajar con tu historia.','title'=>'Pago *confirmado.*'];
-   $m['blocks']=[['lead'=>$lead('gracias. Recibimos tu pago y tu historia ya está en manos del estudio.')],$tracker($prod),$summary('Resumen del pago',$rows),
+   $m+=['subject'=>'Pago confirmado: empezamos con '.($biz?'tu pieza':'tu canción').' · '.$ref,'preheader'=>$biz?'Confirmamos tu pago. Comenzamos a trabajar con el brief de tu marca.':'Confirmamos tu pago. Comenzamos a trabajar con tu historia.','title'=>'Pago *confirmado.*'];
+   $m['blocks']=[['lead'=>$lead($biz?'gracias. Recibimos tu pago y el brief de tu marca ya está en manos del estudio.':'gracias. Recibimos tu pago y tu historia ya está en manos del estudio.')],$tracker($prod),$summary('Resumen del pago',$rows),
     ['steps'=>['title'=>'Lo que viene ahora','items'=>$items]],
-    ['cta'=>['label'=>$full?'Subir mis fotos y clips':'Seguir mi sesión','url'=>$url,'hint'=>'Los plazos se coordinan con el equipo según tu historia y la agenda de producción.']]];
+    ['cta'=>['label'=>$full?'Subir mis fotos y clips':'Seguir mi sesión','url'=>$url,'hint'=>$biz?'Los plazos se coordinan con el equipo según el alcance acordado y la agenda de producción.':'Los plazos se coordinan con el equipo según tu historia y la agenda de producción.']]];
    break;
   case 'production':
    [$title,$pre,$text]=mailStageCopy($stage,$pk);$staged=$stage>=1&&$stage<=4;$names=mailStageNames($pk);
    $m+=['subject'=>($staged?strip_tags(str_replace('*','',$title)):'Novedades de tu canción').' · '.$ref,'preheader'=>$pre,'title'=>$title,'hero'=>'hero-production.jpg'];
-   if($staged&&$pk!=='ai'&&mailHasAsset('hero-production-'.$stage.'.jpg'))$m['hero']='hero-production-'.$stage.'.jpg';
+   if($staged&&($pk!=='ai'||$stage===1)&&mailHasAsset('hero-production-'.$stage.'.jpg'))$m['hero']='hero-production-'.$stage.'.jpg';
    $recap=mailRecapLine($o);$next=$staged?mailStageNext($stage,$pk):null;
-   $needsMaterial=($o['product_code']??'')==='full'&&isset($ctx['sources'])&&(int)$ctx['sources']===0;
+   $isFull=($o['product_code']??'')==='full';$needsMaterial=$isFull&&isset($ctx['sources'])&&(int)$ctx['sources']===0;$gotMaterial=$isFull&&isset($ctx['sources'])&&(int)$ctx['sources']>0;
    $m['blocks']=array_values(array_filter([['lead'=>$lead($text)],$tracker($prod,false,$staged?['at'=>$stage-1,'count'=>4]:null,$staged?' · '.$names[$stage].' ('.$stage.' de 4)':''),
     $recap!==''?['recap'=>['label'=>$biz?'Tu marca':'Tu canción para','text'=>$recap]]:null,
+    $gotMaterial&&!$needsMaterial?['p'=>'Ya recibimos tu material para el video ('.(int)$ctx['sources'].' '.((int)$ctx['sources']===1?'archivo':'archivos').'). ¡Gracias!']:null,
     $needsMaterial?['callout'=>['tone'=>'warn','title'=>'Aún falta tu material para el video','text'=>'Sube tus fotos y clips desde tu sesión para que podamos armar tu video emocional.']]:null,
     $note!==''?['note'=>['label'=>'Mensaje del estudio','text'=>$note]]:null,
     $next?['callout'=>['tone'=>'info','title'=>$next[0],'text'=>$next[1]]]:null,
-    ['cta'=>['label'=>$needsMaterial?'Subir mis fotos y clips':'Ver mi sesión','url'=>$url,'hint'=>$staged?'Te escribiremos de nuevo en la siguiente etapa.':null]]]));
+    ['cta'=>['label'=>$needsMaterial?'Subir mis fotos y clips':'Ver mi sesión','url'=>$url,'hint'=>$staged&&!$next?'Te escribiremos de nuevo en la siguiente etapa.':null]]]));
    break;
   case 'review':
    $rt=mailRoundsText($o);
-   $adj=$rt!==''?'Tu paquete incluye '.$rt.': reúne todos tus comentarios y envíalos juntos.':'Si algo no te cuadra, escríbenos y lo revisamos contigo.';
+   $adj=$rt!==''?'Tu paquete incluye '.$rt.': reúne todos tus comentarios y envíalos juntos.':'Escríbenos y lo revisamos contigo.';
    if($pk==='ai'){
     $m+=['subject'=>'Tu canción ya se puede escuchar · '.$ref,'preheader'=>'Tu canción está en tu sesión, lista para escucharla con calma.','title'=>'Tu canción *ya se puede escuchar.*'];
     $intro=$lead('subimos tu canción a tu sesión privada. Escúchala con calma, mejor con audífonos.');
-    $items=[['Abre tu sesión y dale play','Escúchala completa, sin prisa.'],['Cuéntanos qué sentiste','Tus comentarios llegan directo al estudio.'],['Si algo no te cuadra',$adj]];$cta='Escuchar mi canción';
+    $items=[['Abre tu sesión y dale play','Escúchala completa, sin prisa.'],['Si algo no te cuadra',$adj]];$cta='Escuchar mi canción';$rhint='No necesitas responder si todo suena bien.';
    }else{
     $m+=['subject'=>'Es tu turno de escuchar · '.$ref,'preheader'=>$biz?'Tu pieza está lista para que la revises.':'Tu canción está lista para que la escuches y nos cuentes qué sientes.','title'=>'Es tu turno *de escuchar.*'];
     $intro=$lead($biz?'subimos una versión de tu pieza a tu sesión privada. Escúchala con calma y cuéntanos qué ajustarías.':'subimos una versión de tu canción a tu sesión privada. Escúchala con calma, mejor con audífonos, y cuéntanos qué sientes.');
-    $items=[['Abre tu sesión y dale play','Si hay varias versiones, las encuentras todas ordenadas (v1, v2…).'],['Déjanos tus comentarios','Qué te encantó y qué cambiarías. Llegan directo al estudio.'],['Nosotros hacemos el resto',$adj]];$cta='Escuchar y comentar';
+    $items=[['Abre tu sesión y dale play','Si hay varias versiones, las encuentras todas ordenadas (v1, v2…).'],['Déjanos tus comentarios','Qué te encantó y qué cambiarías. Llegan directo al estudio.'],['Nosotros hacemos el resto',$adj]];$cta='Escuchar y comentar';$rhint='Tus comentarios se envían desde tu sesión, no hace falta responder este correo.';
    }
    $m['blocks']=array_values(array_filter([['lead'=>$intro],$tracker($rev),$note!==''?['note'=>['label'=>'Mensaje del estudio','text'=>$note]]:null,['steps'=>['title'=>'Cómo revisarla','items'=>$items]],
-    ['cta'=>['label'=>$cta,'url'=>$url,'hint'=>'Tus comentarios se envían desde tu sesión, no hace falta responder este correo.']]]));
+    ['cta'=>['label'=>$cta,'url'=>$url,'hint'=>$rhint]]]));
    break;
   case 'completed':
    $files=[];foreach($ctx['files']??[] as $f)$files[]=[mailClean((string)$f['original_name']),mailKindLabel((string)$f['mime'])];
    $more=count($files)>8?'y '.(count($files)-8).' archivo'.(count($files)-8===1?'':'s').' más en tu sesión':'';$files=array_slice($files,0,8);
    $b=json_decode((string)($o['brief']??''),true);$scope=$biz&&is_array($b)&&isset($b['agreed_scope'])&&is_scalar($b['agreed_scope'])?mailClip((string)$b['agreed_scope'],400):'';
    $where=($listening?'Tu Listening Room privado ya tiene '.($biz?'tu pieza':'tu canción').': está dentro de tu sesión.':'Tu entrega ya está en tu sesión.').' Escúchala y descarga tus archivos; guárdalos en un lugar seguro, porque tu enlace privado puede vencer.';
-   $m+=['subject'=>($biz?'Tu pieza está lista · ':'Tu canción está lista · ').$ref,'preheader'=>'Ya puedes escucharla, descargarla y guardarla para siempre.','title'=>$biz?'Tu pieza *está lista.*':'Tu canción *está lista.*'];
-   $m['blocks']=array_values(array_filter([['lead'=>$lead($biz?'tu pieza ya está terminada. Aquí tienes tus archivos y la licencia acordada.':($pk==='ai'?'tu canción ya está terminada: tu MP3 y tu portada están listos para compartir.':'tu canción ya está terminada. Gracias por confiarnos una historia tan tuya: ahora es de ustedes.'))],$tracker($last,true),
+   $m+=['subject'=>($biz?'Tu pieza está lista · ':'Tu canción está lista · ').$ref,'preheader'=>'Ya puedes escucharla y descargarla desde tu sesión.','title'=>$biz?'Tu pieza *está lista.*':'Tu canción *está lista.*'];
+   $isFull=($o['product_code']??'')==='full';$cLabel=$biz?'Escuchar y descargar mi pieza':($isFull?'Ver y descargar mi Full Experience':'Escuchar y descargar mi canción');
+   $m['blocks']=array_values(array_filter([['lead'=>$lead($biz?'tu pieza ya está terminada. Aquí tienes tus archivos y la licencia acordada.':($pk==='ai'?'tu canción ya está terminada: tu MP3 y tu portada están listos para compartir.':($isFull?'tu canción y tu video ya están terminados. Gracias por confiarnos una historia tan tuya: ahora es de ustedes.':'tu canción ya está terminada. Gracias por confiarnos una historia tan tuya: ahora es de ustedes.')))],$tracker($last,true),
+    ['cta'=>['label'=>$cLabel,'url'=>$url,'link'=>[$pk==='ai'?'¿Dudas con tu entrega? Escríbenos':'¿Algo que ajustar? Escríbenos','mailto:'.$support.'?subject='.rawurlencode('Sobre mi entrega · '.$ref)]]],
     $files?['files'=>['title'=>'Tu entrega','items'=>$files,'more'=>$more]]:null,
     $scope!==''?['note'=>['label'=>'Licencia acordada','text'=>$scope,'plain'=>true]]:null,
-    $note!==''?['note'=>['label'=>'Mensaje del estudio','text'=>$note]]:null,['p'=>$where],
-    ['cta'=>['label'=>$biz?'Escuchar y descargar mi pieza':'Escuchar y descargar mi canción','url'=>$url,'link'=>[$pk==='ai'?'¿Dudas con tu entrega? Escríbenos':'¿Algo que ajustar? Escríbenos','mailto:'.$support.'?subject='.rawurlencode('Sobre mi entrega · '.$ref)]]]]));
+    $note!==''?['note'=>['label'=>'Mensaje del estudio','text'=>$note]]:null,['p'=>$where]]));
    break;
   case 'cancelled':
    $m+=['subject'=>'Tu sesión fue cancelada · '.$ref,'preheader'=>'Cancelamos tu sesión. Si fue un error, la retomamos contigo.','title'=>'Tu sesión *fue cancelada.*'];unset($m['sessionUrl']);
@@ -395,7 +399,7 @@ function mailModel(string $kind,array $o,array $c,array $ctx=[]): array {
    $pos=match($o['status']){'created'=>$scoped?1:0,'payment_pending'=>$biz?2:1,'paid','in_production'=>$prod,'review'=>$rev,'completed'=>$last,default=>$prod};
    $q=str_contains($note,'?');
    $m+=['subject'=>($q?'El estudio tiene una pregunta · ':'Novedades de tu canción · ').$ref,'preheader'=>(mb_strlen($pn=$note!==''?mailClip($note,110):'')<40?trim($pn.' Hay novedades en tu sesión de Fromheartbeat.'):$pn),'title'=>$q?'El estudio *tiene una pregunta.*':'Novedades *de tu sesión.*','hero'=>'hero-update.jpg'];
-   $m['blocks']=array_values(array_filter([['lead'=>$lead($q?'el estudio te dejó una pregunta. Respóndela y llega directo al equipo.':'el estudio dejó una novedad en tu sesión.')],$tracker($pos,$o['status']==='completed'),$note!==''?['note'=>['label'=>'Mensaje del estudio','text'=>$note]]:null,
+   $m['blocks']=array_values(array_filter([['lead'=>$lead($q?'el estudio te dejó una pregunta. Respóndela y llega directo al equipo.':'el estudio dejó una novedad en tu sesión.')],$o['status']==='cancelled'?null:$tracker($pos,$o['status']==='completed'),$note!==''?['note'=>['label'=>'Mensaje del estudio','text'=>$note]]:null,
     ['cta'=>['label'=>$q&&$canReply?'Responder en mi sesión':'Abrir mi sesión','url'=>$url,'hint'=>$q?($canReply?'Tu respuesta se envía desde tu sesión.':'También puedes responder a este correo.'):null]]]));
  }
  $m['hero']??='hero-'.$kind.'.jpg';
@@ -409,11 +413,11 @@ function mailTeamModel(string $headline,string $message,array $o,array $c): arra
  $stages=['Historia recibida','Letra','Grabación','Producción','Mezcla y master','Entrega'];
  $rows=[['Cliente',mailClip((string)($c['name']??''),80)],['Correo',mailClip((string)($c['email']??''),80)],['Teléfono',mailClip((string)($c['phone']??''),40)],['Experiencia',$o['product_name']],['Importe',mailMoney((int)$o['amount_in_cents'])],['Estado',$labels[$o['status']]??$o['status']],['Etapa',$stages[(int)$o['production_stage']]??'—']];
  $brief=mailBriefRows($o);$message=mailClean($message);
- return ['kind'=>'team','layout'=>'team','subject'=>$headline.' · '.$ref,'preheader'=>mailClip($message,120),'eyebrow'=>'Equipo · '.$ref,'title'=>$headline,'hero'=>'','reference'=>$ref,
+ return ['kind'=>'team','layout'=>'team','subject'=>$headline.' · '.$ref,'preheader'=>mb_strlen($pm=mailClip($message,120))<30?trim($pm.' — aviso interno del estudio'):$pm,'eyebrow'=>'Equipo · '.$ref,'title'=>$headline,'hero'=>'','reference'=>$ref,
   'blocks'=>array_values(array_filter([['lead'=>$message],['summary'=>['title'=>'Pedido','rows'=>$rows]],$brief?['summary'=>['title'=>'Brief','rows'=>$brief]]:null,['cta'=>['label'=>'Abrir en el panel','url'=>appUrl('/admin.html')]]]))];
 }
 
-/** Lines are broken after cells/rows so no line nears the 998-char SMTP limit (harmless in table layouts). */
+/** Lines are broken after cells/rows to keep them short (harmless in table layouts). Customer text can still make a long line; mailFill() forces quoted-printable, so the MIME never exceeds 76 chars per line. */
 function mailBuild(array $m): string {
  $html=preg_replace_callback('~<style>.*?</style>~s',fn($x)=>str_replace(['}','{'],["}\n",'{'],$x[0]),mailLayoutHtml($m));
  $html=str_replace(['</tr>','</td>','</table>','</p>','</h1>','</div>','</style>','-->','</title>','</head>'],["</tr>\n","</td>\n","</table>\n","</p>\n","</h1>\n","</div>\n","</style>\n","-->\n","</title>\n","</head>\n"],$html);
