@@ -73,6 +73,20 @@ Sirve el sitio con `php -S 127.0.0.1:8090 -t .` (necesita `private/config/.env` 
 * **Todo objeto 3D tiene un espejo para teclado y lector de pantalla** (botones invisibles, `#stage-keys`): con `Tab` se llega a cada pad, orbe, banco, disco o paquete; `Enter` lo elige y el objeto se ilumina en el estudio. Se actualiza solo al cambiar de paso.
 * Respeta `prefers-reduced-motion`.
 
+## Cierre de compra, sesión del cliente y admin (rediseño V5.1)
+
+Mismo lenguaje en todo: **un color y un icono por estado** (amarillo = falta el pago, violeta = en producción, cian = te toca escuchar, verde = entregada, gris = cancelada) y **seis etapas** (Historia · Letra · Grabación · Producción · Mezcla · Entrega) que se ven igual en el panel, en el terminal 3D y en el admin.
+
+**Cierre de compra** (`app.js` → `checkoutStep`): tres bloques numerados — 1 Tu canción (resumen con «Cambiar»), 2 ¿A dónde te la enviamos?, 3 Pago seguro (total, qué pasa después, que el pago abre otra pestaña). Cada error se escribe **junto al campo** y se enfoca. «Cambiar» desde el resumen vuelve al pago con un toque («Listo, volver al pago»). El modo de pruebas queda plegado. Con el teclado del móvil abierto, el formulario ocupa toda el área visible.
+
+**Sesión del cliente** (`assets/session-ui.js` + `session-ui.css`): arriba, una tarjeta que dice qué pasa y qué hacer; «En qué punto estamos» con las 6 etapas; Sala de escucha (última versión con portada, versiones anteriores, descargas); **mensajes del productor como conversación** (burbujas, etapa de cada mensaje, eventos del sistema en pequeño, notas largas plegadas); respuesta rápida al productor; materiales para Full Experience. El terminal 3D de «Mi sesión» es una consola de seis canales que refleja lo mismo.
+
+**Admin** (`admin.html`, `assets/admin.js`, `admin-studio.css`): tablero con contadores (Por atender / En producción / Esperando al cliente / Esperando el pago / Entregadas), tarjetas con medidor de etapas, búsqueda en vivo. En el detalle: etapa actual, **cita del último mensaje del cliente sin responder**, «siguiente paso sugerido» (solo rellena, nunca envía), compositor con **Para el cliente / Nota interna**, vista previa de lo que verá el cliente, resumen de quién lo verá, plantillas, bloqueo de «enviar a revisión / entregada» si faltan archivos, confirmaciones al cancelar o entregar, borrador que sobrevive a subidas y a una sesión caducada.
+
+Cambios de servidor (mínimos y compatibles): `admin-order` devuelve `visible` en cada nota; `admin-orders` devuelve `last_voice` (quién habló último de forma visible) para saber quién espera respuesta. No cambian pagos, correo ni base de datos.
+
+Pruebas nuevas: `tests/e2e-ux.mjs` (26 comprobaciones por tamaño) con datos simulados en `tests/fixtures.mjs`; `npm run e2e` corre todo en móvil, escritorio, 360×640 y tablet.
+
 ## Revisión adversarial (qué se corrigió)
 
 Un revisor independiente probó 8 tamaños de pantalla × 10 vistas y encontró fallos que se corrigieron:
