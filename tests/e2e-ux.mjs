@@ -76,11 +76,11 @@ await step('admin: unauthenticated visitors get a login, then the board', async 
 });
 await step('admin: board has live counts, priorities first, filters and search', async () => {
   const {ctx, page} = await adminPage(); const tiles = await page.$$eval('.a-tile', a => a.map(e => e.textContent.replace(/\s+/g, ' ').trim()));
-  expect(tiles.length === 6 && /^5 ?Todas/.test(tiles[0]) && /^4 ?Por atender/.test(tiles[1]), JSON.stringify(tiles));
+  expect(tiles.length === 7 && /^5 ?Todas/.test(tiles[0]) && /^4 ?Por atender/.test(tiles[1]), JSON.stringify(tiles));
   const first = await page.$eval('.o-card', e => e.textContent); expect(!/Sergio/.test(first), 'priority first: ' + first.slice(0, 60));
   await page.click('.a-tile[data-filter=done]'); expect(await page.$$eval('.o-card', a => a.length) === 1, 'filter');
   await page.click('.a-tile[data-filter=done]'); await page.fill('#a-q', 'valentina'); await sleep(200); expect(await page.$$eval('.o-card', a => a.length) === 1, 'search');
-  expect(!(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1)), 'horizontal overflow'); await page.screenshot({path: new URL(`./shots/${mode}-a-board.png`, import.meta.url).pathname}); await ctx.close();
+  expect(!(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1)), 'horizontal overflow (board)'); await page.screenshot({path: new URL(`./shots/${mode}-a-board.png`, import.meta.url).pathname}); await ctx.close();
 });
 await step('admin: detail suggests the next move and the composer is pre-filled, never auto-sent', async () => {
   const {ctx, page, st} = await adminPage(); await page.click('[data-order="FHB-7K2Q9"]'); await page.waitForSelector('.a-pipe');
@@ -99,7 +99,7 @@ await step('admin: an internal note is never visible to the customer nor emailed
 await step('admin: delivery upload, contact shortcuts and payments are present', async () => {
   const {ctx, page} = await adminPage(); await page.click('[data-order="FHB-7K2Q9"]'); await page.waitForSelector('.a-pipe');
   const n = await page.evaluate(() => ({mail: !!document.querySelector('a[href^="mailto:"]'), wa: !!document.querySelector('a[href^="https://wa.me/57"]'), up: !!document.querySelector('#upload input[type=file]'), pay: /Aprobado/.test(document.body.textContent), files: document.querySelectorAll('.a-files li').length}));
-  expect(n.mail && n.wa && n.up && n.pay && n.files === 3, JSON.stringify(n)); await page.screenshot({path: new URL(`./shots/${mode}-a-detail.png`, import.meta.url).pathname, fullPage: true}); await ctx.close();
+  expect(n.mail && n.wa && n.up && n.pay && n.files === 3, JSON.stringify(n)); expect(!(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1)), 'horizontal overflow (detail)'); await page.screenshot({path: new URL(`./shots/${mode}-a-detail.png`, import.meta.url).pathname, fullPage: true}); await ctx.close();
 });
 await step('admin: cannot send a song to review or delivery without its files; says what is missing', async () => {
   const ready = {...order('in_production', {stage: 4, files: []}), reference: 'FHB-4S4S4', history: order('in_production', {stage: 4}).history.filter(h => h.actor !== 'customer')};

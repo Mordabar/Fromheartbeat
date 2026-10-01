@@ -8,7 +8,7 @@ const money = n => new Intl.NumberFormat('es-CO', {style: 'currency', currency: 
 const transitions = {created: ['created', 'cancelled'], payment_pending: ['payment_pending', 'cancelled'], paid: ['paid', 'in_production'], in_production: ['in_production', 'review'], review: ['review', 'in_production', 'completed'], completed: ['completed', 'review'], cancelled: ['cancelled']};
 const LABEL = {created: 'Esperando el pago', payment_pending: 'Esperando el pago', paid: 'Pagada · por empezar', in_production: 'En producción', review: 'Esperando al cliente', completed: 'Entregada', cancelled: 'Cancelada'};
 const stages = STAGE_INFO.map(s => s[0]);
-let boot, order, orders = [], filter = 'all', query = '', shown = 20;
+let boot, order, orders = [], filter = 'all', query = '', shown = 20, listSeq = 0, boardScroll = 0;
 const PAGE = 20;
 
 const P = {
@@ -50,15 +50,16 @@ const BUCKETS = [
   ['client', 'Esperando al cliente', 'review', 'headphones', o => o.status === 'review' && !needsStudio(o)],
   ['unpaid', 'Esperando el pago', 'off', 'clock', o => ['created', 'payment_pending'].includes(o.status)],
   ['done', 'Entregadas', 'done', 'star', o => o.status === 'completed'],
+  ['off', 'Canceladas', 'off', 'close', o => o.status === 'cancelled'],
 ];
 const meter = (o, big = false) => `<span class="a-meter${big ? ' big' : ''}" aria-hidden="true">${stages.map((_, i) => `<i class="${o.status === 'completed' || (!['created', 'payment_pending'].includes(o.status) && i < o.production_stage) ? 'on' : !['created', 'payment_pending', 'cancelled'].includes(o.status) && i === Number(o.production_stage) ? 'now' : ''}"></i>`).join('')}</span>`;
-const chip = o => `<span class="a-chip tone-${(STATE[o.status] || STATE.created).tone}">${esc(LABEL[o.status] || o.status)}</span>`;
+const chip = o => waitingOn(o) && o.status !== 'cancelled' ? '<span class="a-chip tone-pay">Te escribió</span>' : `<span class="a-chip tone-${(STATE[o.status] || STATE.created).tone}">${esc(LABEL[o.status] ?? o.status)}</span>`;
 
 function card(o) {
   const st = STATE[o.status] || STATE.created, t = parseDate(o.created_at);
   return `<button class="o-card tone-${st.tone}" data-order="${esc(o.reference)}"><span class="o-badge" aria-hidden="true">${ic(st.icon)}</span>
-    <span class="o-main"><b>${esc(o.name)}</b><span class="sr-only"> · </span><small>${esc(o.product_name)} · ${money(o.amount_in_cents)}</small>${meter(o)}<small class="o-stage">${['created', 'payment_pending'].includes(o.status) ? 'Esperando el pago' : o.status === 'completed' ? 'Entregada' : `Etapa ${Number(o.production_stage) + 1} de 6 · ${esc(stages[o.production_stage])}`}</small></span>
-    <span class="o-side">${chip(o)}${needsStudio(o) && o.status !== 'paid' ? `<span class="o-attn">${ic('alert')} ${waitingOn(o) ? 'Te escribió' : 'Por atender'}</span>` : ''}<small>${esc(o.reference)}<br>${esc(ago(t))}</small></span></button>`;
+    <span class="o-main"><b>${esc(o.name)}</b><span class="sr-only"> · </span><small>${esc(o.product_name)} · ${money(o.amount_in_cents)}</small>${meter(o)}<small class="o-stage">${['created', 'payment_pending'].includes(o.status) ? 'Esperando el pago' : o.status === 'completed' ? 'Entregada' : o.status === 'cancelled' ? 'Cancelada' : `Etapa ${Number(o.production_stage) + 1} de 6 · ${esc(stages[o.production_stage])}`}</small></span>
+    <span class="o-side">${chip(o)}${needsStudio(o) && o.status !== 'paid' && !waitingOn(o) ? `<span class="o-attn">${ic('alert')} Por atender</span>` : ''}<small>${esc(o.reference)}<br>${esc(ago(t))}</small></span></button>`;
 }
 
 function board() {
@@ -77,8 +78,9 @@ function renderBoard() {
   document.querySelector('#a-count').textContent = `${rows.length} ${rows.length === 1 ? 'sesión' : 'sesiones'}${orders.length >= 200 ? ' · se muestran las 200 más recientes' : ''}`;
 }
 async function list(q = '', quiet = false) {
-  const j = await api('admin-orders', null, '&q=' + encodeURIComponent(q));
-  orders = j.orders; query = q; shown = PAGE; document.querySelector('#logout').hidden = false;
+  const seq = ++listSeq, j = await api('admin-orders', null, '&q=' + encodeURIComponent(q));
+  if (seq !== listSeq || (quiet && !document.querySelector('#a-board'))) return;   // a late answer never replaces what the producer is looking at
+  orders = j.orders; query = q; if (!quiet) shown = shown > PAGE && !q ? shown : PAGE; document.querySelector('#logout').hidden = false;
   if (quiet && document.querySelector('#a-board')) { renderBoard(); return; }
   root.innerHTML = `${adminNav('orders')}<header class="a-head"><p class="a-eyebrow">Operaciones</p><h1>Las historias del estudio.</h1></header>
     ${boot.testMode ? labGuide() : ''}
@@ -105,7 +107,7 @@ const isUpload = h => /^(Versión disponible|Archivo añadido):/.test(h.note);
 function unanswered(o) {
   for (let i = o.history.length - 1; i >= 0; i--) {
     const h = o.history[i], w = who(h.actor); if (w === 'system') continue;
-    if (w === 'me') return h.note.replace(/^Comentario del cliente:\s*/, '');
+    if (w === 'me') { if (isUpload(h)) continue; return h.note.replace(/^Comentario del cliente:\s*/, ''); }
     if (/^Atendida sin mensaje/.test(h.note) || (Number(h.visible) !== 0 && !isUpload(h))) return null;
   }
   return null;
@@ -148,17 +150,19 @@ function thread(o) {
 }
 
 async function detail(ref, keep = {}) {
-  order = (await api('admin-order', null, '&reference=' + encodeURIComponent(ref))).order; const o = order, st = STATE[o.status] || STATE.created;
+  clearTimeout(searchTimer); ++listSeq;
+  if (document.querySelector('#a-board')) boardScroll = window.scrollY;
+  order = (await api('admin-order', null, '&reference=' + encodeURIComponent(ref))).order; Object.assign(order, {history: order.history || [], files: order.files || [], payments: order.payments || [], brief: order.brief || {}, customer: order.customer || {name: '—', email: '', phone: ''}, product: order.product || {price: 0}}); const o = order, st = STATE[o.status] || STATE.created;
   const pending = ['created', 'payment_pending'].includes(o.status), actions = nextActions(o), quote = pending || o.status === 'cancelled' ? null : unanswered(o), waiting = quote !== null, first = o.customer.name.split(' ')[0];
   const digits = String(o.customer.phone || '').replace(/\D/g, ''), wa = /^3\d{9}$/.test(digits) ? `https://wa.me/57${digits}` : digits.length >= 11 ? `https://wa.me/${digits}` : '';
   const briefKeys = {genre: 'Género', mood: 'Emoción', voice: 'Voz', language: 'Idioma', tempo: 'Ritmo', recipient: 'Para', occasion: 'Ocasión', brand: 'Marca', campaign: 'Campaña', channels: 'Canales', license_scope: 'Licencia solicitada', agreed_scope: 'Alcance acordado', details: 'Detalles'};
   const chips = ['genre', 'mood', 'voice', 'language', 'tempo'].filter(k => o.brief[k]).map(k => `<span class="a-tag"><small>${briefKeys[k]}</small>${esc(o.brief[k])}</span>`).join('');
   const rest = Object.entries(o.brief).filter(([k, v]) => v && !['genre', 'mood', 'voice', 'language', 'tempo', 'story'].includes(k));
-  const wantsUpload = ['in_production', 'review'].includes(o.status), uploadCard = `<form id="upload" class="a-card"><h2 class="a-h">Entregables y archivos</h2><p class="a-muted">Nombra cada archivo con su versión: <code>Cancion-v2.mp3</code>. El cliente verá la última como principal y conserva las anteriores.</p>
+  const wantsUpload = ['in_production', 'review'].includes(o.status), uploadCard = o.status === 'cancelled' ? '' : `<form id="upload" class="a-card"><h2 class="a-h">Entregables y archivos</h2><p class="a-muted">Nombra cada archivo con su versión: <code>Cancion-v2.mp3</code>. El cliente verá la última como principal y conserva las anteriores.</p>
     <fieldset class="a-seg"><legend class="sr-only">Tipo de archivo</legend><label><input type="radio" name="kind" value="delivery" checked><span>Para el cliente</span></label><label><input type="radio" name="kind" value="source"><span>Material del cliente</span></label></fieldset>
     <label class="a-drop"><input class="sr-only" name="file" type="file" required accept="audio/mpeg,audio/wav,image/jpeg,image/png,image/webp,video/mp4"><span>${ic('upload')} <b id="a-file-name">Elegir archivo</b><small>MP3, WAV, JPG, PNG, WebP o MP4 · hasta 50 MB</small></span></label>
     <button class="primary full-width">${ic('upload')} Subir archivo</button><p class="form-error" role="alert"></p>
-    <ul class="a-files">${o.files.map(f => `<li><span class="a-tag">${f.kind === 'delivery' ? 'Entrega' : 'Origen'}</span><span class="a-fn">${esc(f.original_name)}</span><a href="api.php?action=file&id=${f.id}&download=1" aria-label="Descargar ${esc(f.original_name)}">${ic('arrow', 'down')}</a></li>`).join('') || '<li class="a-muted">Aún no hay archivos.</li>'}</ul></form>`;
+    <ul class="a-files">${o.files.map(f => `<li><span class="a-tag">${f.kind === 'delivery' ? 'Entrega' : 'Origen'}</span><span class="a-fn">${esc(f.original_name)}</span><a href="api.php?action=file&id=${Number(f.id)}&download=1" aria-label="Descargar ${esc(f.original_name)}">${ic('arrow', 'down')}</a></li>`).join('') || '<li class="a-muted">Aún no hay archivos.</li>'}</ul></form>`;
   root.innerHTML = `${adminNav('orders')}<button class="a-back" id="back">${ic('back')} Todas las sesiones</button>
   <header class="a-detail-head tone-${st.tone}"><span class="o-badge big" aria-hidden="true">${ic(st.icon)}</span><div><p class="a-eyebrow">${esc(o.reference)}</p><h1>${esc(o.customer.name)}</h1><p class="a-muted">${esc(o.product_name)} · ${money(o.amount_in_cents)} COP</p></div>${chip(o)}</header>
   <div class="a-layout"><div class="a-col">
@@ -171,7 +175,7 @@ async function detail(ref, keep = {}) {
     <fieldset class="a-seg"><legend class="sr-only">¿Quién lo ve?</legend><label><input type="radio" name="audience" value="client" ${keep.audience !== 'internal' ? 'checked' : ''}><span>${ic('eye')} Para ${esc(first)}</span></label><label><input type="radio" name="audience" value="internal" ${keep.audience === 'internal' ? 'checked' : ''}><span>${ic('lock')} Nota interna</span></label></fieldset>
     ${waiting ? `<div class="a-quote"><p class="a-sub">${esc(first)} escribió</p><blockquote>${esc(quote.length > 280 ? quote.slice(0, 280) + '…' : quote)}</blockquote></div>` : ''}
     <label class="field a-note"><span id="a-note-label">${keep.audience === 'internal' ? 'Nota solo para el equipo' : waiting ? `Tu respuesta para ${esc(first)}` : `Mensaje que verá ${esc(first)} en su sesión`}</span><textarea name="note" required minlength="3" maxlength="2000" rows="4" placeholder="${keep.audience === 'internal' ? 'Ej.: Pidió referencia a Carlos Vives. Revisar tonalidad.' : 'Cuéntale en palabras simples qué pasó y qué sigue.'}">${esc(keep.text || '')}</textarea><small class="a-count"><span id="a-len">0</span> / 2000</small></label>
-    <div class="a-chips" role="group" aria-label="Plantillas de mensaje">${[['Empezamos', TEMPLATES.start], ['Letra', TEMPLATES[1]], ['Voz grabada', TEMPLATES[3]], ['Mezcla', TEMPLATES[4]], ['Lista para escuchar', TEMPLATES.review], ['Ya lo ajustamos', TEMPLATES.reply]].map(([l, t]) => `<button type="button" class="a-chip-btn" data-template="${esc(t)}">${esc(l)}</button>`).join('')}</div>
+    <div class="a-chips" role="group" aria-label="Plantillas de mensaje">${(waiting ? [['Ya lo ajustamos', TEMPLATES.reply], ['Lista para escuchar', TEMPLATES.review]] : [['Empezamos', TEMPLATES.start], ['Letra', TEMPLATES[1]], ['Voz grabada', TEMPLATES[3]], ['Mezcla', TEMPLATES[4]], ['Lista para escuchar', TEMPLATES.review]]).map(([l, t]) => `<button type="button" class="a-chip-btn" data-template="${esc(t)}">${esc(l)}</button>`).join('')}</div>
     <div id="a-preview" class="a-preview" ${keep.audience === 'internal' || !keep.text ? 'hidden' : ''}><p class="a-sub">Así lo verá ${esc(first)}</p><div class="a-msg studio"><div class="a-bub"><p class="a-who">Tu productor<span id="a-pv-stage">${esc(stages[keep.stage ?? o.production_stage])}</span></p><p id="a-pv-text">${esc(keep.text || '')}</p></div></div></div>
     <div class="a-two"><label class="field"><span>Estado</span><select name="status">${(transitions[o.status] || [o.status]).map(k => `<option value="${k}" ${k === (keep.status || o.status) ? 'selected' : ''}>${esc(LABEL[k])}</option>`).join('')}</select></label><label class="field"><span>Etapa</span><select name="stage">${stages.map((s, i) => `<option value="${i}" ${i === Number(keep.stage ?? o.production_stage) ? 'selected' : ''}>${i + 1}. ${esc(s)}</option>`).join('')}</select></label></div>
     <label class="check" id="a-notify"><input type="checkbox" name="notify" ${keep.audience === 'internal' ? 'disabled' : ''} ${keep.notify ? 'checked' : ''}><span>Avisar a ${esc(first)} por correo</span></label>
@@ -188,9 +192,12 @@ async function detail(ref, keep = {}) {
    ${wantsUpload ? '' : uploadCard}
    <section class="a-card"><h2 class="a-h">Pagos</h2>${o.payments.map(p => `<div class="a-pay"><b>${money(p.amount_in_cents)} ${esc(p.currency)}</b><span class="a-chip tone-${p.status === 'APPROVED' ? 'done' : p.status === 'PENDING' ? 'pay' : 'off'}">${esc({APPROVED: 'Aprobado', PENDING: 'Pendiente', DECLINED: 'Rechazado', VOIDED: 'Anulado', ERROR: 'Error'}[p.status] || p.status)}</span><small>${esc(p.transaction_id || 'Aún sin transacción')}<br>${esc(p.reference)}</small></div>`).join('') || '<p class="a-muted">No hay intentos de pago.</p>'}</section>
   </div></div>`;
+  const cf = document.querySelector('#update'); if (cf) syncCompose(cf);
 }
 
 // ---- Events -----------------------------------------------------------------------------------------------------------
+let searchTimer = 0;
+function focusTitle() { const h = document.querySelector('.admin-shell h1'); if (h) { h.tabIndex = -1; h.focus({preventScroll: true}); document.title = h.textContent.trim() + ' · Estudio Fromheartbeat'; } }
 const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 const draftKey = 'fhb_admin_draft';
 const readDraft = () => { const f = document.querySelector('#update'); return f ? {text: f.elements.note.value, audience: f.elements.audience.value, status: f.elements.status.value, stage: Number(f.elements.stage.value), notify: f.elements.notify.checked} : {}; };
@@ -211,7 +218,6 @@ function fillCompose(f, text, {append = false} = {}) {
 }
 // Choosing a state moves the stage to what makes sense, so the two can never contradict each other.
 function syncStage(f) { const v = f.elements.status.value; if (v === 'completed' || v === 'review') f.elements.stage.value = '5'; else if (v === 'paid') f.elements.stage.value = '0'; else if (v === 'in_production' && Number(f.elements.stage.value) === 5) f.elements.stage.value = '3'; }
-let searchTimer = 0;
 document.addEventListener('input', e => {
   const f = e.target.closest('#update'); if (f) syncCompose(f);
   if (e.target.id === 'a-q') { query = e.target.value; renderBoard(); clearTimeout(searchTimer); searchTimer = setTimeout(() => list(query, true).catch(err => tell(err.message, true)), 350); }
@@ -227,7 +233,7 @@ function sendForm(action, fd, onProgress) {
     if (onProgress) x.upload.onprogress = e => e.lengthComputable && onProgress(Math.round(e.loaded / e.total * 100));
     x.onerror = () => reject(Error('Sin conexión con el servidor. Revisa tu internet e inténtalo de nuevo.'));
     x.onload = () => { let j = {}; try { j = JSON.parse(x.responseText); } catch {}
-      if (x.status >= 200 && x.status < 300) return resolve(j);
+      if (x.status >= 200 && x.status < 300) return Object.keys(j).length ? resolve(j) : reject(Error('El servidor no confirmó que se guardara. Revisa y vuelve a intentarlo.'));
       if (x.status === 401) { stash(); login(); return reject(Error('Tu sesión expiró. Entra de nuevo y seguimos donde ibas.')); }
       reject(Error(j.error || (x.status === 413 ? `El archivo es demasiado grande para el servidor (máximo ${MAX_MB} MB).` : 'No se pudo completar la acción. Inténtalo de nuevo.'))); };
     x.send(fd);
@@ -252,7 +258,7 @@ document.addEventListener('click', async e => {
     }
     if (btn.dataset.next !== undefined) {
       const a = nextActions(order)[Number(btn.dataset.next)], f = document.querySelector('#update'); if (!a || a.blocked) return;
-      f.elements.status.value = a.status; f.elements.stage.value = String(a.stage); fillCompose(f, a.text || '', {append: !!a.reply}); f.elements.notify.checked = !a.reply; f.elements.attention.checked = false; syncCompose(f);
+      f.elements.status.value = a.status; f.elements.stage.value = String(a.stage); fillCompose(f, a.text || '', {append: !!a.reply}); f.elements.notify.checked = true; f.elements.attention.checked = false; syncCompose(f);
       f.scrollIntoView({behavior: reduced() ? 'auto' : 'smooth', block: 'start'}); f.elements.note.focus({preventScroll: true});
       tell(a.reply ? 'Escribe tu respuesta y pulsa «Enviar».' : 'Revisa el mensaje y pulsa «Enviar».'); return;
     }
@@ -261,8 +267,8 @@ document.addEventListener('click', async e => {
       try { if (btn.dataset.lab === 'sync') { const r = await api('admin-sync', {reference: order.reference}); tell('Estado según Wompi: ' + (LABEL[r.status] || r.status)); } if (btn.dataset.lab === 'kit') { const r = await api('admin-test-kit', {reference: order.reference}); tell(r.added + ' archivos de prueba añadidos.'); } await detail(order.reference, readDraft()); } finally { btn.disabled = false; }
       return;
     }
-    if (btn.dataset.order) { await detail(btn.dataset.order); window.scrollTo({top: 0}); return; }
-    if (btn.id === 'back') await list(query);
+    if (btn.dataset.order) { await detail(btn.dataset.order); window.scrollTo({top: 0}); focusTitle(); return; }
+    if (btn.id === 'back') { await list(query); window.scrollTo({top: boardScroll}); focusTitle(); }
   } catch (err) { tell(err.message, true); }
 });
 document.addEventListener('submit', async e => {
@@ -286,7 +292,7 @@ document.addEventListener('submit', async e => {
     if (f.id === 'upload') {
       const file = f.elements.file.files[0]; if (!file) { say('Elige un archivo primero.'); return; }
       if (file.size > MAX_MB * 2 ** 20) { say(`«${file.name}» pesa ${(file.size / 2 ** 20).toFixed(0)} MB. El máximo es ${MAX_MB} MB.`); return; }
-      if (file.type && !TYPES.includes(file.type)) { say('Ese tipo de archivo no se puede subir. Usa MP3, WAV, JPG, PNG, WebP o MP4.'); return; }
+      if (!TYPES.includes(file.type) && !/\.(mp3|wav|jpe?g|png|webp|mp4)$/i.test(file.name)) { say('Ese tipo de archivo no se puede subir. Usa MP3, WAV, JPG, PNG, WebP o MP4.'); return; }
       const fd = new FormData(f); fd.append('reference', order.reference);
       await sendForm('upload', fd, p => { b.textContent = `Subiendo… ${p} %`; });
       await detail(order.reference, readDraft()); tell('Archivo subido.');
