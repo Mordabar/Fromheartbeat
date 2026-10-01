@@ -7,7 +7,7 @@ import {put, box, neonFrame, makeScreen, Pill} from './st-kit.js';
 
 import {STATE, STAGE_INFO} from './session-ui.js';
 const TONE = {pay: '#ffc857', make: '#c9a0ff', review: '#38e1ff', done: '#3dffc5', off: '#a79bb8'};
-const SHORT = ['Historia', 'Letra', 'Voz', 'Producción', 'Mezcla', 'Entrega'];
+const SHORT = ['Historia', 'Letra', 'Grabación', 'Producción', 'Mezcla', 'Entrega'];
 
 export function buildSession(s) {
   const g = stationGroup(AZIMUTH.session); s.scene.add(g);
@@ -29,10 +29,10 @@ export function buildSession(s) {
       c.fillStyle = '#b9a6e6'; c.font = `600 ${h * 0.058}px ${FONT.sans}`; c.fillText('Toca la pantalla para abrir tus pedidos ↗', px, h * 0.88);
       return;
     }
-    const look = STATE[o.status] || STATE.created, tone = TONE[look.tone], stage = Number(o.stage ?? 0), pending = ['created', 'payment_pending'].includes(o.status), finished = o.status === 'completed';
+    const look = STATE[o.status] || STATE.created, tone = TONE[look.tone], stage = ['review', 'completed'].includes(o.status) ? 5 : Number(o.stage ?? 0), pending = ['created', 'payment_pending', 'cancelled'].includes(o.status), finished = o.status === 'completed';
     neonText(c, look.label, px, h * 0.24, {size: h * 0.15, color: tone, align: 'left', blur: 18, maxW: w * 0.88});
     c.fillStyle = '#efe6ff'; c.font = `500 ${h * 0.058}px ${FONT.sans}`; c.textAlign = 'left';
-    const says = o.status === 'in_production' ? STAGE_INFO[stage][1] : look.says;
+    const says = o.status === 'in_production' ? (stage === 5 ? 'Estamos en el último paso: preparamos la entrega.' : STAGE_INFO[stage][1]) : look.says;
     wrap(c, says, w * 0.88).slice(0, 2).forEach((l, k) => c.fillText(l, px, h * 0.4 + k * h * 0.072));
     // Six channels, like the faders of a console: full = done, lit = now, empty = soon.
     const span = w - px * 2, col = span / 6, top = h * 0.57, bot = h * 0.82;

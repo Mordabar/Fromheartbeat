@@ -141,3 +141,7 @@
  .o-card{grid-template-columns:auto 1fr;grid-template-areas:"b m" "s s"}.o-badge{grid-area:b}.o-main{grid-area:m}.o-side{grid-area:s;flex-direction:row;justify-content:space-between;align-items:center;text-align:left}
  .o-side small{text-align:right}
 }
+
+.a-chips{flex-wrap:wrap;overflow:visible}
+.a-blocked{flex:1 1 100%}
+.a-drop:focus-within{outline:2px solid #fff;outline-offset:2px}.a-drop{cursor:pointer}

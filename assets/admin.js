@@ -156,7 +156,7 @@ async function detail(ref, keep = {}) {
   const rest = Object.entries(o.brief).filter(([k, v]) => v && !['genre', 'mood', 'voice', 'language', 'tempo', 'story'].includes(k));
   const wantsUpload = ['in_production', 'review'].includes(o.status), uploadCard = `<form id="upload" class="a-card"><h2 class="a-h">Entregables y archivos</h2><p class="a-muted">Nombra cada archivo con su versión: <code>Cancion-v2.mp3</code>. El cliente verá la última como principal y conserva las anteriores.</p>
     <fieldset class="a-seg"><legend class="sr-only">Tipo de archivo</legend><label><input type="radio" name="kind" value="delivery" checked><span>Para el cliente</span></label><label><input type="radio" name="kind" value="source"><span>Material del cliente</span></label></fieldset>
-    <label class="a-drop"><input name="file" type="file" required accept="audio/mpeg,audio/wav,image/jpeg,image/png,image/webp,video/mp4"><span>${ic('upload')} <b>Elegir archivo</b><small>MP3, WAV, JPG, PNG, WebP o MP4 · hasta 50 MB</small></span></label>
+    <label class="a-drop"><input class="sr-only" name="file" type="file" required accept="audio/mpeg,audio/wav,image/jpeg,image/png,image/webp,video/mp4"><span>${ic('upload')} <b id="a-file-name">Elegir archivo</b><small>MP3, WAV, JPG, PNG, WebP o MP4 · hasta 50 MB</small></span></label>
     <button class="primary full-width">${ic('upload')} Subir archivo</button><p class="form-error" role="alert"></p>
     <ul class="a-files">${o.files.map(f => `<li><span class="a-tag">${f.kind === 'delivery' ? 'Entrega' : 'Origen'}</span><span class="a-fn">${esc(f.original_name)}</span><a href="api.php?action=file&id=${f.id}&download=1" aria-label="Descargar ${esc(f.original_name)}">${ic('arrow', 'down')}</a></li>`).join('') || '<li class="a-muted">Aún no hay archivos.</li>'}</ul></form>`;
   root.innerHTML = `${adminNav('orders')}<button class="a-back" id="back">${ic('back')} Todas las sesiones</button>
@@ -166,7 +166,7 @@ async function detail(ref, keep = {}) {
     <ol class="a-stages">${stages.map((n, i) => `<li class="${o.status === 'completed' || (!pending && i < o.production_stage) ? 'done' : !pending && i === Number(o.production_stage) ? 'now' : ''}"><span>${i + 1}</span>${esc(n)}</li>`).join('')}</ol>
     ${waiting ? `<div class="a-alert" role="group" aria-label="Mensaje del cliente sin responder"><p class="a-alert-t">${ic('alert')} <b>${esc(first)} te escribió y espera respuesta</b></p><blockquote>${esc(quote.length > 280 ? quote.slice(0, 280) + '…' : quote)}</blockquote><button type="button" class="a-link" data-attend>Ya lo atendí por otro medio · quitar de «por atender»</button></div>` : Number(o.requires_attention) ? `<div class="a-alert"><p class="a-alert-t">${ic('alert')} <b>Marcada como «por atender»</b></p><button type="button" class="a-link" data-attend>Marcar como atendida</button></div>` : ''}
     ${actions.length ? `<div class="a-next"><p class="a-sub">${actions.length > 1 ? 'Qué quieres hacer ahora' : 'Siguiente paso sugerido'}</p>${actions.map((a, i) => `<button class="${a.primary ? 'primary' : 'secondary'} a-act" data-next="${i}" ${a.blocked ? 'disabled aria-describedby="blk' + i + '"' : ''}>${ic(a.icon)} ${esc(a.label)}</button>${a.blocked ? `<p class="a-blocked" id="blk${i}">${ic('upload')} ${esc(a.blocked)} <a href="#upload">Subir archivo</a></p>` : ''}`).join('')}</div>` : pending ? '<p class="a-muted">La producción empieza cuando Wompi confirme el pago. Se actualiza solo.</p>' : o.status === 'cancelled' ? '<p class="a-muted">Esta sesión fue cancelada y no se puede reactivar.</p>' : ''}</section>
-   ${wantsUpload ? uploadCard : ''}
+   ${wantsUpload && !waiting ? uploadCard : ''}
    ${o.status === 'cancelled' ? '' : `<form id="update" class="a-card a-compose" novalidate><h2 class="a-h">Mensaje y estado</h2>
     <fieldset class="a-seg"><legend class="sr-only">¿Quién lo ve?</legend><label><input type="radio" name="audience" value="client" ${keep.audience !== 'internal' ? 'checked' : ''}><span>${ic('eye')} Para ${esc(first)}</span></label><label><input type="radio" name="audience" value="internal" ${keep.audience === 'internal' ? 'checked' : ''}><span>${ic('lock')} Nota interna</span></label></fieldset>
     ${waiting ? `<div class="a-quote"><p class="a-sub">${esc(first)} escribió</p><blockquote>${esc(quote.length > 280 ? quote.slice(0, 280) + '…' : quote)}</blockquote></div>` : ''}
@@ -178,6 +178,7 @@ async function detail(ref, keep = {}) {
     <label class="check"><input type="checkbox" name="attention" ${Number(o.requires_attention) && !waiting ? 'checked' : ''}><span>Dejar marcada como «por atender»</span></label>
     <p id="a-summary" class="a-summary" role="status"></p>
     <button class="primary full-width" id="a-send">${ic('send')} Enviar a ${esc(first)}</button><p class="form-error" role="alert"></p></form>`}
+   ${wantsUpload && waiting ? uploadCard : ''}
    <section class="a-card"><h2 class="a-h">Conversación <b>${o.history.filter(h => who(h.actor) !== 'system').length} mensajes</b></h2>${thread(o)}</section>
   </div><div class="a-col">
    ${boot.testMode ? labCard(o) : ''}
@@ -215,7 +216,8 @@ document.addEventListener('input', e => {
   const f = e.target.closest('#update'); if (f) syncCompose(f);
   if (e.target.id === 'a-q') { query = e.target.value; renderBoard(); clearTimeout(searchTimer); searchTimer = setTimeout(() => list(query, true).catch(err => tell(err.message, true)), 350); }
 });
-document.addEventListener('change', e => { const f = e.target.closest('#update'); if (f) { if (e.target.name === 'status') syncStage(f); syncCompose(f); } });
+document.addEventListener('change', e => { if (e.target.matches('#upload input[type=file]')) { const n = document.querySelector('#a-file-name'); n.textContent = e.target.files[0]?.name || 'Elegir archivo'; }
+  const f = e.target.closest('#update'); if (f) { if (e.target.name === 'status') syncStage(f); syncCompose(f); } });
 
 // Uploads: checked before sending, with real progress and a readable error.
 const MAX_MB = 50, TYPES = ['audio/mpeg', 'audio/wav', 'audio/x-wav', 'image/jpeg', 'image/png', 'image/webp', 'video/mp4'];

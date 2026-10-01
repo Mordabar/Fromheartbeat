@@ -127,5 +127,40 @@ await step('admin: choosing a state keeps the stage coherent; cancelling asks fi
   await c.page.selectOption('[name=status]', 'cancelled'); await c.page.fill('[name=note]', 'Cancelada a pedido'); await c.page.click('#update button.primary'); await sleep(400);
   expect(asked && c.st.saved.length === 0, 'cancel must ask and not save when dismissed'); await c.ctx.close();
 });
+await step('checkout: the error is written next to the field that needs it, and clears when typing', async () => {
+  const t = await open(b, mode); await mockCustomerApi(t.page, order('created'));
+  await t.F(() => Object.assign(window.__fhb.draft(), {genre: 'Bachata', mood: 'Romántica', voice: 'Femenina', recipient: 'Luna', occasion: 'Aniversario', story: 'Nos conocimos en un viaje a la playa en 2016.', product: 'full', name: '', email: '', phone: '', consent: false}));
+  await t.F(() => window.__fhb.go('checkout')); await t.settle(3.5); await sleep(300); await t.F(() => document.querySelector('#next').click()); await sleep(400);
+  const e = await t.F(() => { const el = document.querySelector('.field-err'); if (!el) return null; const r = el.getBoundingClientRect(), b = document.querySelector('#options-dialog .panel-body').getBoundingClientRect(); return {text: el.textContent, inView: r.top >= b.top && r.bottom <= b.bottom}; });
+  expect(e && /nombre/i.test(e.text) && e.inView, 'inline error not visible: ' + JSON.stringify(e)); await t.page.fill('[name=name]', 'Ana'); await sleep(150);
+  expect(!(await t.F(() => document.querySelector('.field-err'))), 'error should clear on typing'); await t.ctx.close();
+});
+await step('checkout: "Cambiar" from the summary returns to payment in one tap', async () => {
+  const t = await open(b, mode); await mockCustomerApi(t.page, order('created'));
+  await t.F(() => Object.assign(window.__fhb.draft(), {genre: 'Bachata', mood: 'Romántica', voice: 'Femenina', recipient: 'Luna', occasion: 'Aniversario', story: 'Nos conocimos en un viaje a la playa en 2016.', product: 'full'}));
+  await t.F(() => window.__fhb.go('checkout')); await t.settle(3.5); await sleep(300);
+  await t.F(() => document.querySelector('.recap-row button').click()); await t.settle(3); await sleep(300);
+  expect(/volver al pago/i.test(await text(t, '#j-next')), 'label: ' + await text(t, '#j-next')); await t.F(() => document.querySelector('#j-next').click()); await t.settle(3);
+  expect((await t.F(() => window.__fhb.view())) === 'checkout', 'did not return to checkout'); await t.ctx.close();
+});
+await step('cancelled session shows no progress, says so, and offers a way to talk', async () => {
+  const t = await open(b, mode); await mockCustomerApi(t.page, order('cancelled')); await t.F(() => window.__fhb.go('recover')); await sleep(300); await t.F(() => document.querySelector('.my-order').click()); await t.settle(3.5); await sleep(300);
+  const n = await t.F(() => ({now: document.querySelectorAll('.s-stages .now').length, done: document.querySelectorAll('.s-stages .done').length, meter: document.querySelectorAll('.s-meter .now,.s-meter .on').length, h: document.querySelector('.s-hero h1').textContent}));
+  expect(n.now === 0 && n.done === 0 && n.meter === 0 && /cancelada/i.test(n.h), JSON.stringify(n)); await t.ctx.close();
+});
+await step('review: the last stage is the one that is lit (hero and line agree)', async () => {
+  const t = await sessionFor('review'); expect(/Etapa 6 de 6/.test(await text(t, '.s-line .s-h')), await text(t, '.s-line .s-h')); await t.ctx.close();
+});
+await step('long producer notes are folded with a "Leer completa" button', async () => {
+  const t = await open(b, mode); const o = order('review'); o.history.push({status: 'review', stage: 5, actor: 'admin:1', note: 'Una nota muy larga. '.repeat(60), created_at: '2026-09-20 10:00:00'}); await mockCustomerApi(t.page, o);
+  await t.F(() => window.__fhb.go('recover')); await sleep(300); await t.F(() => document.querySelector('.my-order').click()); await t.settle(3.5); await sleep(300);
+  expect(await t.F(() => !!document.querySelector('.s-text.clamp') && !!document.querySelector('[data-readmore]')), 'no clamp'); await t.F(() => document.querySelector('[data-readmore]').click());
+  expect(await t.F(() => !document.querySelector('.s-text.clamp')), 'did not expand'); await t.ctx.close();
+});
+await step('Mi sesión: with a session on this device the first action is opening it', async () => {
+  const t = await open(b, mode); await mockCustomerApi(t.page, order('in_production')); await t.F(() => window.__fhb.go('recover')); await sleep(400);
+  const n = await t.F(() => ({cards: document.querySelectorAll('.my-order').length, foot: document.querySelector('#options-dialog .panel-foot')?.textContent.trim() || '', lost: !!document.querySelector('.s-lost')}));
+  expect(n.cards === 1 && n.lost && !/Enviarme/.test(n.foot), JSON.stringify(n)); await t.ctx.close();
+});
 await step('no console errors anywhere', async () => { const real = errors.filter(e => !/api\.php|Failed to load resource/.test(e)); expect(!real.length, real.slice(0, 3).join(' | ')); });
 await b.close(); finish({errors: [], failed: []});

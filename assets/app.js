@@ -56,10 +56,11 @@ function shell({head,body,foot='',cls=''}){return `<section class="panel ${cls}"
 const simpleHead=(title,hint='',back='back')=>`<div class="head-row"><button class="icon-btn" data-go="${back}" aria-label="Volver">${ic('back')}</button><span class="step-count">${esc(ZONES[view]||'')}</span><span class="icon-spacer"></span></div><h1 id="panel-title">${title}</h1>${hint?`<p class="hint">${hint}</p>`:''}`;
 
 function wizardHead(step){const i=FLOW.indexOf(step),m=STEPS[step];return `<div class="head-row"><button class="icon-btn" data-go="${i?FLOW[i-1]:'lobby'}" aria-label="${i?'Paso anterior':'Volver al inicio'}">${ic('back')}</button><span class="step-count">Paso ${i+1} de ${FLOW.length} · ${m.zone}</span><button class="icon-btn" data-go="lobby" aria-label="Salir al inicio (tu avance se guarda)">${ic('close')}</button></div><div class="progress" aria-hidden="true">${FLOW.map((s,j)=>`<i class="${j<i?'done':j===i?'now':''}"></i>`).join('')}</div><h1 id="panel-title">${m.title}</h1><p class="hint">${m.hint}</p>`;}
-function summaryText(){return [draft.genre,draft.mood,draft.voice&&`Voz ${draft.voice.toLowerCase()}`].filter(Boolean).map(esc).join(' · ')||'Tu canción empieza aquí';}
-function nextLabel(step){if(step==='products')return firstMissingBrief(draft)?'Crear con este paquete':'Revisar mi canción';if(step==='checkout'){const p=selectedProduct();return boot.commerceReady?`Ir a pagar ${money(p.price)}`:'Guardar mi sesión';}return 'Siguiente';}
-function wizardFoot(step){const ok=valid(step),i=FLOW.indexOf(step);return `<p class="summary" id="summary">${summaryText()}</p><button class="primary next ${ok?'':'locked'}" id="next" ${step==='checkout'?'type="submit" form="checkout-form"':`type="button" data-next="${step==='products'?(firstMissingBrief(draft)||'checkout'):FLOW[i+1]}"`} aria-disabled="${!ok}">${nextLabel(step)} <span>→</span></button>`;}
+function summaryText(){if(view==='checkout')return boot.commerceReady?'El pago seguro se abre en otra pestaña · tu historia queda guardada':'Tu historia queda guardada y te avisamos para pagar';return [draft.genre,draft.mood,draft.voice&&`Voz ${draft.voice.toLowerCase()}`].filter(Boolean).map(esc).join(' · ')||'Tu canción empieza aquí';}
+function nextLabel(step){if(returnTo&&step!=='checkout')return 'Listo, volver al pago';if(step==='products')return firstMissingBrief(draft)?'Crear con este paquete':'Revisar mi canción';if(step==='checkout'){const p=selectedProduct();return boot.commerceReady?`Ir a pagar ${money(p.price)}`:'Guardar mi sesión';}return 'Siguiente';}
+function wizardFoot(step){const ok=valid(step),i=FLOW.indexOf(step);return `<p class="summary" id="summary">${summaryText()}</p><button class="primary next ${ok?'':'locked'}" id="next" ${step==='checkout'?'type="submit" form="checkout-form"':`type="button" data-next="${nextTarget(step)}"`} aria-disabled="${!ok}">${nextLabel(step)} <span>→</span></button>`;}
 // Say exactly what is missing, in words, and put the cursor there.
+function clearFieldErrors(){document.querySelectorAll('.field.invalid,.check.invalid').forEach(x=>{x.classList.remove('invalid');x.querySelector('.field-err')?.remove();x.querySelector('[aria-describedby^=err-]')?.removeAttribute('aria-describedby');});}
 function checkoutProblem(form){
  const missing=firstMissingBrief(draft),f=form.elements;let msg,el;
  if(missing){msg=STEPS[missing].need;}
@@ -67,8 +68,9 @@ function checkoutProblem(form){
  else if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test((draft.email||'').trim())){msg='Revisa tu correo: parece incompleto (por ejemplo ana@ejemplo.com).';el=f.email;}
  else if(((draft.phone||'').replace(/\D/g,'')).length<7){msg='Escribe tu celular con todos los números.';el=f.phone;}
  else{msg='Marca la casilla para aceptar los términos y poder continuar.';el=f.consent;}
- $('#checkout-error').textContent=msg;document.querySelectorAll('.field.invalid').forEach(x=>x.classList.remove('invalid'));
- if(el){el.closest('.field')?.classList.add('invalid');el.focus({preventScroll:false});el.scrollIntoView?.({block:'center',behavior:'smooth'});}
+ $('#checkout-error').textContent=msg;clearFieldErrors();
+ if(el){const box=el.closest('.field,.check');box?.classList.add('invalid');const e=document.createElement('p');e.className='field-err';e.id='err-'+el.name;e.setAttribute('role','alert');e.textContent=msg;box?.append(e);el.setAttribute('aria-describedby',e.id);el.focus({preventScroll:true});box?.scrollIntoView?.({block:'center'});}
+ else $('#checkout-error')?.scrollIntoView?.({block:'center'});
  announce(msg);
 }
 function refreshFoot(){if(!FLOW.includes(view))return;const ok=valid(view);document.querySelectorAll('#next,#j-next').forEach(n=>{n.classList.toggle('locked',!ok);n.setAttribute('aria-disabled',String(!ok));});const s=$('#summary');if(s)s.innerHTML=summaryText();}
@@ -106,8 +108,10 @@ function checkoutStep(){const p=selectedProduct();
  </form>`;}
 function wizardView(step){const body={genre:genreStep,mood:moodStep,voice:voiceStep,story:storyStep,products:productsStep,checkout:checkoutStep}[step]();return shell({cls:`wizard step-${step}`,head:wizardHead(step),body,foot:wizardFoot(step)});}
 
-function recoverView(){const list=myOrders.length?`<h2 class="s-h"><span>En este dispositivo</span><b>${myOrders.length} ${myOrders.length>1?'sesiones':'sesión'}</b></h2><div class="my-orders">${myOrders.map(o=>{const st=STATE[o.status]||STATE.created,stg=['created','payment_pending'].includes(o.status)?'':o.status==='completed'?'Entregada':'Etapa '+(Number(o.production_stage)+1)+' de 6 · '+STAGE_INFO[Number(o.production_stage)||0][0];return `<button class="my-order tone-${st.tone}" data-order="${esc(o.reference)}"><span class="mo-badge" aria-hidden="true">${ic(st.icon)}</span><span class="mo-text"><b class="mo-state">${esc(st.label)}</b><strong>${esc(o.product_name)} · ${money(o.amount_in_cents)}</strong><small>${esc(stg||'Aún no empieza')} · ${esc(o.reference)}</small></span>${ic('arrow')}</button>`;}).join('')}</div><h2 class="s-h"><span>¿Otro dispositivo?</span><b>Recibe tu enlace por correo</b></h2>`:'';
- return shell({head:simpleHead('Tu sesión','Sigue tu canción o recupera tu enlace privado.'),body:`${list}<form id="recover-form"><label class="field"><span>El correo con el que hiciste tu pedido</span><input type="email" name="email" required autocomplete="email" placeholder="tucorreo@ejemplo.com"></label><p class="form-error" id="recover-result" role="status"></p></form>`,foot:`<button class="primary" type="submit" form="recover-form">${ic('mail')} Enviarme mi enlace</button>`});}
+function recoverView(){
+ const has=myOrders.length>0,mail=`<form id="recover-form"><label class="field"><span>El correo con el que hiciste tu pedido</span><input type="email" name="email" required autocomplete="email" placeholder="tucorreo@ejemplo.com"></label><p class="form-error" id="recover-result" role="status"></p><button class="secondary" type="submit">${ic('mail')} Enviarme mi enlace</button></form>`;
+ const list=has?`<h2 class="s-h"><span>En este dispositivo</span><b>${myOrders.length} ${myOrders.length>1?'sesiones':'sesión'}</b></h2><div class="my-orders">${myOrders.map(o=>{const st=STATE[o.status]||STATE.created,stg=['created','payment_pending','cancelled'].includes(o.status)?'':o.status==='completed'?'Entregada':'Etapa '+(Number(o.production_stage)+1)+' de 6 · '+STAGE_INFO[Number(o.production_stage)||0][0];return `<button class="my-order tone-${st.tone}" data-order="${esc(o.reference)}"><span class="mo-badge" aria-hidden="true">${ic(st.icon)}</span><span class="mo-text"><b class="mo-state">${esc(st.label)}</b><strong>${esc(o.product_name)} · ${money(o.amount_in_cents)}</strong><small>${esc(stg||'Aún no empieza')} · ${esc(o.reference)}</small></span>${ic('arrow')}</button>`;}).join('')}</div><details class="s-card s-lost"><summary>${ic('mail')} ¿No ves tu sesión? Recíbela por correo</summary>${mail}</details>`:`<p class="s-says">No encontramos sesiones en este dispositivo. Escribe el correo de tu pedido y te enviamos tu enlace privado.</p>${mail}`;
+ return shell({cls:'session',head:`<div class="head-row"><button class="icon-btn" data-go="lobby" aria-label="Volver al inicio">${ic('back')}</button><span class="step-count">Mi sesión</span><span class="icon-spacer"></span></div>`,body:`<div class="s-wrap">${list}</div>`});}
 
 function sessionView(){const o=currentOrder;if(!o)return shell({head:simpleHead('Abriendo tu sesión…'),body:''});
  return shell({cls:'tall session',head:`<div class="head-row"><button class="icon-btn" data-go="lobby" aria-label="Volver al inicio">${ic('back')}</button><span class="step-count">Tu sesión</span><span class="icon-spacer"></span></div>`,body:sessionMarkup(o,{esc,money,ic,boot,testCard})});}
@@ -119,11 +123,13 @@ const isMobile=()=>innerWidth<900;
 const optionsDialog=$('#options-dialog'), STEP_ICON={genre:'sliders',mood:'sparkle',voice:'mic',story:'lines',products:'star',checkout:'lock'};
 const DRAWER_VIEWS=['about','terms','privacy','recover','session','checkout','story'];
 const announce=text=>{const l=$('#live');l.textContent='';requestAnimationFrame(()=>{l.textContent=text;});};
-const nextTarget=step=>step==='products'?(firstMissingBrief(draft)||'checkout'):FLOW[FLOW.indexOf(step)+1];
+let returnTo=null;
+const nextTarget=step=>returnTo&&step!=='checkout'?'checkout':step==='products'?(firstMissingBrief(draft)||'checkout'):FLOW[FLOW.indexOf(step)+1];
 function sync3D(){if(!studio)return;studio.setDraft(draft);studio.stations.session?.setOrder(currentOrder?{reference:currentOrder.reference,status:currentOrder.status,productName:currentOrder.product_name,stage:currentOrder.production_stage}:null);renderHud();}
 function mountOptions(){const host=$('#mobile-content');if(root.parentElement!==host)host.append(root);document.body.classList.toggle('mobile-studio',isMobile());}
-function openOptions(){mountOptions();if(!optionsDialog.open){modalReturnFocus=document.activeElement;optionsDialog.show();document.body.classList.add('options-open');$('#close-options').focus({preventScroll:true});}renderHud();frameStudio();}
-function closeOptions(){if(optionsDialog.open)optionsDialog.close();document.body.classList.remove('options-open');optionsDialog.classList.remove('expanded');renderHud();frameStudio();}
+function syncInert(){const k=$('#stage-keys');if(k)k.inert=optionsDialog.open&&DRAWER_VIEWS.includes(view);}
+function openOptions(){mountOptions();if(!optionsDialog.open){modalReturnFocus=document.activeElement;optionsDialog.show();document.body.classList.add('options-open');$('#close-options').focus({preventScroll:true});}syncInert();renderHud();frameStudio();}
+function closeOptions(){if(optionsDialog.open)optionsDialog.close();document.body.classList.remove('options-open');syncInert();optionsDialog.classList.remove('expanded');renderHud();frameStudio();}
 function hydrateIcons(){document.querySelectorAll('.ico[data-icon]').forEach(el=>{el.innerHTML=iconSvg(el.dataset.icon);});}
 
 
@@ -193,7 +199,7 @@ function frameStudio(){
  studio.setFree([left,top,right,Math.max(top+120,bottom)]);
  const off=Math.abs(studio.rig.yaw)+Math.abs(studio.rig.pitch)+Math.abs(studio.rig.zoom-1)>0.03;$('#reset-view').hidden=!off;
 }
-function render(enter=true){mountOptions();root.innerHTML=(FLOW.includes(view)?()=>wizardView(view):{lobby,info:aboutView,about:aboutView,samples:samplesView,recover:recoverView,session:sessionView,terms:()=>legalView(false),privacy:()=>legalView(true)}[view]||lobby)();const panel=root.querySelector('.panel');if(panel&&enter)panel.classList.add('enter');document.body.dataset.view=view;sync3D();requestAnimationFrame(frameStudio);}
+function render(enter=true){mountOptions();const keepScroll=!enter?(root.querySelector('.panel-body')?.scrollTop||0):0;root.innerHTML=(FLOW.includes(view)?()=>wizardView(view):{lobby,info:aboutView,about:aboutView,samples:samplesView,recover:recoverView,session:sessionView,terms:()=>legalView(false),privacy:()=>legalView(true)}[view]||lobby)();const panel=root.querySelector('.panel');if(panel&&enter)panel.classList.add('enter');document.body.dataset.view=view;if(keepScroll){const pb=root.querySelector('.panel-body');if(pb)pb.scrollTop=keepScroll;}sync3D();requestAnimationFrame(frameStudio);}
 
 function go(next){
  if(!boot)return;
@@ -212,6 +218,7 @@ function go(next){
  if(!['terms','privacy'].includes(view))lastView=view;
  if(next==='lobby')trail.length=0;else if(!back&&next!==view){trail.push(view);if(trail.length>20)trail.shift();}
  if(FLOW.includes(next))flowView=next;
+ if(next==='checkout'||!FLOW.includes(next))returnTo=next==='terms'||next==='privacy'?returnTo:null;
  if(next==='recover')api('my-orders').then(r=>{myOrders=r.orders;if(view==='recover')render(false);}).catch(()=>{});
  view=next;genreTab=null;
  if(draft.mood)studio?.tone(draft.mood);
@@ -250,7 +257,7 @@ function onAction(a){
 document.addEventListener('click',async e=>{const el=e.target.closest('button');if(!el)return;
  if(el.hasAttribute('data-plain')){if(FLOW.includes(view))plainMode=true;openOptions();return;}
  if(el.id==='reset-view'){studio?.resetView();return;}
- if(el.dataset.go){go(el.dataset.go);return;}
+ if(el.dataset.go){if(el.closest('.recap-row'))returnTo='checkout';go(el.dataset.go);return;}
  if(el.dataset.next!==undefined){if(!valid(view)){toast(STEPS[view].need);announce(STEPS[view].need);el.classList.remove('shake');void el.offsetWidth;el.classList.add('shake');studio?.pulse(.8);return;}go(el.dataset.next);return;}
  if(el.dataset.tab){genreTab=el.dataset.tab;const body=root.querySelector('.panel-body');body.innerHTML=genreStep();body.scrollTop=0;body.querySelector('[role="tab"][aria-selected="true"]')?.focus();return;}
  if(el.dataset.pick){const name=el.dataset.pick,value=el.dataset.value;applyPick(name,value);root.querySelectorAll(`[data-pick="${name}"]`).forEach(b=>{const on=b===el;b.classList.toggle('on',on);b.setAttribute('aria-pressed',String(on));});
@@ -261,16 +268,18 @@ document.addEventListener('click',async e=>{const el=e.target.closest('button');
  if(el.dataset.track!==undefined){playTrack(Number(el.dataset.track));return;}
  if(el.dataset.order){loadOrder(el.dataset.order).catch(e=>toast(e.message));return;}
  if(el.id==='resume-payment'){el.disabled=true;const tab=paymentTab();try{openPayment(tab,(await api('checkout',{reference:currentOrder.reference})).url);await loadOrder(currentOrder.reference);}catch(e){tab?.close();$('#payment-error').textContent=e.message;el.disabled=false;}}
- if(el.dataset.quick){const t=el.closest('form').elements.message;t.value=(t.value?t.value+' ':'')+el.dataset.quick+'. ';t.focus();return;}
+ if(el.dataset.quick){const t=el.closest('form').elements.message;if(!t.value.includes(el.dataset.quick))t.value=(t.value?t.value+' ':'')+el.dataset.quick+'. ';t.focus();return;}
+ if(el.dataset.readmore!==undefined){const p=el.previousElementSibling,open=p.classList.toggle('clamp')===false;el.textContent=open?'Mostrar menos':'Leer completa';el.setAttribute('aria-expanded',String(open));return;}
  if(el.id==='refresh-order')loadOrder(currentOrder.reference).catch(e=>toast(e.message));
 });
-document.addEventListener('input',e=>{const t=e.target;if(t.name&&t.name in draft){draft[t.name]=t.value;save();if(t.name==='story')$('#story-count').textContent=draft.story.length;if(t.name==='occasion')root.querySelectorAll('[data-pick=occasion]').forEach(b=>{const on=b.dataset.value===t.value;b.classList.toggle('on',on);b.setAttribute('aria-pressed',String(on));});if(['recipient','occasion','story'].includes(t.name))sync3D();}refreshFoot();});
-document.addEventListener('change',e=>{if(e.target.name==='consent'){draft.consent=e.target.checked;save();refreshFoot();}});
+document.addEventListener('input',e=>{const t=e.target;if(t.closest?.('.field.invalid,.check.invalid'))clearFieldErrors();if(t.name&&t.name in draft){draft[t.name]=t.value;save();if(t.name==='story')$('#story-count').textContent=draft.story.length;if(t.name==='occasion')root.querySelectorAll('[data-pick=occasion]').forEach(b=>{const on=b.dataset.value===t.value;b.classList.toggle('on',on);b.setAttribute('aria-pressed',String(on));});if(['recipient','occasion','story'].includes(t.name))sync3D();}refreshFoot();});
+document.addEventListener('change',e=>{if(e.target.matches('#source-form input[type=file]')){const n=$('#s-file-name');if(n&&e.target.files[0])n.textContent=e.target.files[0].name;}
+if(e.target.name==='consent'){draft.consent=e.target.checked;save();refreshFoot();}});
 document.addEventListener('submit',async e=>{e.preventDefault();const form=e.target;
  if(form.id==='story-form'){$('#next')?.click();return;}
  if(form.id==='checkout-form'&&(firstMissingBrief(draft)||!valid('checkout'))){checkoutProblem(form);return;}
  const btn=form.id==='checkout-form'?$('#next'):root.querySelector(`[form="${form.id}"]`)||form.querySelector('button');
- if(btn)btn.disabled=true;
+ if(btn){btn.disabled=true;btn.setAttribute('aria-busy','true');if(form.id==='checkout-form'){btn.dataset.idle=btn.innerHTML;btn.textContent='Guardando tu historia…';}}
  const tab=form.id==='checkout-form'&&boot.commerceReady?paymentTab():null;
  try{
   if(form.id==='checkout-form'){const {order}=await api('orders',{product:draft.product,name:draft.name,email:draft.email,phone:draft.phone,consent:form.elements.consent.checked,idempotency_key:draft.key,brief:Object.fromEntries(['genre','mood','voice','language','tempo','recipient','occasion','story','details'].map(k=>[k,draft[k]]))});currentOrder=order;history.replaceState({},'',`?session=${order.reference}`);
@@ -279,9 +288,9 @@ document.addEventListener('submit',async e=>{e.preventDefault();const form=e.tar
    if(boot.commerceReady){try{openPayment(tab,(await api('checkout',{reference:order.reference})).url);}catch(err){tab?.close();await loadOrder(order.reference);$('#payment-error').textContent=err.message;return;}}
    await loadOrder(order.reference);studio?.celebrate();return;}
   if(form.id==='recover-form'){const data=await api('recover',{email:form.elements.email.value});$('#recover-result').textContent=data.message;}
-  if(form.id==='feedback-form'){await api('feedback',{reference:currentOrder.reference,message:form.elements.message.value});await loadOrder(currentOrder.reference);toast('Tu comentario llegó al estudio.');}
+  if(form.id==='feedback-form'){if(form.elements.message.value.trim().length<3){const out=form.querySelector('.form-error');out.textContent='Escribe al menos unas palabras para tu productor.';form.elements.message.focus();return;}await api('feedback',{reference:currentOrder.reference,message:form.elements.message.value});await loadOrder(currentOrder.reference);toast('Tu comentario llegó al estudio.');}
   if(form.id==='source-form'){const data=new FormData(form);data.append('reference',currentOrder.reference);const res=await fetch('api.php?action=upload',{method:'POST',headers:{'X-CSRF-Token':boot.csrf},body:data});const json=await res.json();if(!res.ok)throw Error(json.error);await loadOrder(currentOrder.reference);toast('Archivo guardado en tu sesión.');}
- }catch(error){tab?.close();const out=form.querySelector('.form-error, #upload-result');if(out)out.textContent=error.message;else toast(error.message);}finally{if(btn)btn.disabled=false;}
+ }catch(error){tab?.close();const out=form.querySelector('.form-error, #upload-result');if(out)out.textContent=error.message;else toast(error.message);}finally{if(btn){btn.disabled=false;btn.removeAttribute('aria-busy');if(btn.dataset.idle){btn.innerHTML=btn.dataset.idle;delete btn.dataset.idle;}}}
 });
 // Wompi only returns to public HTTPS sites. Elsewhere (local sandbox) the checkout opens in a new tab while this tab
 // stays on the session and polls; the tab is opened during the click so the browser does not block it.
