@@ -5,7 +5,9 @@ import {drawIcon} from './icons.js';
 import {stationGroup, AZIMUTH} from './layout.js';
 import {put, box, neonFrame, makeScreen, Pill} from './st-kit.js';
 
-const STAGES = ['Historia recibida', 'Letra', 'Grabación', 'Producción', 'Mezcla y master', 'Entrega'];
+import {STATE, STAGE_INFO} from './session-ui.js';
+const TONE = {pay: '#ffc857', make: '#c9a0ff', review: '#38e1ff', done: '#3dffc5', off: '#a79bb8'};
+const SHORT = ['Historia', 'Letra', 'Voz', 'Producción', 'Mezcla', 'Entrega'];
 
 export function buildSession(s) {
   const g = stationGroup(AZIMUTH.session); s.scene.add(g);
@@ -27,15 +29,20 @@ export function buildSession(s) {
       c.fillStyle = '#b9a6e6'; c.font = `600 ${h * 0.058}px ${FONT.sans}`; c.fillText('Toca la pantalla para abrir tus pedidos ↗', px, h * 0.88);
       return;
     }
-    neonText(c, o.statusLabel, px, h * 0.27, {size: h * 0.15, color: '#c9a8ff', align: 'left', blur: 18, maxW: w * 0.88});
-    c.fillStyle = '#efe6ff'; c.font = `600 ${h * 0.07}px ${FONT.sans}`; c.fillText(o.productName || '', px, h * 0.45, w * 0.88);
-    const stage = Number(o.stage ?? 0), x0 = px, span = w - px * 2, y = h * 0.7;
-    STAGES.forEach((label, i) => {
-      const x = x0 + span * i / (STAGES.length - 1), done = i <= stage;
-      if (i) { c.strokeStyle = i <= stage ? '#3dffc5' : 'rgba(255,255,255,.18)'; c.lineWidth = 5; c.beginPath(); c.moveTo(x0 + span * (i - 1) / (STAGES.length - 1) + h * 0.03, y); c.lineTo(x - h * 0.03, y); c.stroke(); }
-      c.fillStyle = done ? (i === stage ? '#ff8de6' : '#3dffc5') : 'rgba(255,255,255,.16)'; c.shadowColor = c.fillStyle; c.shadowBlur = done ? 12 : 0;
-      c.beginPath(); c.arc(x, y, h * 0.03, 0, Math.PI * 2); c.fill(); c.shadowBlur = 0;
-      c.fillStyle = done ? '#efe6ff' : '#8f7cb8'; c.font = `600 ${h * 0.036}px ${FONT.sans}`; c.textAlign = 'center'; c.fillText(label.split(' ')[0], x, y + h * 0.085);
+    const look = STATE[o.status] || STATE.created, tone = TONE[look.tone], stage = Number(o.stage ?? 0), pending = ['created', 'payment_pending'].includes(o.status), finished = o.status === 'completed';
+    neonText(c, look.label, px, h * 0.24, {size: h * 0.15, color: tone, align: 'left', blur: 18, maxW: w * 0.88});
+    c.fillStyle = '#efe6ff'; c.font = `500 ${h * 0.058}px ${FONT.sans}`; c.textAlign = 'left';
+    const says = o.status === 'in_production' ? STAGE_INFO[stage][1] : look.says;
+    wrap(c, says, w * 0.88).slice(0, 2).forEach((l, k) => c.fillText(l, px, h * 0.4 + k * h * 0.072));
+    // Six channels, like the faders of a console: full = done, lit = now, empty = soon.
+    const span = w - px * 2, col = span / 6, top = h * 0.57, bot = h * 0.82;
+    SHORT.forEach((label, k) => {
+      const cx = px + col * (k + 0.5), state = finished || (!pending && k < stage) ? 'done' : !pending && k === stage ? 'now' : 'next';
+      c.fillStyle = 'rgba(255,255,255,.1)'; roundRect(c, cx - col * 0.16, top, col * 0.32, bot - top, col * 0.08); c.fill();
+      const fill = state === 'done' ? 1 : state === 'now' ? 0.55 : 0;
+      if (fill) { c.fillStyle = state === 'done' ? '#3dffc5' : '#b57cff'; c.shadowColor = c.fillStyle; c.shadowBlur = state === 'now' ? 18 : 8; roundRect(c, cx - col * 0.16, bot - (bot - top) * fill, col * 0.32, (bot - top) * fill, col * 0.08); c.fill(); c.shadowBlur = 0; }
+      c.fillStyle = state === 'next' ? '#8f7cb8' : '#ffffff'; c.font = `${state === 'now' ? 800 : 600} ${h * 0.05}px ${FONT.sans}`; c.textAlign = 'center'; c.fillText(label, cx, h * 0.89, col * 0.96);
+      c.font = `700 ${h * 0.04}px ${FONT.sans}`; c.fillStyle = state === 'now' ? '#d9c0ff' : '#8f7cb8'; c.fillText(state === 'now' ? 'AHORA' : String(k + 1), cx, h * 0.945);
     });
   }, {px: 120});
   st.screen.group.position.set(0, 6.4, -2.4); g.add(st.screen.group);
