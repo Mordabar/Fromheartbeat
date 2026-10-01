@@ -199,8 +199,40 @@ def label(img, glyph, cx, cy, r, pal):
     base = Image.fromarray(np.clip(img, 0, 255).astype(np.uint8)).convert('RGBA')
     base.alpha_composite(gl)
     base.alpha_composite(lab, (int(cx - r), int(cy - r)))
-    g = glyph_layer(glyph, int(r * 1.5))
+    g = glyph_layer(glyph, int(r * 1.62))
     base.alpha_composite(g, (int(cx - g.width / 2), int(cy - g.height / 2)))
+    return np.asarray(base.convert('RGB'), np.float32)
+
+
+
+def tonearm(img, mode, pal, cx=W / 2, cy=H / 2, R=212):
+    """Turntable arm: 'play' needle in the groove, 'lifted' hovering off the disc, 'rest' parked outside."""
+    _, _, rim, _ = PALETTES[pal]
+    S = 2
+    layer = Image.new('RGBA', (W * S, H * S), (0, 0, 0, 0))
+    sh = Image.new('RGBA', (W * S, H * S), (0, 0, 0, 0))
+    d, ds = ImageDraw.Draw(layer), ImageDraw.Draw(sh)
+    P = (cx + 1.13 * R, cy - .78 * R)
+    H_ = {'play': (cx + .50 * R, cy + .10 * R), 'lifted': (cx + .98 * R, cy + .46 * R), 'rest': (cx + 1.13 * R, cy + .30 * R)}[mode]
+    mid = (P[0] - (P[0] - H_[0]) * .15, P[1] + (H_[1] - P[1]) * .55)  # slight elbow like an S-arm
+    pts = [P, mid, H_]
+    col = (222, 205, 255, 235) if pal != 'dim' else (170, 162, 195, 235)
+    for dx, dy, dd, c, w in [(7, 10, ds, (0, 0, 0, 170), 9), (0, 0, d, col, 8)]:
+        dd.line([((x + dx) * S, (y + dy) * S) for x, y in pts], fill=c, width=w * S, joint='curve')
+        for x, y in (pts[0], pts[-1]):
+            dd.ellipse([(x + dx - w * .5) * S, (y + dy - w * .5) * S, (x + dx + w * .5) * S, (y + dy + w * .5) * S], fill=c)
+    # pivot base
+    for r, c in [(22, (40, 26, 80, 255)), (13, col)]:
+        d.ellipse([(P[0] - r) * S, (P[1] - r) * S, (P[0] + r) * S, (P[1] + r) * S], fill=c)
+    # head shell
+    hx, hy = H_
+    d.rounded_rectangle([(hx - 17) * S, (hy - 8) * S, (hx + 17) * S, (hy + 12) * S], radius=5 * S, fill=(170, 120, 255, 255))
+    d.ellipse([(hx - 3) * S, (hy + 9) * S, (hx + 3) * S, (hy + 15) * S], fill=(255, 255, 255, 255))
+    sh = sh.filter(ImageFilter.GaussianBlur(7 * S)).resize((W, H), Image.LANCZOS)
+    layer = layer.resize((W, H), Image.LANCZOS)
+    base = Image.fromarray(np.clip(img, 0, 255).astype(np.uint8)).convert('RGBA')
+    base.alpha_composite(sh)
+    base.alpha_composite(layer)
     return np.asarray(base.convert('RGB'), np.float32)
 
 
@@ -227,6 +259,9 @@ def finish(img, name):
     out.save(OUT / f'{name}.jpg', quality=84, optimize=True, progressive=True)
 
 
+ARM = {'hero-production': 'play', 'hero-production-1': 'play', 'hero-production-2': 'play', 'hero-production-3': 'play', 'hero-production-4': 'play',
+       'hero-review': 'play', 'hero-completed': 'play', 'hero-payment_failed': 'lifted', 'hero-cancelled': 'rest'}
+
 HEROES = {  # file -> (glyph, palette, sparkle count)
     'hero-received': ('note', 'violet', 14), 'hero-quote': ('doc', 'violet', 10), 'hero-payment_failed': ('alert', 'warm', 6),
     'hero-paid': ('check', 'violet', 18), 'hero-production': ('bars', 'violet', 12), 'hero-production-1': ('lines', 'violet', 10),
@@ -241,6 +276,8 @@ def hero(name, glyph, pal, spark):
     img = waves(img, pal)
     img, (cx, cy, lr) = vinyl(img, pal)
     img = label(img, glyph, cx, cy, lr, pal)
+    if name in ARM:
+        img = tonearm(img, ARM[name], pal)
     img = sparkles(img, spark, zlib.crc32(name.encode()) % 1000, pal)
     finish(img, name)
 

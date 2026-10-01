@@ -18,7 +18,7 @@ const fail = (file, msg) => failures.push(`${file}: ${msg}`);
 
 // 1) palette contrast: every text/background pair the layout really uses (WCAG AA: 4.5 body text, 3 for large/bold >=18px)
 const pairs = [['ink', 'panel', 4.5], ['ink', 'bg', 4.5], ['ink', 'card', 4.5], ['body', 'panel', 4.5], ['body', 'card2', 4.5], ['muted', 'panel', 4.5], ['muted', 'card', 4.5],
-  ['dim', 'panel', 4.5], ['dim', 'bg', 4.5], ['dim', 'card', 4.5], ['neon', 'panel', 4.5], ['neon', 'card', 4.5], ['neon', 'bg', 4.5], ['neon', 'card2', 4.5], ['btnInk', 'btn', 7], ['btnInk', 'neon', 7], ['warn', 'card2', 4.5], ['violet', 'card', 3]];
+  ['dim', 'panel', 4.5], ['dim', 'bg', 4.5], ['dim', 'card', 4.5], ['neon', 'panel', 4.5], ['neon', 'card', 4.5], ['neon', 'bg', 4.5], ['neon', 'card2', 4.5], ['btnInk', 'btn', 7], ['btnInk', 'neon', 7], ['warn', 'card2', 4.5], ['violet', 'card', 3], ['rail', 'panel', 3], ['pink', 'panel', 3]];
 for (const [fg, bg, min] of pairs) { const r = ratio(C[fg], C[bg]); if (r < min) fail('paleta', `contraste ${fg} sobre ${bg} = ${r.toFixed(2)} (mínimo ${min})`); }
 
 const banned = [[/display\s*:\s*(flex|grid)/i, 'flex/grid no funcionan en Outlook ni en Gmail antiguo'], [/position\s*:\s*(absolute|fixed|sticky)/i, 'position no es fiable en correo'],
@@ -62,6 +62,32 @@ for (const f of files) {
     if (/<script|<img src=x|onerror=|<b>negrita/i.test(html.replace(/<img[^>]*logo-email[^>]*>/, ''))) fail(f, 'entrada hostil NO escapada');
     if (!/&lt;script&gt;|&lt;img/.test(html) && f === 'hostile-injection.html') fail(f, 'se esperaba el HTML hostil escapado visible como texto');
   }
+
+  // --- client-compat structure ---
+  const noCond = html.replace(/<!--\[if[\s\S]*?<!\[endif\]-->/g, '');
+  const opens = (html.match(/<!--\[if/g) || []).length, closes = (html.match(/<!\[endif\]-->/g) || []).length;
+  if (opens !== closes) fail(f, `comentarios condicionales desbalanceados (${opens} abren, ${closes} cierran)`);
+  const vml = (html.match(/<v:roundrect[^>]*>/) || [''])[0];
+  const vmlHref = (vml.match(/href="([^"]*)"/) || [, ''])[1], htmlBtn = (html.match(/<a class="btn-a" href="([^"]*)"/) || [, ''])[1];
+  if (!/xmlns:w=/.test(vml) || !/<w:anchorlock\/>/.test(html) || !/arcsize=/.test(vml) || !/fillcolor=/.test(vml)) fail(f, 'VML incompleto (xmlns:w, anchorlock, arcsize, fillcolor)');
+  if (vmlHref !== htmlBtn) fail(f, 'el href del botón VML (Outlook) no coincide con el del botón HTML');
+  const vmlH = +((vml.match(/height:(\d+)px/) || [, 0])[1]); if (vmlH < 44) fail(f, `botón VML de ${vmlH}px (mínimo 44)`);
+  if (!/<!--\[if mso\]>[\s\S]*?font-family:Arial[\s\S]*?<!\[endif\]-->/.test(html)) fail(f, 'falta el override MSO de font-family (Outlook cae a Times)');
+  if (/\.ttf/.test(html) || (/@font-face/.test(html) && (!/woff2/.test(html) || !/font-display:swap/.test(html)))) fail(f, '@font-face debe usar woff2 con font-display:swap (sin .ttf)');
+  for (const row of html.match(/<td[^>]*\bheight="([1-6])"[^>]*>/g) || []) if (!/mso-line-height-rule:exactly/.test(row)) fail(f, 'fila fina sin mso-line-height-rule:exactly: ' + row.slice(0, 70));
+  const inlineSizes = [...html.replace(/<style>[\s\S]*?<\/style>/g, '').matchAll(/font-size:(\d+(?:\.\d+)?)px/g)].map(m => +m[1]).filter(n => n < 10 && n !== 1);
+  if (inlineSizes.length) fail(f, 'texto con tamaño menor a 10px: ' + [...new Set(inlineSizes)].join(', '));
+  // --- content safety ---
+  const visible = noCond.replace(/<style[\s\S]*?<\/style>/g, '').replace(/<[^>]+>/g, ' ').replace(/&[a-z#0-9]+;/g, ' ');
+  if (!hostile && /\b(Array|NaN|undefined|null|Warning|Notice|Deprecated)\b|\{\{|\}\}/.test(visible)) fail(f, 'marcador de plantilla o error filtrado en el texto visible: ' + (visible.match(/\b(Array|NaN|undefined|null|Warning|Notice|Deprecated)\b|\{\{/) || [''])[0]);
+  for (const m of html.matchAll(/<a\s[^>]*href="([^"]*)"[^>]*>([^<]+)<\/a>/g)) {            // visible text that looks like a URL/domain/email must match its destination
+    const t = m[2].trim(); if (!/^[\w.-]+\.[a-z]{2,}$/i.test(t) && !/^[\w.+-]+@[\w.-]+$/.test(t)) continue;
+    const ok = t.includes('@') ? m[1] === 'mailto:' + t : (() => { try { return new URL(m[1]).hostname === t; } catch { return false; } })();
+    if (!ok) fail(f, `el texto del enlace "${t}" no coincide con su destino ${m[1].slice(0, 50)}`);
+  }
+  const txt = fs.existsSync(txtPath) ? fs.readFileSync(txtPath, 'utf8') : '';
+  if (/^[A-ZÁÉÍÓÚÑ]{3,}[A-ZÁÉÍÓÚÑ ·:0-9-]*[áéíóúñ]/m.test(txt)) fail(f, 'texto plano con mayúsculas a medias (strtoupper no multibyte)');
+  if (!/Términos: https?:\/\/.*\?ver=terminos/.test(txt) && !f.includes('team')) fail(f, 'el texto plano no incluye el enlace a Términos');
   // sizes of the subject / preheader
   const subj = (html.match(/<title>([^<]*)<\/title>/) || [, ''])[1].replace(/&[a-z#0-9]+;/g, 'x');
   if (subj.length > 70) fail(f, `asunto largo (${subj.length}): se corta en móviles`);
@@ -70,4 +96,4 @@ for (const f of files) {
 }
 const total = files.length;
 if (failures.length) { console.log(`FALLAS (${failures.length}) en ${total} correos:\n - ` + failures.join('\n - ')); process.exit(1); }
-console.log(`OK: ${total} correos pasan ${banned.length + 14} reglas y ${pairs.length} pares de contraste.`);
+console.log(`OK: ${total} correos pasan ${banned.length + 30} reglas y ${pairs.length} pares de contraste.`);

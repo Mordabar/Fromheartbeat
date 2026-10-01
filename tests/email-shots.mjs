@@ -18,7 +18,7 @@ for (const [tag, viewport] of Object.entries(sizes)) {
   const page = await ctx.newPage();
   const failed = [];
   // file:// -> http fonts are blocked by CORS in the preview only; real mail clients do not enforce it
-  await page.route('**/assets/fonts/*', async route => { const r = await route.fetch(); await route.fulfill({ response: r, headers: { ...r.headers(), 'access-control-allow-origin': '*' } }); });
+  await page.route('**/fonts/*', async route => { const r = await route.fetch(); await route.fulfill({ response: r, headers: { ...r.headers(), 'access-control-allow-origin': '*' } }); });
   page.on('requestfailed', r => failed.push(r.url()));
   page.on('response', r => { if (r.status() >= 400) failed.push(r.status() + ' ' + r.url()); });
   for (const n of names) {
@@ -29,6 +29,11 @@ for (const [tag, viewport] of Object.entries(sizes)) {
     if (overflow.sw > overflow.cw + 1) problems.push(`${n} [${tag}] desborda horizontalmente: ${overflow.sw}px > ${overflow.cw}px`);
     if (failed.length) problems.push(`${n} [${tag}] recursos que fallan: ${[...new Set(failed)].join(', ')}`);
     await page.screenshot({ path: path.join(shots, `${n}-${tag}.png`), fullPage: true });
+    if (tag === 'm') { // clients that strip <style> (Gmail with IMAP accounts, some webmail) must not overflow either
+      await page.evaluate(() => document.querySelectorAll('style').forEach(s => s.remove()));
+      const o2 = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth }));
+      if (o2.sw > o2.cw + 1) problems.push(`${n} [sin <style>] desborda: ${o2.sw}px > ${o2.cw}px`);
+    }
   }
   await ctx.close();
 }

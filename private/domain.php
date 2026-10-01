@@ -115,7 +115,7 @@ function applyPayment(array $t,string $checksum):array {
   if($a['status']!=='APPROVED')sql('UPDATE payment_attempts SET transaction_id=?,status=? WHERE id=?',[$t['id'],$t['status'],$a['id']]);
   if($t['status']==='APPROVED' && $a['status']!=='APPROVED') {
    if(in_array($o['status'],['created','payment_pending','cancelled'],true)) {
-    $attention=$o['status']==='cancelled'?1:0;$o['status']='paid';sql('UPDATE orders SET status=?,requires_attention=? WHERE id=?',['paid',$attention,$o['id']]);history($o,'Pago confirmado. Tu sesión ha comenzado.','wompi');notifyJourney($o,'paid',['at'=>gmdate('Y-m-d H:i:s')],'paid:'.$o['reference'],'Pago confirmado','Wompi confirmó el pago. La sesión pasó a «Pagado»: toca comenzar la producción.');
+    $attention=$o['status']==='cancelled'?1:0;$o['status']='paid';sql('UPDATE orders SET status=?,requires_attention=? WHERE id=?',['paid',$attention,$o['id']]);history($o,'Pago confirmado. Tu sesión ha comenzado.','wompi');notifyJourney($o,'paid',['at'=>gmdate('Y-m-d H:i:s'),'transaction'=>(string)$t['id']],'paid:'.$o['reference'],'Pago confirmado','Wompi confirmó el pago. La sesión pasó a «Pagado»: toca comenzar la producción.');
    } else { sql('UPDATE orders SET requires_attention=1 WHERE id=?',[$o['id']]);history($o,'Se recibió una aprobación adicional. Conciliar posible pago duplicado.','wompi',false);enqueue('duplicate:'.$t['id'],env('TEAM_EMAIL'),'Revisar pago adicional '.$o['reference'],'Revisar transacción '.$t['id'].' en Wompi antes de realizar cualquier reembolso.'); }
   }
   if(in_array($t['status'],['DECLINED','ERROR'],true) && in_array($o['status'],['created','payment_pending'],true))notifyJourney($o,'payment_failed',['payment'=>$t['status']],'payfail:'.$t['id']);

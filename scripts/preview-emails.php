@@ -41,6 +41,24 @@ $cases=[
  'hostile-injection'=>['update',sample('full',['status'=>'in_production','production_stage'=>2,'brief'=>json_encode(array_merge($brief,['recipient'=>'<script>alert(1)</script>','occasion'=>'"><img src=x onerror=alert(2)>']))]),['name'=>'<img src=x onerror=alert(3)> Eva','email'=>'e@example.com','phone'=>'1'],['note'=>"</td></tr><script>alert(4)</script> & \"comillas\" 'simples' <b>negrita</b>\nlínea 2"]],
  'hostile-longstring'=>['update',sample('full',['status'=>'review','production_stage'=>4]),['name'=>'Maria de los Angeles Fernandez de la Torre Sotomayor','email'=>'m@example.com','phone'=>'1'],['note'=>str_repeat('Supercalifragilisticoespialidoso',12)]],
  'noname'=>['received',sample('full'),['name'=>'','email'=>'x@example.com','phone'=>'1'],[]],
+ // business journey (6 steps) and product-aware copy (Dedicatoria is the AI product: no singer, no master, no adjustment round)
+ 'paid-business'=>['paid',sample('jingle',['status'=>'paid']),$cust,['at'=>'2026-09-30 13:34:00','transaction'=>'11979929-1790775282-73584']],
+ 'production-business-2'=>['production',sample('jingle',['status'=>'in_production','production_stage'=>2]),$cust,[]],
+ 'review-business'=>['review',sample('campaign',['status'=>'review','production_stage'=>4]),$cust,[]],
+ 'completed-business'=>['completed',sample('jingle',['status'=>'completed','production_stage'=>5,'brief'=>json_encode(['brand'=>'Café Alborada','campaign'=>'Lanzamiento','channels'=>'Radio','license_scope'=>'x','story'=>'x','agreed_scope'=>"Jingle de 30 segundos con 2 adaptaciones (MP3 + WAV).\nLicencia comercial para Colombia, 12 meses."])]),$cust,['files'=>array_slice($files,0,2)]],
+ 'payment-failed-business'=>['payment_failed',sample('jingle',['status'=>'payment_pending']),$cust,['payment'=>'DECLINED']],
+ 'update-business-pending'=>['update',sample('jingle',['status'=>'payment_pending']),$cust,['note'=>'Recuerda completar el pago para empezar.']],
+ 'production-ai-2'=>['production',sample('dedicatoria',['status'=>'in_production','production_stage'=>2]),$cust,[]],
+ 'production-ai-4'=>['production',sample('dedicatoria',['status'=>'in_production','production_stage'=>4]),$cust,[]],
+ 'review-dedicatoria'=>['review',sample('dedicatoria',['status'=>'review','production_stage'=>4]),$cust,[]],
+ 'review-personalizada'=>['review',sample('personalizada',['status'=>'review','production_stage'=>4]),$cust,[]],
+ 'update-question'=>['update',sample('full',['status'=>'in_production','production_stage'=>1]),$cust,['note'=>'¿Cómo se pronuncia el nombre de tu mamá?']],
+ 'cancelled-nonote'=>['cancelled',sample('personalizada',['status'=>'cancelled']),$cust,[]],
+ // adversarial
+ 'hostile-manyfiles'=>['completed',sample('full',['status'=>'completed','production_stage'=>5]),$cust,['files'=>array_map(fn($i)=>['original_name'=>"Cancion-v$i-<b>x</b>.mp3",'mime'=>'audio/mpeg'],range(1,120)),'note'=>str_repeat('&',2000)]],
+ 'hostile-bidi'=>['received',sample('full'),['name'=>"\u{202E}evil Eva",'email'=>'e@example.com','phone'=>'1'],[]],
+ 'hostile-longname'=>['received',sample('full'),['name'=>str_repeat('Supercalifragilistico',20),'email'=>'e@example.com','phone'=>'1'],[]],
+ 'hostile-emoji'=>['update',sample('full',['status'=>'in_production','production_stage'=>2]),['name'=>'Ana 🎶','email'=>'a@example.com','phone'=>'1'],['note'=>"🎵 Gracias 🎵 --><!-- </style> {{x}} \u{202E}texto"]],
 ];
 $gallery=[];
 foreach($cases as $name=>[$kind,$o,$c,$ctx]){
@@ -50,6 +68,8 @@ foreach($cases as $name=>[$kind,$o,$c,$ctx]){
 }
 $t=mailTeamModel('Nuevo pedido','Entró una historia nueva. Queda pendiente el pago del cliente.',sample('full',['status'=>'created']),$cust);$p=mailParts(mailBuild($t));
 file_put_contents("$out/team-new.html",$p['html']);file_put_contents("$out/team-new.txt",$p['text']);$gallery['team-new']=$t['subject'];
+$t2=mailTeamModel('Novedad enviada al cliente',str_repeat('<script>x</script> ',200),sample('full',['status'=>'in_production','production_stage'=>2]),['name'=>'<b>Eva</b>','email'=>'e@example.com','phone'=>'1']);$p2=mailParts(mailBuild($t2));
+file_put_contents("$out/hostile-team.html",$p2['html']);file_put_contents("$out/hostile-team.txt",$p2['text']);$gallery['hostile-team']=$t2['subject'];
 $li='';foreach($gallery as $n=>$s)$li.='<li><a href="'.mh($n).'.html">'.mh($n).'</a> — '.mh($s).'</li>';
 file_put_contents("$out/index.html",'<!doctype html><meta charset="utf-8"><title>Correos Fromheartbeat</title><body style="font:15px/1.7 Arial;background:#07040f;color:#f4eeff;padding:30px"><h1>Correos de Fromheartbeat</h1><ul>'.$li.'</ul></body>');
 echo count($gallery)." correos escritos en $out\n";

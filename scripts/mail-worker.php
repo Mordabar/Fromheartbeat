@@ -14,7 +14,7 @@ $rows=sql('SELECT m.* FROM mail_queue m LEFT JOIN fhb_mail_dispatch d ON d.mail_
 foreach($rows as $row){
  sql('INSERT INTO fhb_mail_dispatch(mail_id,attempts) VALUES(?,1) ON DUPLICATE KEY UPDATE attempts=attempts+1',[$row['id']]);
  try{
-  $mail=new PHPMailer\PHPMailer\PHPMailer(true);$mail->isSMTP();$mail->Host=env('SMTP_HOST');$mail->Port=(int)env('SMTP_PORT','587');$mail->SMTPAuth=env('SMTP_USERNAME')!=='';$mail->Username=env('SMTP_USERNAME');$mail->Password=env('SMTP_PASSWORD');$mail->SMTPSecure=env('SMTP_ENCRYPTION','tls');$mail->Timeout=20;$mail->CharSet='UTF-8';$mail->setFrom(env('MAIL_FROM'),'Fromheartbeat');$mail->addAddress($row['recipient']);$mail->Subject=$row['subject'];$parts=mailParts($row['body']);if($parts['html']!==null){$mail->isHTML(true);$mail->Encoding=PHPMailer\PHPMailer\PHPMailer::ENCODING_QUOTED_PRINTABLE;$mail->Body=$parts['html'];$mail->AltBody=$parts['text'];}else $mail->Body=$parts['text'];$mail->send();
+  $mail=new PHPMailer\PHPMailer\PHPMailer(true);$mail->isSMTP();$mail->Host=env('SMTP_HOST');$mail->Port=(int)env('SMTP_PORT','587');$mail->SMTPAuth=env('SMTP_USERNAME')!=='';$mail->Username=env('SMTP_USERNAME');$mail->Password=env('SMTP_PASSWORD');$mail->SMTPSecure=env('SMTP_ENCRYPTION','tls');$mail->Timeout=20;$mail->CharSet='UTF-8';$mail->setFrom(env('MAIL_FROM'),'Fromheartbeat');$mail->addAddress($row['recipient']);$mail->Subject=$row['subject'];mailFill($mail,$row['body']);$mail->send();
   sql('UPDATE fhb_mail_dispatch SET sent_at=UTC_TIMESTAMP(),last_error=NULL WHERE mail_id=?',[$row['id']]);
  }catch(Throwable $e){sql('UPDATE fhb_mail_dispatch SET last_error=? WHERE mail_id=?',[mb_substr($e->getMessage(),0,500),$row['id']]);fwrite(STDERR,'Error de correo #'.$row['id']."\n");}
 }

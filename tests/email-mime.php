@@ -15,8 +15,7 @@ $c=['name'=>'María José','email'=>'maria@example.com','phone'=>'1'];
 
 function send(string $stored): PHPMailer {
  $mail=new PHPMailer(true);$mail->CharSet='UTF-8';$mail->setFrom('contacto@fromheartbeat.com','Fromheartbeat');$mail->addAddress('maria@example.com');$mail->Subject='Prueba · ñandú';
- $p=mailParts($stored);
- if($p['html']!==null){$mail->isHTML(true);$mail->Encoding=PHPMailer::ENCODING_QUOTED_PRINTABLE;$mail->Body=$p['html'];$mail->AltBody=$p['text'];}else $mail->Body=$p['text'];
+ mailFill($mail,$stored); // the exact function scripts/mail-worker.php calls
  $mail->preSend();return $mail;
 }
 $m=mailModel('paid',$o,$c,['at'=>'2026-09-30 13:34:00']);$stored=mailBuild($m);
@@ -36,6 +35,9 @@ $check(str_contains($dec,'¡')||str_contains($dec,'María')||str_contains($dec,'
 $check(str_contains($dec,'María')||str_contains($dec,'gracias'),'el cuerpo debe incluir el saludo');
 $check(preg_match('~href="https://fromheartbeat\.com/\?session=FHB-260930-024D7A1892#token=[0-9a-f]{64}"~',$dec)===1,'el botón debe llevar el enlace privado con token de 64 hex');
 // legacy rows (queued before this change) must keep working as plain text
+$check(!str_contains($raw,'=0A'),'no debe haber =0A: los saltos deben ser CRLF canónicos antes de codificar');
+$check(str_contains($raw,'Reply-To: Fromheartbeat <contacto@fromheartbeat.com>')||str_contains($raw,'Reply-To:'),'debe llevar Reply-To (el correo invita a responder)');
+$check(str_contains($raw,'Auto-Submitted: auto-generated'),'debe marcar Auto-Submitted para evitar respuestas automáticas');
 $legacy="Hola,\n\nTu sesión FHB-1.\nFromheartbeat";$lm=send($legacy);$check(!str_contains($lm->getSentMIMEMessage(),'text/html'),'las filas antiguas deben salir como texto plano');
 $check(mailParts($legacy)['html']===null&&mailParts($legacy)['text']===$legacy,'mailParts no debe alterar filas antiguas');
 // round-trip fidelity for hostile body text containing the markers

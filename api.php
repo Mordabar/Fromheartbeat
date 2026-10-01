@@ -58,7 +58,7 @@ try {
  if($action==='admin-test-kit'&&$method==='POST'){admin();jsonResponse(['added'=>attachTestKit(accessOrder(field(input(),'reference',1,40)))],201);}
  if($action==='admin-update'&&$method==='POST') {
   $aid=admin();$in=input();$ref=field($in,'reference',1,40);$note=field($in,'note',3,2000);$status=field($in,'status',1,24);$stage=filter_var($in['stage']??null,FILTER_VALIDATE_INT);need($stage!==false&&$stage>=0&&$stage<=5,'Etapa inválida.');
-  need(!(($in['notify']??false)===true&&($in['visible']??true)===false),'Una nota interna no puede enviarse al cliente.');
+  $visible=($in['visible']??true)===true;need(!(($in['notify']??false)===true&&!$visible),'Una nota interna no puede enviarse al cliente.');
   db()->beginTransaction();try{
    $o=sql('SELECT * FROM orders WHERE reference=? FOR UPDATE',[$ref])->fetch();need((bool)$o,'Pedido no encontrado.',404);
    $allowed=['created'=>['created','cancelled'],'payment_pending'=>['payment_pending','cancelled'],'paid'=>['paid','in_production'],'in_production'=>['in_production','review'],'review'=>['review','in_production','completed'],'completed'=>['completed','review'],'cancelled'=>['cancelled']];
@@ -72,7 +72,7 @@ try {
     if($o['product_code']==='full')need(in_array('video/mp4',$mimes,true),'Falta el video de Full Experience.');
    }
    if($status==='completed')$stage=5;
-   sql('UPDATE orders SET status=?,production_stage=?,requires_attention=? WHERE id=?',[$status,$stage,($in['attention']??false)?1:0,$o['id']]);$o['status']=$status;$o['production_stage']=$stage;history($o,$note,'admin:'.$aid,($in['visible']??true)===true);
+   sql('UPDATE orders SET status=?,production_stage=?,requires_attention=? WHERE id=?',[$status,$stage,($in['attention']??false)?1:0,$o['id']]);$o['status']=$status;$o['production_stage']=$stage;history($o,$note,'admin:'.$aid,$visible);
    if(($in['notify']??false)===true)notifyJourney($o,['in_production'=>'production','review'=>'review','completed'=>'completed','cancelled'=>'cancelled'][$status]??'update',['note'=>$note],'update:'.$ref.':'.bin2hex(random_bytes(6)),'Novedad enviada al cliente',$note);
    db()->commit();jsonResponse(['ok'=>true]);
   }catch(Throwable $e){if(db()->inTransaction())db()->rollBack();throw $e;}
