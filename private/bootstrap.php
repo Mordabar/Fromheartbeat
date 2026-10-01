@@ -39,3 +39,4 @@ function appUrl(string $path=''):string { return rtrim(env('APP_URL','http://127
 function storage():string { $path=env('STORAGE_PATH',BASE.'/storage'); if(!is_dir($path))mkdir($path,0700,true); return $path; }
 require_once BASE.'/catalog.php';
 require_once BASE.'/domain.php';
+require_once BASE.'/mail.php';

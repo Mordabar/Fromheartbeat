@@ -31,7 +31,7 @@ try {
  if($action==='recover'&&$method==='POST') {
   rate('recover',3,3600);$in=input();$email=strtolower(field($in,'email',5,254));
   $orders=sql('SELECT o.* FROM orders o JOIN customers c ON o.customer_id=c.id WHERE c.email=? AND o.token_expires_at>UTC_TIMESTAMP() ORDER BY o.id DESC LIMIT 10',[$email])->fetchAll();
-  foreach($orders as $o)notifyOrder($o,'Vuelve a tu sesión · '.$o['reference'],'Aquí tienes tu acceso privado al estudio.','recover:'.$o['reference'].':'.intdiv(time(),3600));
+  foreach($orders as $o)notifyJourney($o,'recover',[],'recover:'.$o['reference'].':'.intdiv(time(),3600));
   jsonResponse(['message'=>'Si hay sesiones activas con ese correo, recibirás sus enlaces privados.']);
  }
  if($action==='order'&&$method==='GET'){$o=accessOrder((string)($_GET['reference']??''));$last=$_SESSION['synced'][$o['reference']]??0;if(in_array($o['status'],['created','payment_pending'],true)&&time()-$last>=4){$_SESSION['synced'][$o['reference']]=time();try{$o=syncPayments($o);}catch(Throwable $e){error_log('FHB sync '.$e->getMessage());}}jsonResponse(['order'=>orderView($o)]);}
@@ -73,14 +73,14 @@ try {
    }
    if($status==='completed')$stage=5;
    sql('UPDATE orders SET status=?,production_stage=?,requires_attention=? WHERE id=?',[$status,$stage,($in['attention']??false)?1:0,$o['id']]);$o['status']=$status;$o['production_stage']=$stage;history($o,$note,'admin:'.$aid,($in['visible']??true)===true);
-   if(($in['notify']??false)===true)notifyOrder($o,'Novedades de tu canción · '.$ref,$note,'update:'.$ref.':'.bin2hex(random_bytes(6)));
+   if(($in['notify']??false)===true)notifyJourney($o,['in_production'=>'production','review'=>'review','completed'=>'completed','cancelled'=>'cancelled'][$status]??'update',['note'=>$note],'update:'.$ref.':'.bin2hex(random_bytes(6)),'Novedad enviada al cliente',$note);
    db()->commit();jsonResponse(['ok'=>true]);
   }catch(Throwable $e){if(db()->inTransaction())db()->rollBack();throw $e;}
  }
  if($action==='admin-quote'&&$method==='POST') {
   $aid=admin();$in=input();$o=accessOrder(field($in,'reference',1,40));$amount=filter_var($in['amount']??null,FILTER_VALIDATE_INT);$scope=field($in,'scope',20,4000);
   need($o['audience']==='business'&&$o['status']==='created','Este pedido no admite cotización.',409);need($amount!==false&&$amount>=(int)catalog()[$o['product_code']]['price']&&$amount<=10000000000,'Importe inválido.');
-  db()->beginTransaction();try{$o=sql('SELECT * FROM orders WHERE id=? FOR UPDATE',[$o['id']])->fetch();need($o['status']==='created','El pedido ha cambiado. Actualiza la vista.',409);$b=json_decode($o['brief'],true);$b['agreed_scope']=$scope;sql('UPDATE orders SET amount_in_cents=?,brief=?,quoted_at=UTC_TIMESTAMP() WHERE id=?',[$amount,json_encode($b,JSON_UNESCAPED_UNICODE),$o['id']]);history($o,'Cotización disponible. Alcance y licencia: '.$scope,'admin:'.$aid);notifyOrder($o,'Tu propuesta musical está lista · '.$o['reference'],'Revisa el alcance, la licencia y el precio en tu sesión privada antes de pagar.','quote:'.$o['reference'].':'.bin2hex(random_bytes(5)));db()->commit();jsonResponse(['ok'=>true]);}catch(Throwable $e){if(db()->inTransaction())db()->rollBack();throw $e;}
+  db()->beginTransaction();try{$o=sql('SELECT * FROM orders WHERE id=? FOR UPDATE',[$o['id']])->fetch();need($o['status']==='created','El pedido ha cambiado. Actualiza la vista.',409);$b=json_decode($o['brief'],true);$b['agreed_scope']=$scope;sql('UPDATE orders SET amount_in_cents=?,brief=?,quoted_at=UTC_TIMESTAMP() WHERE id=?',[$amount,json_encode($b,JSON_UNESCAPED_UNICODE),$o['id']]);history($o,'Cotización disponible. Alcance y licencia: '.$scope,'admin:'.$aid);notifyJourney($o,'quote',[],'quote:'.$o['reference'].':'.bin2hex(random_bytes(5)),'Propuesta enviada','Enviaste la propuesta al cliente. Queda pendiente su pago.');db()->commit();jsonResponse(['ok'=>true]);}catch(Throwable $e){if(db()->inTransaction())db()->rollBack();throw $e;}
  }
  if($action==='upload'&&$method==='POST') {
   $o=accessOrder((string)($_POST['reference']??''));$isAdmin=isset($_SESSION['admin_id']);$kind=$isAdmin?($_POST['kind']??'delivery'):'source';need(in_array($kind,['delivery','source'],true),'Tipo inválido.');
