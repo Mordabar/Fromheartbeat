@@ -165,3 +165,4 @@ body.editing #options-dialog .progress,body.editing #options-dialog .head-row .s
 body.editing #options-dialog .panel-head{min-height:0!important;padding:8px 14px 4px!important}
 /* very short screens: hero goes compact so its button is never cut */
 @media(max-height:620px){.s-hero{padding:14px 14px 12px;gap:4px 12px}.s-hero h1{font-size:21px;margin-bottom:4px}.s-badge{width:40px;height:40px}.s-says{font-size:13px}.s-hero-action{margin-top:4px}.s-wrap{gap:12px}.s-hero-action .primary,.s-wrap .primary.big{min-height:48px}}
+@media(max-height:620px){#options-dialog .session .panel-body{padding:8px 14px 16px}.s-hero{padding:12px}.s-hero h1{font-size:20px;line-height:1.1}.s-eyebrow{margin-bottom:2px}.s-meta{margin-top:2px}.s-hero-action{margin-top:2px}}
