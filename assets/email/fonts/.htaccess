@@ -1,0 +1,4 @@
+# Email clients and the admin preview load these from an opaque origin: allow cross-origin font reads.
+<IfModule mod_headers.c>
+Header set Access-Control-Allow-Origin "*"
+</IfModule>

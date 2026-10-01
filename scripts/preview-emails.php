@@ -6,7 +6,7 @@ declare(strict_types=1);
 if(PHP_SAPI!=='cli'){http_response_code(404);exit;}
 $opt=[];foreach(array_slice($argv,1) as $a)if(preg_match('/^--(\w+)=(.*)$/',$a,$m))$opt[$m[1]]=$m[2];
 $out=rtrim($opt['out']??sys_get_temp_dir().'/fhb-emails','/');if(!is_dir($out))mkdir($out,0775,true);
-putenv('APP_URL='.($opt['base']??'https://fromheartbeat.com'));putenv('APP_KEY='.str_repeat('k',40));putenv('SUPPORT_EMAIL=contacto@fromheartbeat.com');putenv('MAIL_FROM=contacto@fromheartbeat.com');
+putenv('APP_URL='.($opt['base']??'https://fromheartbeat.com'));putenv('APP_KEY='.str_repeat('k',40));putenv('SUPPORT_EMAIL=contacto@fromheartbeat.com');putenv('COMMERCE_READY=true');putenv('MAIL_FROM=contacto@fromheartbeat.com');
 require __DIR__.'/../private/bootstrap.php';
 
 $brief=['recipient'=>'Mi mamá, Luz Marina','occasion'=>'Sus 60 años','genre'=>'Bolero','mood'=>'Nostálgica','voice'=>'Femenina','language'=>'Español','tempo'=>'Lento','story'=>'Historia de ejemplo.'];
@@ -33,7 +33,7 @@ $cases=[
  'production-4-master'=>['production',sample('full',['status'=>'in_production','production_stage'=>4]),$cust,[]],
  'review'=>['review',sample('full',['status'=>'review','production_stage'=>4]),$cust,['note'=>$note]],
  'completed-listening'=>['completed',sample('full',['status'=>'completed','production_stage'=>5]),$cust,['files'=>$files,'note'=>'Fue un honor ponerle música a esta historia.']],
- 'completed-dedicatoria'=>['completed',sample('dedicatoria',['status'=>'completed','production_stage'=>5]),$cust,['files'=>array_slice($files,0,3)]],
+ 'completed-dedicatoria'=>['completed',sample('dedicatoria',['status'=>'completed','production_stage'=>5]),$cust,['files'=>[$files[0],$files[2]]]],
  'cancelled'=>['cancelled',sample('personalizada',['status'=>'cancelled']),$cust,['note'=>'Cancelada a pedido del cliente.']],
  'update'=>['update',sample('personalizada',['status'=>'paid','production_stage'=>0]),$cust,['note'=>'Hola, necesitamos confirmar cómo se pronuncia el nombre de tu mamá.']],
  'recover'=>['recover',sample('full',['status'=>'in_production','production_stage'=>2]),$cust,[]],
@@ -54,6 +54,14 @@ $cases=[
  'review-personalizada'=>['review',sample('personalizada',['status'=>'review','production_stage'=>4]),$cust,[]],
  'update-question'=>['update',sample('full',['status'=>'in_production','production_stage'=>1]),$cust,['note'=>'¿Cómo se pronuncia el nombre de tu mamá?']],
  'cancelled-nonote'=>['cancelled',sample('personalizada',['status'=>'cancelled']),$cust,[]],
+ 'received-nopay'=>['received',sample('full'),$cust,['_nopay'=>true]],
+ 'production-full-nosources'=>['production',sample('full',['status'=>'in_production','production_stage'=>1]),$cust,['sources'=>0]],
+ 'production-full-sources'=>['production',sample('full',['status'=>'in_production','production_stage'=>3]),$cust,['sources'=>4]],
+ 'review-full'=>['review',sample('full',['status'=>'review','production_stage'=>4]),$cust,['sources'=>4]],
+ 'update-question-prepay'=>['update',sample('personalizada',['status'=>'paid']),$cust,['note'=>'¿Nos confirmas la fecha del cumpleaños?']],
+ 'hostile-shout'=>['received',sample('full'),['name'=>'JUAN PABLO','email'=>'j@example.com','phone'=>'1'],[]],
+ 'hostile-punct'=>['received',sample('full'),['name'=>'---','email'=>'j@example.com','phone'=>'1'],[]],
+ 'hostile-invisible'=>['update',sample('full',['status'=>'in_production','production_stage'=>2,'brief'=>json_encode(['recipient'=>"Ma\u{2060}má\u{061C}\u{00AD} Luz",'occasion'=>'x','genre'=>'Bolero','mood'=>'Nostálgica','voice'=>'Femenina','language'=>'Español','story'=>'x'])]),['name'=>"Ana\u{200B}",'email'=>'a@example.com','phone'=>'1'],['note'=>"Hola\u{2060} \u{061C}mundo \u{0085}fin"]],
  // adversarial
  'hostile-manyfiles'=>['completed',sample('full',['status'=>'completed','production_stage'=>5]),$cust,['files'=>array_map(fn($i)=>['original_name'=>"Cancion-v$i-<b>x</b>.mp3",'mime'=>'audio/mpeg'],range(1,120)),'note'=>str_repeat('&',2000)]],
  'hostile-bidi'=>['received',sample('full'),['name'=>"\u{202E}evil Eva",'email'=>'e@example.com','phone'=>'1'],[]],
@@ -62,6 +70,7 @@ $cases=[
 ];
 $gallery=[];
 foreach($cases as $name=>[$kind,$o,$c,$ctx]){
+ putenv('COMMERCE_READY='.(empty($ctx['_nopay'])?'true':'false'));
  if($kind==='completed'&&!isset($ctx['files']))$ctx['files']=[];
  $m=mailModel($kind,$o,$c,$ctx);$full=mailBuild($m);$p=mailParts($full);
  file_put_contents("$out/$name.html",$p['html']);file_put_contents("$out/$name.txt",$p['text']);$gallery[$name]=$m['subject'];

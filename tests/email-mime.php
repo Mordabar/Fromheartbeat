@@ -35,6 +35,9 @@ $check(str_contains($dec,'¡')||str_contains($dec,'María')||str_contains($dec,'
 $check(str_contains($dec,'María')||str_contains($dec,'gracias'),'el cuerpo debe incluir el saludo');
 $check(preg_match('~href="https://fromheartbeat\.com/\?session=FHB-260930-024D7A1892#token=[0-9a-f]{64}"~',$dec)===1,'el botón debe llevar el enlace privado con token de 64 hex');
 // legacy rows (queued before this change) must keep working as plain text
+$check(!str_contains($mail->AltBody,'<')&&!str_contains($mail->AltBody,'&nbsp;'),'el AltBody no debe contener HTML');
+$check(preg_match('~https://fromheartbeat\.com/\?session=FHB-260930-024D7A1892#token=[0-9a-f]{64}~',$mail->AltBody)===1,'el AltBody debe llevar el mismo enlace privado que el botón');
+$check(str_contains($raw,'@fromheartbeat.com>')&&!preg_match('/Message-ID: <[^>]*@vm>/',$raw),'el Message-ID debe usar el dominio, no el host interno');
 $check(!str_contains($raw,'=0A'),'no debe haber =0A: los saltos deben ser CRLF canónicos antes de codificar');
 $check(str_contains($raw,'Reply-To: Fromheartbeat <contacto@fromheartbeat.com>')||str_contains($raw,'Reply-To:'),'debe llevar Reply-To (el correo invita a responder)');
 $check(str_contains($raw,'Auto-Submitted: auto-generated'),'debe marcar Auto-Submitted para evitar respuestas automáticas');

@@ -64,7 +64,7 @@ for (const f of files) {
   }
 
   // --- client-compat structure ---
-  const noCond = html.replace(/<!--\[if[\s\S]*?<!\[endif\]-->/g, '');
+  const noCond = html.replace(/<!--\[if mso\]>[\s\S]*?<!\[endif\]-->/g, '');
   const opens = (html.match(/<!--\[if/g) || []).length, closes = (html.match(/<!\[endif\]-->/g) || []).length;
   if (opens !== closes) fail(f, `comentarios condicionales desbalanceados (${opens} abren, ${closes} cierran)`);
   const vml = (html.match(/<v:roundrect[^>]*>/) || [''])[0];
@@ -77,6 +77,20 @@ for (const f of files) {
   for (const row of html.match(/<td[^>]*\bheight="([1-6])"[^>]*>/g) || []) if (!/mso-line-height-rule:exactly/.test(row)) fail(f, 'fila fina sin mso-line-height-rule:exactly: ' + row.slice(0, 70));
   const inlineSizes = [...html.replace(/<style>[\s\S]*?<\/style>/g, '').matchAll(/font-size:(\d+(?:\.\d+)?)px/g)].map(m => +m[1]).filter(n => n < 10 && n !== 1);
   if (inlineSizes.length) fail(f, 'texto con tamaño menor a 10px: ' + [...new Set(inlineSizes)].join(', '));
+
+  // --- rules added after the round-2 mutation tests ---
+  const hosts = new Set([...html.matchAll(/href="https?:\/\/([^\/"?#]+)/g)].map(m => m[1]));
+  if (hosts.size > 1) fail(f, 'enlaces a más de un dominio: ' + [...hosts].join(', '));
+  for (const m of html.matchAll(/href="(https?:\/\/[^"]*\/\?session=[^"]*)"/g)) if (!/#token=[0-9a-f]{64}$/.test(m[1])) fail(f, 'enlace de sesión sin token de 64 hex: ' + m[1].slice(0, 70));
+  if (!/class="wrap" width="600"/.test(html)) fail(f, 'la tabla principal debe medir 600');
+  const btnPad = (html.match(/class="btn-a"[^>]*padding:(\d+)px/) || [, 0])[1]; if (+btnPad < 14) fail(f, `botón con padding vertical ${btnPad}px (mínimo 14)`);
+  if (!/<img class="logo"[^>]*alt="fromheartbeat"/.test(html)) fail(f, 'el logo debe llevar alt="fromheartbeat"');
+  const palette = new Set(Object.values(C).map(v => v.toLowerCase()));
+  for (const m of noCond.matchAll(/(?<![-\w])color:(#[0-9a-fA-F]{6})/g)) if (!palette.has(m[1].toLowerCase())) fail(f, 'color de texto fuera de la paleta: ' + m[1]);
+  for (const m of noCond.matchAll(/style="([^"]*)"/g)) {            // an element that sets both colours must be legible by itself (badges, pills)
+    const fg = (m[1].match(/(?<![-\w])color:(#[0-9a-fA-F]{6})/) || [])[1], bg = (m[1].match(/background-color:(#[0-9a-fA-F]{6})/) || [])[1];
+    if (fg && bg && ratio(fg, bg) < 4.5) fail(f, `texto ${fg} sobre ${bg} = ${ratio(fg, bg).toFixed(2)}`);
+  }
   // --- content safety ---
   const visible = noCond.replace(/<style[\s\S]*?<\/style>/g, '').replace(/<[^>]+>/g, ' ').replace(/&[a-z#0-9]+;/g, ' ');
   if (!hostile && /\b(Array|NaN|undefined|null|Warning|Notice|Deprecated)\b|\{\{|\}\}/.test(visible)) fail(f, 'marcador de plantilla o error filtrado en el texto visible: ' + (visible.match(/\b(Array|NaN|undefined|null|Warning|Notice|Deprecated)\b|\{\{/) || [''])[0]);
@@ -96,4 +110,4 @@ for (const f of files) {
 }
 const total = files.length;
 if (failures.length) { console.log(`FALLAS (${failures.length}) en ${total} correos:\n - ` + failures.join('\n - ')); process.exit(1); }
-console.log(`OK: ${total} correos pasan ${banned.length + 30} reglas y ${pairs.length} pares de contraste.`);
+console.log(`OK: ${total} correos pasan todas las reglas (${banned.length} patrones prohibidos + comprobaciones estructurales) y ${pairs.length} pares de contraste.`);
