@@ -21,7 +21,7 @@ El hosting no tiene ffmpeg ni permite ejecutar programas, así que todo se hace 
 - Las librerías se cargan sólo cuando hacen falta: `assets/vendor/mediabunny.min.js` (MPL-2.0) y `assets/vendor/lame.min.js` (LGPL-3.0, sin modificar). Licencias en `assets/vendor/LICENSES.txt`.
 
 ## Cómo funciona la subida por fragmentos
-`upload-init` → varios `upload-chunk` (cuerpo binario) → `upload-finish`. Todo queda en `private/storage/incoming/` (`.part` + `.json`) hasta completarse; lo abandonado se limpia a las 48 h. El tipo real se decide por los **primeros bytes** del archivo, no por la extensión. Al terminar una tanda del cliente, `upload-done` marca la sesión «por atender» y envía **un solo** aviso al equipo (máx. uno cada 15 min).
+`upload-init` → varios `upload-chunk` (cuerpo binario) → `upload-finish`. Todo queda en `private/storage/incoming/` (`.part` + `.json`) hasta completarse; lo abandonado (12 h sin fragmentos nuevos) se limpia solo. El tipo real se decide por los **primeros bytes** del archivo, no por la extensión. Al terminar una tanda del cliente, `upload-done` marca la sesión «por atender» y envía **un solo** aviso al equipo (máx. uno cada 15 min).
 No hay tablas nuevas: no hay que tocar la base de datos.
 
 ## Variables opcionales del `.env`

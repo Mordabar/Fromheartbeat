@@ -88,6 +88,7 @@ function filesIncoming(): string { $d=storage().'/incoming'; if(!is_dir($d))mkdi
 function filesPurgeStale(): void {
  $d=filesIncoming();$old=time()-43200;
  foreach(glob($d.'/*.json')?:[] as $j){$p=substr($j,0,-5).'.part';$t=max((int)@filemtime($j),is_file($p)?(int)@filemtime($p):0);if($t<$old){@unlink($j);@unlink($p);}}
+ foreach(glob($d.'/*.done')?:[] as $dn)if((int)@filemtime($dn)<time()-3600)@unlink($dn);
  foreach(glob($d.'/*.part')?:[] as $p)if(!is_file(substr($p,0,-5).'.json')&&(int)@filemtime($p)<$old)@unlink($p);
 }
 function filesMeta(string $id): array {
@@ -126,7 +127,7 @@ function filesCommit(array $o,bool $isAdmin,string $kind,string $tmp,string $ori
  });
  if(!$isAdmin){ // el aviso sale en el servidor (no depende de que el navegador siga abierto): uno por ventana de 15 minutos
   sql('UPDATE orders SET requires_attention=1 WHERE id=?',[$o['id']]);
-  notifyTeam($o,'Archivos nuevos del cliente','El cliente está subiendo archivos a su sesión (el primero: «'.$original.'»). Revísalos en el panel.','files:'.$o['reference'].':'.intdiv(time(),900));
+  try{notifyTeam($o,'Archivos nuevos del cliente','El cliente está subiendo archivos a su sesión (el primero: «'.$original.'»). Revísalos en el panel.','files:'.$o['reference'].':'.intdiv(time(),900));}catch(Throwable $e){error_log('FHB notify '.$e->getMessage());} // el archivo ya está guardado: un fallo del aviso no debe fingir que la subida falló
  }
  history($o,($kind==='delivery'?'Versión disponible: ':'Archivo añadido: ').$original,$isAdmin?'admin:'.(int)$_SESSION['admin_id']:'customer');
  return ['id'=>$id,'original_name'=>$original,'mime'=>$mime,'size_bytes'=>$size,'kind'=>$kind];
@@ -179,7 +180,11 @@ function filesChunk(): never {
 }
 
 function filesFinish(): never {
- $in=input();$id=field($in,'id',32,32);[$m,$o]=filesMeta($id);$isAdmin=($m['by']??'')==='admin';
+ $in=input();$id=field($in,'id',32,32);
+ // Idempotente: si la respuesta se perdió y el navegador repite el cierre, devuelve el mismo archivo en vez de duplicarlo.
+ $dn=filesIncoming().'/'.$id.'.done';
+ if(preg_match('/^[a-f0-9]{32}$/',$id)&&is_file($dn)){$dm=@json_decode((string)@file_get_contents($dn),true);if(is_array($dm)){if(($dm['by']??'')==='admin')admin();accessOrder((string)$dm['ref']);jsonResponse(['file'=>$dm['file']],200);}}
+ [$m,$o]=filesMeta($id);$isAdmin=($m['by']??'')==='admin';
  $part=filesIncoming().'/'.$id.'.part';
  $fp=@fopen($part,'r+b');need((bool)$fp,'La subida no existe o ya terminó.',404);
  try{
@@ -187,7 +192,7 @@ function filesFinish(): never {
   clearstatcache(true,$part);need((int)filesize($part)===(int)$m['size'],'Faltan datos del archivo. Se reintentará.',409);
   try{$f=filesCommit($o,$isAdmin,(string)$m['kind'],$part,(string)$m['name'],fn(string $dest)=>rename($part,$dest),true);}
   catch(Throwable $e){@unlink($part);@unlink(filesIncoming().'/'.$id.'.json');throw $e;}
-  @unlink(filesIncoming().'/'.$id.'.json');
+  @unlink(filesIncoming().'/'.$id.'.json');@file_put_contents($dn,json_encode(['ref'=>$m['ref'],'by'=>$m['by'],'file'=>$f],JSON_UNESCAPED_UNICODE));
  }finally{fclose($fp);}
  jsonResponse(['file'=>$f],201);
 }

@@ -201,7 +201,7 @@ function drawInner(m) {
   const count = el.parentElement?.querySelector('[data-u-count]'); if (count) { count.dataset.was ??= count.textContent; count.textContent = files.length ? `${files.length} ${files.length === 1 ? 'enviado' : 'enviados'}` : count.dataset.was; }
   const active = items.some(i => ['queued', 'preparing', 'ready', 'uploading'].includes(i.status));
   el.classList.toggle('is-busy', active);
-  const live = el.querySelector('[data-u-live]'); if (live) live.textContent = S.saved.get(m.ref) || summary(items);
+  const live = el.querySelector('[data-u-live]'); if (live) live.textContent = S.saved.get(m.ref) || (active && navigator.onLine === false ? 'Sin conexión · se reanuda sola' : summary(items));
   const opt = el.querySelector(`[data-u-preset][value="${S.preset}"]`); if (opt && !opt.checked) opt.checked = true; const hint = el.querySelector('[data-u-hint]'); if (hint) hint.textContent = PRESETS[S.preset]?.hint || '';
 }
 function summary(items) {
