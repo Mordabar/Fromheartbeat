@@ -83,6 +83,9 @@ function mailStageCopy(int $stage,string $pk): array { // [title, preheader, lea
   4=>$biz?['Afinando *los últimos detalles.*','Mezcla, master y preparación de tus archivos.','Equilibramos cada voz y cada instrumento, damos el master final y preparamos los archivos de entrega.']
      :($ai?['Última *revisión de calidad.*','Antes de entregarte tu canción.','Hacemos una última revisión de calidad para que tu MP3 y tu portada lleguen listos para compartir.']
      :['Afinando *los últimos detalles.*','Mezcla y master: el pulido final.','Equilibramos cada voz y cada instrumento y damos el master final para que suene increíble en cualquier parlante.']),
+  5=>$biz?['Preparando *tu entrega.*','Dejamos listos los archivos finales de tu pieza.','Estamos dejando listos los archivos finales de tu pieza para subirlos a tu sesión.']
+     :($ai?['Preparando *tu entrega.*','Tu MP3 y tu portada están por llegar.','Estamos dejando listos tu MP3 y tu portada para subirlos a tu sesión.']
+     :['Preparando *tu entrega.*','Tu canción ya casi está en tus manos.','Tu canción está terminada. Estamos dejando listos los archivos finales para subirlos a tu sesión.']),
   default=>[$biz?'Tu pieza *sigue en marcha.*':'Tu sesión *sigue en marcha.*','Seguimos trabajando en tu canción.','Tu sesión sigue avanzando en el estudio. Aquí tienes cómo va.']
  };
 }
@@ -91,8 +94,9 @@ function mailStageNext(int $stage,string $pk): ?array {
  $t=[
   'studio'=>[1=>['Lo que sigue: grabación','Cuando la letra esté lista, pasa a cabina para grabar las voces. Si recuerdas un detalle que falte (un apodo, una fecha), cuéntalo desde tu sesión.'],2=>['Lo que sigue: arreglos','Con las voces grabadas, armamos los arreglos y las capas de producción.'],3=>['Lo que sigue: mezcla y master','Cuando la producción esté lista, equilibramos y masterizamos. Después podrás escuchar tu primera versión.'],4=>['Lo que sigue: tu primera escucha','Al terminar el master subimos una versión a tu sesión y te escribimos para que la escuches.']],
   'ai'=>[1=>['Lo que sigue: composición','Con tu letra lista, creamos la música y la voz con nuestro flujo de creación digital con IA. ¿Falta un detalle? Cuéntalo desde tu sesión.'],2=>['Lo que sigue: pulido','Revisamos la composición y la ajustamos para que suene como la imaginaste.'],3=>['Lo que sigue: revisión final','Hacemos una última revisión de calidad de tu MP3 y tu portada.'],4=>['Lo que sigue: tu entrega','Subimos tu MP3 y tu portada a tu sesión y te avisamos por correo.']],
-  'business'=>[1=>['Lo que sigue: grabación','Cuando la letra esté lista, grabamos las voces y los instrumentos de tu pieza.'],2=>['Lo que sigue: arreglos','Con las grabaciones listas, armamos los arreglos y las capas.'],3=>['Lo que sigue: mezcla y master','Mezcla, master y preparación de tus adaptaciones.'],4=>['Lo que sigue: tu revisión','Subimos una versión a tu sesión para que la revises y nos cuentes qué ajustarías.']],
+  'business'=>[1=>['Lo que sigue: grabación','Cuando la letra esté lista, grabamos las voces y los instrumentos de tu pieza.'],2=>['Lo que sigue: arreglos','Con las grabaciones listas, armamos los arreglos y las capas.'],3=>['Lo que sigue: mezcla y master','Mezcla, master y preparación de tus adaptaciones.'],4=>['Lo que sigue: tu revisión','Subimos una versión a tu sesión para que la revises y nos cuentes qué ajustarías.'],5=>['Lo que sigue: tu entrega','Cuando los archivos estén listos, te avisamos por correo y los descargas desde tu sesión.']],
  ];
+ foreach(['studio','ai'] as $k)$t[$k][5]=['Lo que sigue: tu entrega','Cuando los archivos estén listos, te avisamos por correo y los descargas desde tu sesión.'];
  return $t[$pk][$stage]??null;
 }
 function mailKindLabel(string $mime): string {
@@ -341,12 +345,12 @@ function mailModel(string $kind,array $o,array $c,array $ctx=[]): array {
     ['cta'=>['label'=>$full?'Subir mis fotos y clips':'Seguir mi sesión','url'=>$url,'hint'=>$biz?'Los plazos se coordinan con el equipo según el alcance acordado y la agenda de producción.':'Los plazos se coordinan con el equipo según tu historia y la agenda de producción.']]];
    break;
   case 'production':
-   [$title,$pre,$text]=mailStageCopy($stage,$pk);$staged=$stage>=1&&$stage<=4;$names=mailStageNames($pk);
-   $m+=['subject'=>($staged?strip_tags(str_replace('*','',$title)):'Novedades de tu canción').' · '.$ref,'preheader'=>$pre,'title'=>$title,'hero'=>'hero-production.jpg'];
+   [$title,$pre,$text]=mailStageCopy($stage,$pk);$staged=$stage>=1&&$stage<=5;$names=mailStageNames($pk)+[5=>'Entrega'];
+   $m+=['subject'=>($staged?rtrim(strip_tags(str_replace('*','',$title)),'. '):'Novedades de tu canción').' · '.$ref,'preheader'=>$pre,'title'=>$title,'hero'=>'hero-production.jpg'];
    if($staged&&($pk!=='ai'||$stage===1)&&mailHasAsset('hero-production-'.$stage.'.jpg'))$m['hero']='hero-production-'.$stage.'.jpg';
    $recap=mailRecapLine($o);$next=$staged?mailStageNext($stage,$pk):null;
    $isFull=($o['product_code']??'')==='full';$needsMaterial=$isFull&&isset($ctx['sources'])&&(int)$ctx['sources']===0;$gotMaterial=$isFull&&isset($ctx['sources'])&&(int)$ctx['sources']>0;
-   $m['blocks']=array_values(array_filter([['lead'=>$lead($text)],$tracker($prod,false,$staged?['at'=>$stage-1,'count'=>4]:null,$staged?' · '.$names[$stage].' ('.$stage.' de 4)':''),
+   $m['blocks']=array_values(array_filter([['lead'=>$lead($text)],$tracker($prod,false,$staged&&$stage<=4?['at'=>$stage-1,'count'=>4]:null,$staged?' · '.$names[$stage].($stage<=4?' ('.$stage.' de 4)':''):''),
     $recap!==''?['recap'=>['label'=>$biz?'Tu marca':'Tu canción para','text'=>$recap]]:null,
     $gotMaterial&&!$needsMaterial?['p'=>'Ya recibimos tu material para el video ('.(int)$ctx['sources'].' '.((int)$ctx['sources']===1?'archivo':'archivos').'). ¡Gracias!']:null,
     $needsMaterial?['callout'=>['tone'=>'warn','title'=>'Aún falta tu material para el video','text'=>'Sube tus fotos y clips desde tu sesión para que podamos armar tu video emocional.']]:null,
@@ -446,4 +450,14 @@ function notifyJourney(array $o,string $kind,array $ctx,string $key,?string $tea
  }
  enqueue($key.':customer',$c['email'],$m['subject'],$custBody);
  if($teamBody!==null)enqueue($key.':team',env('TEAM_EMAIL'),$t['subject'],$teamBody);
+}
+
+/** Aviso sólo para el equipo (por ejemplo, el cliente subió archivos). Un fallo de render nunca rompe la acción que lo originó. */
+function notifyTeam(array $o,string $headline,string $message,string $key): void {
+ try{
+  $o=sql('SELECT * FROM orders WHERE id=?',[$o['id']])->fetch()?:$o;$o['product']=catalog()[$o['product_code']]??[];
+  $t=mailTeamModel($headline,$message,$o,customerFor($o));$body=mailBuild($t);
+ }catch(PDOException $e){throw $e;}
+ catch(Throwable $e){error_log('FHB mail '.get_class($e).' '.$e->getMessage());return;}
+ enqueue($key.':team',env('TEAM_EMAIL'),$t['subject'],$body);
 }

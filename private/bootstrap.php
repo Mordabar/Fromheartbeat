@@ -40,3 +40,4 @@ function storage():string { $path=env('STORAGE_PATH',BASE.'/storage'); if(!is_di
 require_once BASE.'/catalog.php';
 require_once BASE.'/domain.php';
 require_once BASE.'/mail.php';
+require_once BASE.'/files.php';

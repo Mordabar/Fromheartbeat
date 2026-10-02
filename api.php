@@ -15,7 +15,7 @@ try {
  }
  sessionBoot();
  if($method==='POST')csrf();
- if($action==='bootstrap'&&$method==='GET')jsonResponse(['csrf'=>$_SESSION['csrf'],'tracks'=>musicPublic(),'catalog'=>array_values(catalog()),'options'=>briefOptions(),'content'=>siteContent(),'admin'=>isset($_SESSION['admin_id']),'environment'=>env('APP_ENV','production'),'commerceReady'=>env('COMMERCE_READY')==='true','testMode'=>testMode(),'heroVideo'=>env('HERO_VIDEO')==='true'&&is_file(__DIR__.'/assets/video/studio-loop.mp4')?'assets/video/studio-loop.mp4':null,'support'=>env('SUPPORT_EMAIL'),'legal'=>['name'=>env('LEGAL_NAME'),'taxId'=>env('LEGAL_TAX_ID'),'address'=>env('LEGAL_ADDRESS')]]);
+ if($action==='bootstrap'&&$method==='GET')jsonResponse(['csrf'=>$_SESSION['csrf'],'tracks'=>musicPublic(),'catalog'=>array_values(catalog()),'options'=>briefOptions(),'content'=>siteContent(),'admin'=>isset($_SESSION['admin_id']),'environment'=>env('APP_ENV','production'),'commerceReady'=>env('COMMERCE_READY')==='true','testMode'=>testMode(),'heroVideo'=>env('HERO_VIDEO')==='true'&&is_file(__DIR__.'/assets/video/studio-loop.mp4')?'assets/video/studio-loop.mp4':null,'uploads'=>filesPublicConfig(),'support'=>env('SUPPORT_EMAIL'),'legal'=>['name'=>env('LEGAL_NAME'),'taxId'=>env('LEGAL_TAX_ID'),'address'=>env('LEGAL_ADDRESS')]]);
  if($action==='music-media'&&$method==='GET')musicStream();
  if($action==='admin-music'&&$method==='GET'){admin();jsonResponse(['tracks'=>musicRead()]);}
  if($action==='admin-music-save'&&$method==='POST')musicSave();
@@ -61,7 +61,7 @@ try {
   $visible=($in['visible']??true)===true;need(!(($in['notify']??false)===true&&!$visible),'Una nota interna no puede enviarse al cliente.');
   db()->beginTransaction();try{
    $o=sql('SELECT * FROM orders WHERE reference=? FOR UPDATE',[$ref])->fetch();need((bool)$o,'Pedido no encontrado.',404);
-   $allowed=['created'=>['created','cancelled'],'payment_pending'=>['payment_pending','cancelled'],'paid'=>['paid','in_production'],'in_production'=>['in_production','review'],'review'=>['review','in_production','completed'],'completed'=>['completed','review'],'cancelled'=>['cancelled']];
+   $allowed=['created'=>['created','cancelled'],'payment_pending'=>['payment_pending','cancelled'],'paid'=>['paid','in_production'],'in_production'=>['in_production','review','completed'],'review'=>['review','in_production','completed'],'completed'=>['completed','review'],'cancelled'=>['cancelled']];
    need(in_array($status,$allowed[$o['status']],true),'Transición de estado no permitida. El pago sólo lo confirma Wompi.',409);
    need($stage===0||in_array($status,['paid','in_production','review','completed'],true),'Primero debe confirmarse el pago.');
    if($status==='completed'){
@@ -84,17 +84,17 @@ try {
   need($o['audience']==='business'&&$o['status']==='created','Este pedido no admite cotización.',409);need($amount!==false&&$amount>=(int)catalog()[$o['product_code']]['price']&&$amount<=10000000000,'Importe inválido.');
   db()->beginTransaction();try{$o=sql('SELECT * FROM orders WHERE id=? FOR UPDATE',[$o['id']])->fetch();need($o['status']==='created','El pedido ha cambiado. Actualiza la vista.',409);$b=json_decode($o['brief'],true);$b['agreed_scope']=$scope;sql('UPDATE orders SET amount_in_cents=?,brief=?,quoted_at=UTC_TIMESTAMP() WHERE id=?',[$amount,json_encode($b,JSON_UNESCAPED_UNICODE),$o['id']]);history($o,'Cotización disponible. Alcance y licencia: '.$scope,'admin:'.$aid);notifyJourney($o,'quote',[],'quote:'.$o['reference'].':'.bin2hex(random_bytes(5)),'Propuesta enviada','Enviaste la propuesta al cliente. Queda pendiente su pago.');db()->commit();jsonResponse(['ok'=>true]);}catch(Throwable $e){if(db()->inTransaction())db()->rollBack();throw $e;}
  }
- if($action==='upload'&&$method==='POST') {
-  $o=accessOrder((string)($_POST['reference']??''));$isAdmin=isset($_SESSION['admin_id']);$kind=$isAdmin?($_POST['kind']??'delivery'):'source';need(in_array($kind,['delivery','source'],true),'Tipo inválido.');
-  need($isAdmin||($o['product_code']==='full'&&in_array($o['status'],['paid','in_production','review','completed'],true)),'Las fotos y clips se reciben cuando el pago de Full Experience está confirmado.',403);$f=$_FILES['file']??null;
-  need($f&&$f['error']===UPLOAD_ERR_OK,'No se pudo recibir el archivo. Límite: 50 MB.');need($f['size']>0&&$f['size']<=50*1024*1024,'El archivo debe pesar hasta 50 MB.');
-  $mime=(new finfo(FILEINFO_MIME_TYPE))->file($f['tmp_name']);$types=['audio/mpeg'=>'mp3','audio/wav'=>'wav','audio/x-wav'=>'wav','image/jpeg'=>'jpg','image/png'=>'png','image/webp'=>'webp','video/mp4'=>'mp4'];need(isset($types[$mime]),'Formato permitido: MP3, WAV, JPG, PNG, WebP o MP4.');
-  if(!$isAdmin)need(in_array($mime,['image/jpeg','image/png','image/webp','video/mp4'],true),'Adjunta una fotografía o un video.');
-  need((int)sql('SELECT COUNT(*) FROM deliverables WHERE order_id=?',[$o['id']])->fetchColumn()<40,'Se alcanzó el límite de 40 archivos.');
-  $name=bin2hex(random_bytes(24)).'.'.$types[$mime];$original=mb_substr(preg_replace('/[^\pL\pN._ -]/u','_',basename($f['name'])),0,150);
-  need(move_uploaded_file($f['tmp_name'],storage().'/'.$name),'No se pudo guardar el archivo.',500);
-  try{sql('INSERT INTO deliverables(order_id,storage_name,original_name,mime,size_bytes,kind) VALUES(?,?,?,?,?,?)',[$o['id'],$name,$original,$mime,$f['size'],$kind]);}catch(Throwable $e){unlink(storage().'/'.$name);throw $e;}
-  history($o,($kind==='delivery'?'Versión disponible: ':'Archivo añadido: ').$original,$isAdmin?'admin:'.$_SESSION['admin_id']:'customer');jsonResponse(['ok'=>true],201);
+ if($action==='upload-init'&&$method==='POST')filesInit();
+ if($action==='upload-status'&&$method==='GET')filesStatus();
+ if($action==='upload-chunk'&&$method==='POST')filesChunk();
+ if($action==='upload-finish'&&$method==='POST')filesFinish();
+ if($action==='upload-cancel'&&$method==='POST')filesCancel();
+ if($action==='upload-done'&&$method==='POST')filesDone();
+ if($action==='file-delete'&&$method==='POST')filesDelete();
+ if($action==='upload'&&$method==='POST') { // formulario clásico (un archivo, hasta el límite de PHP); el cargador por partes es el camino normal
+  $o=accessOrder((string)($_POST['reference']??''));$isAdmin=isset($_SESSION['admin_id']);$f=$_FILES['file']??null;
+  need($f&&$f['error']===UPLOAD_ERR_OK,'No se pudo recibir el archivo. Usa el cargador de la sesión para archivos grandes.');
+  $r=filesCommit($o,$isAdmin,$isAdmin?(string)($_POST['kind']??'delivery'):'source',$f['tmp_name'],(string)$f['name'],fn(string $dest)=>move_uploaded_file($f['tmp_name'],$dest));jsonResponse(['ok'=>true,'file'=>$r],201);
  }
  if($action==='file'&&$method==='GET') {
   $f=sql('SELECT d.*,o.reference FROM deliverables d JOIN orders o ON o.id=d.order_id WHERE d.id=?',[(int)($_GET['id']??0)])->fetch();need((bool)$f,'Archivo no encontrado.',404);accessOrder($f['reference']);$path=storage().'/'.$f['storage_name'];need(is_file($path),'Archivo no disponible.',404);
