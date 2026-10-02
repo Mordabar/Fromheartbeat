@@ -18,3 +18,4 @@ try:
     if not os.path.exists(T+'/t.mp4'):ff('-f','lavfi','-i','testsrc=size=320x240:rate=15:duration=2','-i',T+'/t.wav','-shortest','-c:v','mpeg4','-c:a','aac',T+'/t.mp4')
     if not os.path.exists(T+'/big.webm'):ff('-f','lavfi','-i','testsrc2=size=1920x1080:rate=30:duration=6','-f','lavfi','-i','sine=frequency=440:duration=6','-c:v','libvpx-vp9','-b:v','18M','-deadline','realtime','-cpu-used','8','-c:a','libopus',T+'/big.webm')
 except Exception as e:print('sin ffmpeg:',e)
+open(T+'/falso-nombre-muy-largo-de-prueba.jpg','wb').write(b'MZ\x90\x00'*50)  # dice ser JPG pero no lo es: el servidor debe rechazarlo
