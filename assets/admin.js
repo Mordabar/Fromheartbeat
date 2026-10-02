@@ -134,7 +134,7 @@ function deliverCard(o) {
   const mine = o.files.filter(f => f.kind === 'source');
   return `<section id="deliver" class="a-card"><h2 class="a-h">Entrega al cliente <b>${ready ? 'Todo listo' : `${done} de ${list.length} listos`}</b></h2>
    <ul class="a-deliv" aria-label="Archivos de la entrega">${list.map(d => `<li class="${d.file ? 'ok' : ''}"><span class="d-st" aria-hidden="true">${d.file ? '✓' : '·'}</span><b>${esc(d.label)}</b><small>${d.file ? esc(d.file.original_name) : 'Falta'}</small></li>`).join('')}</ul>
-   <p class="a-muted">Arrastra todos los archivos juntos: cada uno se reconoce por su contenido. Sube versiones nuevas con el nombre <code>Cancion-v2.mp3</code>; el cliente ve la última y conserva las anteriores. Se envían tal cual, sin compresión.</p>
+   <p class="a-muted">Elige todos los archivos juntos: cada uno se reconoce por su contenido. Sube versiones nuevas con el nombre <code>Cancion-v2.mp3</code>; el cliente ve la última y conserva las anteriores. Se envían tal cual, sin compresión.</p>
    ${uploaderHtml(o.reference, {role: 'admin', kind: 'delivery', pickLabel: 'Elegir los archivos de entrega', dropHint: 'WAV, MP3, video, portada… varios a la vez · hasta 1 GB cada uno'})}
    ${mine.length ? `<details class="a-more a-src"><summary>Material que envió el cliente · ${mine.length}</summary>${uploaderHtml(o.reference, {role: 'admin', kind: 'source', listOnly: true})}</details>` : ''}</section>`;
 }

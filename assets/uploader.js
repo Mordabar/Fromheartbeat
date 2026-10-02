@@ -24,7 +24,8 @@ export const busy = ref => S.items.some(i => (!ref || i.ref === ref) && ['queued
 
 // ------------------------------------------------------------------------------------------------------------ red
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const waitOnline = async () => { while (navigator.onLine === false) await new Promise(r => addEventListener('online', r, {once: true})); };
+const waitOnline = async item => { while (navigator.onLine === false) { if (item) { item.warn = 'Sin conexión · se reanuda sola'; emit('structure'); } await new Promise(r => addEventListener('online', r, {once: true})); if (item) { item.warn = ''; emit('structure'); } } };
+addEventListener('offline', () => emit('structure')); addEventListener('online', () => emit('structure'));
 class Fatal extends Error {}
 async function refreshCsrf() { let r; try { r = await fetch('api.php?action=bootstrap', {credentials: 'same-origin'}); } catch { throw new Fatal(OFFLINE); } const j = await r.json(); if (j.csrf) S.ctx.setCsrf?.(j.csrf); return j.csrf; }
 const OFFLINE = 'Sin conexión con el estudio. Revisa tu internet y vuelve a intentarlo.';
@@ -50,20 +51,22 @@ function sendChunk(item, blob, offset, onBytes) {
 
 async function upload(item) {
   const blob = item.out, size = blob.size;
-  await waitOnline();
+  await waitOnline(item);
   const init = await json('upload-init', {reference: item.ref, name: item.outName, size, kind: item.kind});
-  item.uploadId = init.id; const top = Math.min(init.chunk || S.cfg.chunkBytes, S.cfg.chunkBytes);
+  item.uploadId = init.id;
+  if (item.status === 'canceled') { json('upload-cancel', {id: init.id}).catch(() => {}); throw Object.assign(new Error('c'), {name: 'AbortError'}); } // se canceló mientras se preparaba la subida
+  const top = Math.min(init.chunk || S.cfg.chunkBytes, S.cfg.chunkBytes);
   let chunk = top, off = 0, fails = 0; // con mala señal el fragmento se achica (mín. 256 KB) y vuelve a crecer cuando mejora
   while (off < size) {
     if (item.status === 'canceled') throw Object.assign(new Error('c'), {name: 'AbortError'});
-    await waitOnline();
+    await waitOnline(item);
     const end = Math.min(size, off + chunk);
     try {
       const r = await sendChunk(item, blob.slice(off, end), off, n => { item.sent = off + n; emit('progress', item); });
       if (r.status === 200) { off = r.json.received; item.sent = off; fails = 0; chunk = Math.min(top, chunk * 2); emit('progress', item); continue; }
       if (r.status === 403 && /sesi[oó]n venci/i.test(r.json.error || '')) { await refreshCsrf(); continue; }
       if (r.status === 409) { off = (await status(item)); continue; }
-      if (r.status >= 400 && r.status < 500 && ![400, 408, 429].includes(r.status)) throw new Fatal(r.json.error || 'El estudio no pudo recibir el archivo.');
+      if (r.status >= 400 && r.status < 500 && ![400, 408, 429].includes(r.status)) throw Object.assign(new Fatal(r.json.error || 'El estudio no pudo recibir el archivo.'), {status: r.status});
       throw new Error('servidor ' + r.status);
     } catch (e) {
       if (e instanceof Fatal || e.name === 'AbortError') throw e;
@@ -110,7 +113,7 @@ export function cancel(id) {
   emit('structure'); pump();
 }
 export function retry(id) { const i = S.items.find(x => x.id === id); if (!i) return; if (i.uploadId) json('upload-cancel', {id: i.uploadId}).catch(() => {}); Object.assign(i, {status: i.out ? 'ready' : 'queued', error: '', sent: 0, uploadId: ''}); emit('structure'); pump(); }
-export function dismiss(id) { S.items = S.items.filter(i => i.id !== id || ['queued', 'preparing', 'ready', 'uploading'].includes(i.status)); emit('structure'); }
+export function dismiss(id) { const d = S.items.find(i => i.id === id); if (d?.uploadId && d.status === 'error') json('upload-cancel', {id: d.uploadId}).catch(() => {}); S.items = S.items.filter(i => i.id !== id || ['queued', 'preparing', 'ready', 'uploading'].includes(i.status)); emit('structure'); }
 export function setPreset(p) { if (!PRESETS[p]) return; S.preset = p; try { localStorage.setItem('fhb.preset', p); } catch { /* ok */ } S.items.filter(i => i.status === 'queued' && i.compress).forEach(i => i.preset = p); emit('structure'); }
 
 function pump() {
@@ -134,7 +137,7 @@ async function prep(i) {
 async function send(i) {
   i.status = 'uploading'; i.sent = 0; i.error = ''; emit('structure');
   try { i.row = await upload(i); i.status = 'done'; S.ctx.onFileDone?.(i.row, i); }
-  catch (e) { if (i.status !== 'canceled') { i.status = 'error'; i.error = e.message || 'No se pudo enviar.'; if (i.uploadId && e instanceof Fatal && !/conexi/i.test(e.message)) json('upload-cancel', {id: i.uploadId}).catch(() => {}); } }
+  catch (e) { if (i.status !== 'canceled') { i.status = 'error'; i.error = e.message || 'No se pudo enviar.'; i.noRetry = [409, 413, 415].includes(e.status); if (i.uploadId && e instanceof Fatal && !/conexi/i.test(e.message)) json('upload-cancel', {id: i.uploadId}).catch(() => {}); } }
   emit('structure'); pump();
 }
 function scheduleDone(ref) {
@@ -168,8 +171,8 @@ function emit(type) {
 const pct = i => i.status === 'preparing' ? Math.round(i.prog * 100) : i.out?.size ? Math.min(100, Math.round(i.sent / i.out.size * 100)) : 0;
 function rowHtml(i) {
   const st = i.status, p = pct(i), icn = ICON_FOR[i.k] || 'file';
-  const label = {queued: 'En espera', preparing: `${i.phase || 'Preparando'} · ${p}%`, ready: 'Listo para enviar', uploading: i.warn || `Enviando · ${p}%`, done: i.changed ? 'Reducido y enviado' : 'Enviado', error: i.error || 'No se pudo enviar', canceled: 'Cancelado'}[st];
-  const act = st === 'error' ? `<button type="button" class="u-btn" data-u-retry="${i.id}" aria-label="Reintentar ${esc(i.name)}">${ic('retry')}<span>Reintentar</span></button><button type="button" class="u-x" data-u-dismiss="${i.id}" aria-label="Quitar ${esc(i.name)}">${ic('x')}</button>`
+  const label = {queued: 'En espera', preparing: `${i.phase || 'Preparando'} · ${p}%`, ready: 'Listo para enviar', uploading: i.warn || (navigator.onLine === false ? 'Sin conexión · se reanuda sola' : `Enviando · ${p}%`), done: i.changed ? 'Reducido y enviado' : 'Enviado', error: i.error || 'No se pudo enviar', canceled: 'Cancelado'}[st];
+  const act = st === 'error' ? `<span class="u-act">${i.noRetry ? '' : `<button type="button" class="u-btn" data-u-retry="${i.id}" aria-label="Reintentar ${esc(i.name)}">${ic('retry')}<span>Reintentar</span></button>`}<button type="button" class="u-btn" data-u-dismiss="${i.id}" aria-label="Quitar ${esc(i.name)}">${ic('x')}<span>Quitar</span></button></span>`
     : ['done', 'canceled'].includes(st) ? `<button type="button" class="u-x" data-u-dismiss="${i.id}" aria-label="Quitar de la lista">${ic('x')}</button>`
     : `<button type="button" class="u-x" data-u-cancel="${i.id}" aria-label="Cancelar ${esc(i.name)}">${ic('x')}</button>`;
   const size = i.out && i.out !== i.file ? `${fmtBytes(i.file.size)} → ${fmtBytes(i.out.size)}` : fmtBytes(i.file.size);
@@ -198,13 +201,12 @@ function drawInner(m) {
   const count = el.parentElement?.querySelector('[data-u-count]'); if (count) { count.dataset.was ??= count.textContent; count.textContent = files.length ? `${files.length} ${files.length === 1 ? 'enviado' : 'enviados'}` : count.dataset.was; }
   const active = items.some(i => ['queued', 'preparing', 'ready', 'uploading'].includes(i.status));
   el.classList.toggle('is-busy', active);
-  const live = el.querySelector('[data-u-live]'); if (live) live.textContent = summary(items) || S.saved.get(m.ref) || '';
+  const live = el.querySelector('[data-u-live]'); if (live) live.textContent = S.saved.get(m.ref) || summary(items);
   const opt = el.querySelector(`[data-u-preset][value="${S.preset}"]`); if (opt && !opt.checked) opt.checked = true; const hint = el.querySelector('[data-u-hint]'); if (hint) hint.textContent = PRESETS[S.preset]?.hint || '';
 }
 function summary(items) {
-  if (items.length) S.saved.clear();
   const up = items.filter(i => ['queued', 'preparing', 'ready', 'uploading'].includes(i.status)).length, bad = items.filter(i => i.status === 'error').length, ok = items.filter(i => i.status === 'done').length;
-  return up ? `Enviando ${up} ${up === 1 ? 'archivo' : 'archivos'}…` : bad ? `${bad} sin enviar. Puedes reintentar.` : ok ? `Listo: ${ok} ${ok === 1 ? 'archivo enviado' : 'archivos enviados'}.` : '';
+  return up ? `Enviando ${up} ${up === 1 ? 'archivo' : 'archivos'}…` : bad ? `${bad} sin enviar. Revisa el aviso en rojo.` : ok ? `Listo: ${ok} ${ok === 1 ? 'archivo enviado' : 'archivos enviados'}.` : '';
 }
 function patch(m) {
   for (const i of S.items) {

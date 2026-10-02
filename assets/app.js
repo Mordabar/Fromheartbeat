@@ -203,7 +203,7 @@ function frameStudio(){
 function render(enter=true){mountOptions();const keepScroll=!enter?(root.querySelector('.panel-body')?.scrollTop||0):0;root.innerHTML=(FLOW.includes(view)?()=>wizardView(view):{lobby,info:aboutView,about:aboutView,samples:samplesView,recover:recoverView,session:sessionView,terms:()=>legalView(false),privacy:()=>legalView(true)}[view]||lobby)();const panel=root.querySelector('.panel');if(panel&&enter)panel.classList.add('enter');document.body.dataset.view=view;if(keepScroll){const pb=root.querySelector('.panel-body');if(pb)pb.scrollTop=keepScroll;}sync3D();mountUploads();requestAnimationFrame(frameStudio);}
 
 function mountUploads(){const el=root.querySelector('[data-uploader]');if(el&&currentOrder&&view==='session')mountUploader(el,{ref:currentOrder.reference,role:'customer',kind:'source',files:currentOrder.files,status:currentOrder.status});}
-async function refreshAfterUpload(ref){if(view!=='session'||currentOrder?.reference!==ref)return;try{currentOrder=(await api('order',null,'&reference='+encodeURIComponent(ref))).order;render(false);}catch{}}
+async function refreshAfterUpload(ref){if(view!=='session'||currentOrder?.reference!==ref)return;const inUp=!!document.activeElement?.closest?.('#s-upload');try{currentOrder=(await api('order',null,'&reference='+encodeURIComponent(ref))).order;render(false);if(inUp)root.querySelector('[data-u-pick]')?.focus({preventScroll:true});}catch{}}
 function go(next){
  if(!boot)return;
  const wasLegal=['terms','privacy'].includes(view),drawerWasOpen=optionsDialog.open;

@@ -63,7 +63,7 @@ function filesSniff(string $path,string $name=''): ?string {
  if(str_starts_with($h,'ID3'))return 'audio/mpeg';
  if($b0===0xFF&&($b1&0xF6)===0xF0)return 'audio/aac';
  $txt=strtolower(pathinfo($name,PATHINFO_EXTENSION))==='txt';
- if($txt&&($b0===0xFF&&$b1===0xFE||$b0===0xFE&&$b1===0xFF)&&$n%2===0&&mb_check_encoding(substr($h,2),'UTF-16'))return 'text/plain'; // UTF-16 con BOM
+ if($txt&&($b0===0xFF&&$b1===0xFE||$b0===0xFE&&$b1===0xFF)&&$n%2===0&&mb_check_encoding(substr($h,2),$b0===0xFF?'UTF-16LE':'UTF-16BE'))return 'text/plain'; // UTF-16 con BOM
  if(($f=filesMp3Frame($h,0))!==null&&($f<=0||$n<=$f+4||filesMp3Frame($h,$f)!==null))return 'audio/mpeg';
  // Texto plano: sólo con extensión .txt, UTF-8 válido y sin bytes nulos. El bloque leído puede cortar un carácter por la mitad: se prueba quitando hasta 3 bytes del final.
  if($txt&&!str_contains($h,"\0")){for($k=0;$k<=($n>=8192?3:0);$k++)if(mb_check_encoding(substr($h,0,$n-$k),'UTF-8'))return 'text/plain';}
@@ -84,8 +84,11 @@ function filesCleanName(string $name): string {
 function filesCustomerMayUpload(array $o): bool { return in_array($o['status'],['paid','in_production','review','completed'],true); }
 
 function filesIncoming(): string { $d=storage().'/incoming'; if(!is_dir($d))mkdir($d,0700,true); return $d; }
+/** Una subida abandonada (sin fragmentos nuevos en 12 h) libera su reserva. La edad cuenta desde el último fragmento, no desde que empezó. */
 function filesPurgeStale(): void {
- foreach(glob(filesIncoming().'/*')?:[] as $f)if(is_file($f)&&filemtime($f)<time()-172800)@unlink($f);
+ $d=filesIncoming();$old=time()-43200;
+ foreach(glob($d.'/*.json')?:[] as $j){$p=substr($j,0,-5).'.part';$t=max((int)@filemtime($j),is_file($p)?(int)@filemtime($p):0);if($t<$old){@unlink($j);@unlink($p);}}
+ foreach(glob($d.'/*.part')?:[] as $p)if(!is_file(substr($p,0,-5).'.json')&&(int)@filemtime($p)<$old)@unlink($p);
 }
 function filesMeta(string $id): array {
  need((bool)preg_match('/^[a-f0-9]{32}$/',$id),'La subida no existe o ya terminó.',404);
@@ -121,7 +124,10 @@ function filesCommit(array $o,bool $isAdmin,string $kind,string $tmp,string $ori
   try{sql('INSERT INTO deliverables(order_id,storage_name,original_name,mime,size_bytes,kind) VALUES(?,?,?,?,?,?)',[$o['id'],$name,$original,$mime,$size,$kind]);}catch(Throwable $e){@unlink(storage().'/'.$name);throw $e;}
   return (int)db()->lastInsertId();
  });
- if(!$isAdmin)sql('UPDATE orders SET requires_attention=1 WHERE id=?',[$o['id']]);
+ if(!$isAdmin){ // el aviso sale en el servidor (no depende de que el navegador siga abierto): uno por ventana de 15 minutos
+  sql('UPDATE orders SET requires_attention=1 WHERE id=?',[$o['id']]);
+  notifyTeam($o,'Archivos nuevos del cliente','El cliente está subiendo archivos a su sesión (el primero: «'.$original.'»). Revísalos en el panel.','files:'.$o['reference'].':'.intdiv(time(),900));
+ }
  history($o,($kind==='delivery'?'Versión disponible: ':'Archivo añadido: ').$original,$isAdmin?'admin:'.(int)$_SESSION['admin_id']:'customer');
  return ['id'=>$id,'original_name'=>$original,'mime'=>$mime,'size_bytes'=>$size,'kind'=>$kind];
 }
@@ -156,9 +162,11 @@ function filesChunk(): never {
  $id=(string)($_GET['id']??'');[$m]=filesMeta($id);session_write_close();
  $offset=filter_var($_GET['offset']??null,FILTER_VALIDATE_INT);$len=(int)($_SERVER['CONTENT_LENGTH']??0);$l=filesLimits();
  need($offset!==false&&$offset>=0,'Fragmento inválido.');need($len>0&&$len<=$l['chunk'],'Fragmento demasiado grande.',413);need($offset+$len<=(int)$m['size'],'El fragmento excede el tamaño anunciado.');
- $part=filesIncoming().'/'.$id.'.part';$fp=fopen($part,'c+b');need((bool)$fp,'No se pudo guardar el fragmento.',500);
+ $part=filesIncoming().'/'.$id.'.part';$fp=@fopen($part,'r+b');need((bool)$fp,'La subida no existe o ya terminó.',404);
  try{
-  need(flock($fp,LOCK_EX),'No se pudo guardar el fragmento.',500);clearstatcache(true,$part);$have=(int)filesize($part);
+  need(flock($fp,LOCK_EX),'No se pudo guardar el fragmento.',500);clearstatcache(true,$part);
+  $a=fstat($fp);$b=@stat($part);need($b&&$a['ino']===$b['ino'],'La subida no existe o ya terminó.',404); // el archivo no fue cerrado ni cancelado mientras esperábamos el candado
+  $have=(int)filesize($part);
   need($offset<=$have,'Fragmento fuera de orden.',409);
   fseek($fp,$offset);$in=fopen('php://input','rb');$written=(int)stream_copy_to_stream($in,$fp,$len);fclose($in);fflush($fp);
   need($written===$len,'El fragmento llegó incompleto. Se reintentará.',400);
@@ -173,7 +181,7 @@ function filesChunk(): never {
 function filesFinish(): never {
  $in=input();$id=field($in,'id',32,32);[$m,$o]=filesMeta($id);$isAdmin=($m['by']??'')==='admin';
  $part=filesIncoming().'/'.$id.'.part';
- $fp=@fopen($part,'rb');need((bool)$fp,'La subida no existe o ya terminó.',404);
+ $fp=@fopen($part,'r+b');need((bool)$fp,'La subida no existe o ya terminó.',404);
  try{
   need(flock($fp,LOCK_EX),'No se pudo cerrar la subida.',500); // espera a que termine cualquier fragmento en curso
   clearstatcache(true,$part);need((int)filesize($part)===(int)$m['size'],'Faltan datos del archivo. Se reintentará.',409);
@@ -188,13 +196,12 @@ function filesCancel(): never {
  $in=input();$id=field($in,'id',32,32);filesMeta($id);@unlink(filesIncoming().'/'.$id.'.part');@unlink(filesIncoming().'/'.$id.'.json');jsonResponse(['ok'=>true]);
 }
 
-/** El cliente terminó una tanda: marca la sesión para atención y avisa al estudio una sola vez por ventana de 15 minutos. */
+/** El cliente terminó una tanda: confirma cuántos archivos llegaron (el aviso al equipo ya salió al recibir el primero). */
 function filesDone(): never {
  $in=input();$o=accessOrder(field($in,'reference',1,40));need(!isset($_SESSION['admin_id']),'Sólo lo envía el cliente.',403);
  $rows=sql("SELECT original_name FROM deliverables WHERE order_id=? AND kind='source' AND created_at>=? ORDER BY id",[$o['id'],gmdate('Y-m-d H:i:s',time()-900)])->fetchAll(PDO::FETCH_COLUMN);
  if($rows){
   sql('UPDATE orders SET requires_attention=1 WHERE id=?',[$o['id']]);
-  $n=count($rows);notifyTeam($o,$n===1?'Un archivo nuevo del cliente':$n.' archivos nuevos del cliente',$n===1?'El cliente subió «'.$rows[0].'» a su sesión.':'El cliente subió '.$n.' archivos a su sesión, entre ellos «'.$rows[0].'».','files:'.$o['reference'].':'.intdiv(time(),900));
  }
  jsonResponse(['ok'=>true,'count'=>count($rows)]);
 }

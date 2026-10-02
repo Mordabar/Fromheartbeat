@@ -98,7 +98,7 @@ try {
  }
  if($action==='file'&&$method==='GET') {
   $f=sql('SELECT d.*,o.reference FROM deliverables d JOIN orders o ON o.id=d.order_id WHERE d.id=?',[(int)($_GET['id']??0)])->fetch();need((bool)$f,'Archivo no encontrado.',404);accessOrder($f['reference']);$path=storage().'/'.$f['storage_name'];need(is_file($path),'Archivo no disponible.',404);
-  session_write_close();header('Content-Type: '.$f['mime']);header('Accept-Ranges: bytes');header("Content-Disposition: ".(isset($_GET['download'])?'attachment':'inline')."; filename*=UTF-8''".rawurlencode($f['original_name']));
+  session_write_close();header('Content-Type: '.$f['mime']);header('Accept-Ranges: bytes');header('Cache-Control: private, max-age=3600');header("Content-Disposition: ".(isset($_GET['download'])?'attachment':'inline')."; filename*=UTF-8''".rawurlencode($f['original_name']));
   $size=filesize($path);$start=0;$end=$size-1;
   if(isset($_SERVER['HTTP_RANGE'])){need((bool)preg_match('/^bytes=(\d*)-(\d*)$/',$_SERVER['HTTP_RANGE'],$m),'Rango inválido.',416);if($m[1]===''){$start=max(0,$size-(int)$m[2]);}else{$start=(int)$m[1];if($m[2]!=='')$end=min($end,(int)$m[2]);}need($start<=$end&&$start<$size,'Rango inválido.',416);http_response_code(206);header("Content-Range: bytes $start-$end/$size");}
   header('Content-Length: '.($end-$start+1));$fp=fopen($path,'rb');fseek($fp,$start);$left=$end-$start+1;while($left>0&&!feof($fp)){ $chunk=fread($fp,min(65536,$left));echo $chunk;$left-=strlen($chunk);}fclose($fp);exit;

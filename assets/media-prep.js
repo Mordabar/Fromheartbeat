@@ -85,6 +85,7 @@ async function prepVideo(file, p, onProgress, signal) {
     const k = Math.min(1, p.side / Math.max(dw, dh)), w = Math.max(2, Math.round(dw * k / 2) * 2), h = Math.max(2, Math.round(dh * k / 2) * 2);
     const srcBps = dur > 0 ? file.size * 8 / dur : 0, bitrate = Math.round(p.vbps * Math.min(1, (w * h) / (1920 * 1080)) * 1.1 + 150_000);
     if (srcBps && srcBps < bitrate * 1.15 && k === 1) return null; // ya es ligero: no vale la pena re-codificar
+    if (dur > 0 && (bitrate + p.abps) * dur / 8 > 1.2 * 1024 * MB) return null; // el resultado se arma en memoria: no se intenta si saldría enorme
     const codec = await pickVideoCodec(mb, w, h, bitrate);
     if (!codec) return null;
     const audioCodec = await pickAudioCodec(mb);
