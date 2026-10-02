@@ -27,7 +27,7 @@ COMMERCE_READY=true
 $FHB_EXTRA_ENV
 ENV
 export FHB_SQLITE="$W/test.sqlite" FHB_ENV_FILE="$W/app/private/config/.env" STORAGE_PATH="$W/storage"
-(cd "$W" && nohup php -d upload_max_filesize=50M -d post_max_size=58M -S 127.0.0.1:$PORT -t "$W/app" > "$W/php.log" 2>&1 &)
+(cd "$W" && PHP_CLI_SERVER_WORKERS=${WORKERS:-1} nohup php -d upload_max_filesize=50M -d post_max_size=58M -S 127.0.0.1:$PORT -t "$W/app" > "$W/php.log" 2>&1 &)
 sleep 1
 HASH=$(php -r 'echo password_hash("pw12345678",PASSWORD_DEFAULT);')
 php -r 'require $argv[1]; sqlite_boot($argv[2]);' "$W/app/private/sqlitedb.php" "$FHB_SQLITE"

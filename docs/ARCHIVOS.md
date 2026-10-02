@@ -26,6 +26,8 @@ No hay tablas nuevas: no hay que tocar la base de datos.
 
 ## Variables opcionales del `.env`
 `UPLOAD_MAX_FILE_MB` (1024), `UPLOAD_MAX_ORDER_MB` (4096), `UPLOAD_MAX_FILES` (120). Cada fragmento pesa 4 MB, así que `post_max_size=58M` sobra.
+Los cupos son **por tipo**: lo que sube el cliente nunca le quita espacio a la entrega del estudio. La extensión del archivo guardado siempre sale del contenido detectado (un JPEG llamado `x.bat` queda `x.bat.jpg`).
+**Recomendado:** si puedes, define `STORAGE_PATH` en el `.env` con una carpeta FUERA de `public_html` para que los archivos nunca sean alcanzables por la web (hoy `private/` está protegida por `.htaccess`).
 **Espacio:** revisa el almacenamiento de tu plan: 4 GB por sesión pueden llenarlo rápido si hay muchas sesiones Full Experience.
 
 ## Correos de la entrega (arreglados)
@@ -38,6 +40,7 @@ No hay tablas nuevas: no hay que tocar la base de datos.
 ```
 bash tests/support/serve.sh                       # copia de la app con SQLite (sólo pruebas) en :8199
 python3 tests/support/fixtures.py                 # archivos de ejemplo
+python3 tests/files-limits.py                     # cupos por tipo, concurrencia, extensión forzada, formato en el 1.er fragmento
 python3 tests/files.py                            # 58 pruebas del backend (formatos, ataques, reanudación, estados, correos)
 BASE_URL=http://127.0.0.1:8199 node tests/e2e-uploads.mjs mobile    # Chromium: cliente, varios archivos, compresión real
 BASE_URL=http://127.0.0.1:8199 node tests/e2e-admin-files.mjs desktop   # Chromium: entrega del estudio y correo

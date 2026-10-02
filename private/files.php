@@ -31,6 +31,13 @@ function filesPublicConfig(): array {
 }
 
 /** Devuelve el tipo real a partir de la firma del archivo, o null si no es un formato admitido. */
+/** Longitud de un cuadro MP3 en $i (MPEG-1 capa III), -1 si el encabezado es válido pero no se puede medir, null si no es un encabezado. */
+function filesMp3Frame(string $h,int $i): ?int {
+ if($i+4>strlen($h)||ord($h[$i])!==0xFF)return null;$b1=ord($h[$i+1]);$b2=ord($h[$i+2]);if(($b1&0xE0)!==0xE0)return null;
+ $ver=($b1>>3)&3;$layer=($b1>>1)&3;$br=$b2>>4;$sr=($b2>>2)&3;if($ver===1||$layer===0||$br===0||$br===15||$sr===3)return null;
+ if($ver===3&&$layer===1){$brs=[0,32,40,48,56,64,80,96,112,128,160,192,224,256,320];$srs=[44100,48000,32000];return intdiv(144*$brs[$br]*1000,$srs[$sr])+(($b2>>1)&1);}
+ return -1;
+}
 function filesSniff(string $path,string $name=''): ?string {
  $fp=@fopen($path,'rb'); if(!$fp)return null; $h=(string)fread($fp,8192); fclose($fp); $n=strlen($h); if($n===0)return null;
  $b0=ord($h[0]);$b1=$n>1?ord($h[1]):0;
@@ -55,12 +62,20 @@ function filesSniff(string $path,string $name=''): ?string {
  }
  if(str_starts_with($h,'ID3'))return 'audio/mpeg';
  if($b0===0xFF&&($b1&0xF6)===0xF0)return 'audio/aac';
- if($b0===0xFF&&($b1&0xE0)===0xE0&&(($b1>>1)&3)!==0&&(($b1>>3)&3)!==1)return 'audio/mpeg';
- // Texto plano: sólo con extensión .txt, UTF-8 válido y sin bytes nulos.
- if(strtolower(pathinfo($name,PATHINFO_EXTENSION))==='txt'&&!str_contains($h,"\0")&&mb_check_encoding($h,'UTF-8'))return 'text/plain';
+ $txt=strtolower(pathinfo($name,PATHINFO_EXTENSION))==='txt';
+ if($txt&&($b0===0xFF&&$b1===0xFE||$b0===0xFE&&$b1===0xFF)&&$n%2===0&&mb_check_encoding(substr($h,2),'UTF-16'))return 'text/plain'; // UTF-16 con BOM
+ if(($f=filesMp3Frame($h,0))!==null&&($f<=0||$n<=$f+4||filesMp3Frame($h,$f)!==null))return 'audio/mpeg';
+ // Texto plano: sólo con extensión .txt, UTF-8 válido y sin bytes nulos. El bloque leído puede cortar un carácter por la mitad: se prueba quitando hasta 3 bytes del final.
+ if($txt&&!str_contains($h,"\0")){for($k=0;$k<=($n>=8192?3:0);$k++)if(mb_check_encoding(substr($h,0,$n-$k),'UTF-8'))return 'text/plain';}
  return null;
 }
 
+/** La extensión SIEMPRE sale del contenido detectado: un JPEG llamado «x.bat» se guarda como «x.bat.jpg». */
+function filesNameFor(string $name,string $mime): string {
+ $ext=FILE_TYPES[$mime];$alias=['jpg'=>['jpg','jpeg','jpe'],'mp4'=>['mp4','m4v'],'aif'=>['aif','aiff'],'m4a'=>['m4a','m4b'],'3gp'=>['3gp','3gpp'],'mp3'=>['mp3'],'heic'=>['heic','heif']][$ext]??[$ext];
+ $cur=strtolower(pathinfo($name,PATHINFO_EXTENSION));
+ return in_array($cur,$alias,true)?$name:rtrim($name,'. ').'.'.$ext;
+}
 function filesCleanName(string $name): string {
  $name=basename(str_replace('\\','/',$name));$name=preg_replace('/[^\pL\pN._ ()-]/u','_',$name)??'archivo';$name=trim($name,'. ');
  return mb_substr($name!==''?$name:'archivo',0,150);
@@ -80,20 +95,33 @@ function filesMeta(string $id): array {
  return [$m,$o];
 }
 
+/** Serializa las comprobaciones de cupo de una sesión (init y finish de subidas simultáneas). */
+function filesLocked(array $o,callable $fn): mixed {
+ $fp=fopen(filesIncoming().'/order-'.(int)$o['id'].'.lock','c');need((bool)$fp,'No se pudo preparar la subida.',500);
+ try{need(flock($fp,LOCK_EX),'No se pudo preparar la subida.',500);return $fn();}finally{flock($fp,LOCK_UN);fclose($fp);}
+}
+/** Cupo por TIPO: lo que sube el cliente nunca le quita espacio a la entrega del estudio. */
+function filesUsage(array $o,string $kind): array {
+ $row=sql('SELECT COUNT(*) AS n,COALESCE(SUM(size_bytes),0) AS b FROM deliverables WHERE order_id=? AND kind=?',[$o['id'],$kind])->fetch();$n=(int)$row['n'];$b=(int)$row['b'];
+ foreach(glob(filesIncoming().'/*.json')?:[] as $mf){$pm=@json_decode((string)@file_get_contents($mf),true);if(is_array($pm)&&(int)($pm['order']??0)===(int)$o['id']&&($pm['kind']??'')===$kind){$n++;$b+=(int)$pm['size'];}}
+ return [$n,$b];
+}
 /** Valida y registra un archivo ya completo. $store(destino) debe dejarlo en su sitio (move_uploaded_file o rename). */
-function filesCommit(array $o,bool $isAdmin,string $kind,string $tmp,string $origName,callable $store): array {
+function filesCommit(array $o,bool $isAdmin,string $kind,string $tmp,string $origName,callable $store,bool $reserved=false): array {
  need(in_array($kind,['delivery','source'],true),'Tipo inválido.');
  if(!$isAdmin){$kind='source';need(filesCustomerMayUpload($o),'Puedes enviar tus archivos cuando el pago está confirmado.',403);}
  $size=(int)filesize($tmp);$l=filesLimits();need($size>0,'El archivo está vacío.');need($size<=$l['file'],'El archivo supera el máximo de '.intdiv($l['file'],1048576).' MB.',413);
  $mime=filesSniff($tmp,$origName);need($mime!==null,'Ese formato no está admitido. Usa foto, video, audio, PDF o texto.',415);
  $group=filesGroup($mime);need($isAdmin||in_array($group,FILE_CUSTOMER_GROUPS,true),'Ese formato no está admitido. Usa foto, video, audio, PDF o texto.',415);
- $row=sql('SELECT COUNT(*) AS n,COALESCE(SUM(size_bytes),0) AS b FROM deliverables WHERE order_id=?',[$o['id']])->fetch();
- need((int)$row['n']<$l['count'],'Se alcanzó el límite de '.$l['count'].' archivos en esta sesión.',409);
- need((int)$row['b']+$size<=$l['order'],'Esta sesión alcanzó su espacio máximo ('.round($l['order']/1073741824,1).' GB).',413);
- $name=bin2hex(random_bytes(24)).'.'.FILE_TYPES[$mime];$original=filesCleanName($origName);
- need($store(storage().'/'.$name),'No se pudo guardar el archivo.',500);
- try{sql('INSERT INTO deliverables(order_id,storage_name,original_name,mime,size_bytes,kind) VALUES(?,?,?,?,?,?)',[$o['id'],$name,$original,$mime,$size,$kind]);}catch(Throwable $e){@unlink(storage().'/'.$name);throw $e;}
- $id=(int)db()->lastInsertId();
+ $name=bin2hex(random_bytes(24)).'.'.FILE_TYPES[$mime];$original=filesNameFor(filesCleanName($origName),$mime);
+ // Con $reserved el cupo ya se comprobó (y se reservó) en upload-init; aquí sólo se valida el contenido.
+ $id=filesLocked($o,function()use($o,$kind,$size,$l,$reserved,$name,$original,$mime,$store){
+  if(!$reserved){[$n,$b]=filesUsage($o,$kind);need($n<$l['count'],'Se alcanzó el límite de '.$l['count'].' archivos en esta sesión.',409);need($b+$size<=$l['order'],'Esta sesión alcanzó su espacio máximo ('.round($l['order']/1073741824,1).' GB).',413);}
+  need($store(storage().'/'.$name),'No se pudo guardar el archivo.',500);
+  try{sql('INSERT INTO deliverables(order_id,storage_name,original_name,mime,size_bytes,kind) VALUES(?,?,?,?,?,?)',[$o['id'],$name,$original,$mime,$size,$kind]);}catch(Throwable $e){@unlink(storage().'/'.$name);throw $e;}
+  return (int)db()->lastInsertId();
+ });
+ if(!$isAdmin)sql('UPDATE orders SET requires_attention=1 WHERE id=?',[$o['id']]);
  history($o,($kind==='delivery'?'Versión disponible: ':'Archivo añadido: ').$original,$isAdmin?'admin:'.(int)$_SESSION['admin_id']:'customer');
  return ['id'=>$id,'original_name'=>$original,'mime'=>$mime,'size_bytes'=>$size,'kind'=>$kind];
 }
@@ -106,14 +134,14 @@ function filesInit(): never {
  $size=filter_var($in['size']??null,FILTER_VALIDATE_INT);$l=filesLimits();
  need($size!==false&&$size>0,'El archivo está vacío.');need($size<=$l['file'],'El archivo supera el máximo de '.intdiv($l['file'],1048576).' MB.',413);
  $name=filesCleanName(field($in,'name',1,300));
- $row=sql('SELECT COUNT(*) AS n,COALESCE(SUM(size_bytes),0) AS b FROM deliverables WHERE order_id=?',[$o['id']])->fetch();
- filesPurgeStale();$pending=0;$pendingN=0;
- foreach(glob(filesIncoming().'/*.json')?:[] as $mf){$pm=@json_decode((string)@file_get_contents($mf),true);if(is_array($pm)&&(int)($pm['order']??0)===(int)$o['id']){$pending+=(int)$pm['size'];$pendingN++;}}
- need((int)$row['n']+$pendingN<$l['count'],'Se alcanzó el límite de '.$l['count'].' archivos en esta sesión.',409);
- need((int)$row['b']+$pending+$size<=$l['order'],'Esta sesión alcanzó su espacio máximo ('.round($l['order']/1073741824,1).' GB).',413);
  $free=@disk_free_space(storage());need($free===false||$free>$size+64*1048576,'El estudio no tiene espacio libre ahora mismo. Inténtalo en unos minutos.',507);
- $id=bin2hex(random_bytes(16));
- need(false!==file_put_contents(filesIncoming().'/'.$id.'.json',json_encode(['order'=>(int)$o['id'],'ref'=>$o['reference'],'by'=>$isAdmin?'admin':'customer','name'=>$name,'size'=>$size,'kind'=>$kind,'at'=>time()],JSON_UNESCAPED_UNICODE)),'No se pudo preparar la subida.',500);
+ filesPurgeStale();$id=bin2hex(random_bytes(16));
+ filesLocked($o,function()use($o,$kind,$size,$l,$name,$isAdmin,$id){
+  [$n,$b]=filesUsage($o,$kind);
+  need($n<$l['count'],'Se alcanzó el límite de '.$l['count'].' archivos en esta sesión.',409);
+  need($b+$size<=$l['order'],'Esta sesión alcanzó su espacio máximo ('.round($l['order']/1073741824,1).' GB).',413);
+  need(false!==file_put_contents(filesIncoming().'/'.$id.'.json',json_encode(['order'=>(int)$o['id'],'ref'=>$o['reference'],'by'=>$isAdmin?'admin':'customer','name'=>$name,'size'=>$size,'kind'=>$kind,'at'=>time()],JSON_UNESCAPED_UNICODE)),'No se pudo preparar la subida.',500);
+ });
  touch(filesIncoming().'/'.$id.'.part');
  jsonResponse(['id'=>$id,'received'=>0,'chunk'=>filesPublicConfig()['chunkBytes']],201);
 }
@@ -134,16 +162,25 @@ function filesChunk(): never {
   need($offset<=$have,'Fragmento fuera de orden.',409);
   fseek($fp,$offset);$in=fopen('php://input','rb');$written=(int)stream_copy_to_stream($in,$fp,$len);fclose($in);fflush($fp);
   need($written===$len,'El fragmento llegó incompleto. Se reintentará.',400);
+  if($offset===0){ // el formato se rechaza con el primer fragmento, sin esperar a recibir 1 GB
+   $mime=filesSniff($part,(string)$m['name']);
+   if($mime===null||(($m['by']??'')!=='admin'&&!in_array(filesGroup($mime),FILE_CUSTOMER_GROUPS,true))){@unlink($part);@unlink(filesIncoming().'/'.$id.'.json');throw new HttpError(415,'Ese formato no está admitido. Usa foto, video, audio, PDF o texto.');}
+  }
   jsonResponse(['received'=>max($have,$offset+$len)]);
  }finally{if(is_resource($fp)){flock($fp,LOCK_UN);fclose($fp);}}
 }
 
 function filesFinish(): never {
  $in=input();$id=field($in,'id',32,32);[$m,$o]=filesMeta($id);$isAdmin=($m['by']??'')==='admin';
- $part=filesIncoming().'/'.$id.'.part';clearstatcache();need(is_file($part)&&(int)filesize($part)===(int)$m['size'],'Faltan datos del archivo. Se reintentará.',409);
- try{$f=filesCommit($o,$isAdmin,(string)$m['kind'],$part,(string)$m['name'],fn(string $dest)=>rename($part,$dest));}
- catch(Throwable $e){@unlink($part);@unlink(filesIncoming().'/'.$id.'.json');throw $e;}
- @unlink(filesIncoming().'/'.$id.'.json');
+ $part=filesIncoming().'/'.$id.'.part';
+ $fp=@fopen($part,'rb');need((bool)$fp,'La subida no existe o ya terminó.',404);
+ try{
+  need(flock($fp,LOCK_EX),'No se pudo cerrar la subida.',500); // espera a que termine cualquier fragmento en curso
+  clearstatcache(true,$part);need((int)filesize($part)===(int)$m['size'],'Faltan datos del archivo. Se reintentará.',409);
+  try{$f=filesCommit($o,$isAdmin,(string)$m['kind'],$part,(string)$m['name'],fn(string $dest)=>rename($part,$dest),true);}
+  catch(Throwable $e){@unlink($part);@unlink(filesIncoming().'/'.$id.'.json');throw $e;}
+  @unlink(filesIncoming().'/'.$id.'.json');
+ }finally{fclose($fp);}
  jsonResponse(['file'=>$f],201);
 }
 

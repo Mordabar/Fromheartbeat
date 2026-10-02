@@ -52,21 +52,22 @@ async function upload(item) {
   const blob = item.out, size = blob.size;
   await waitOnline();
   const init = await json('upload-init', {reference: item.ref, name: item.outName, size, kind: item.kind});
-  item.uploadId = init.id; const chunk = Math.min(init.chunk || S.cfg.chunkBytes, S.cfg.chunkBytes);
-  let off = 0, fails = 0;
+  item.uploadId = init.id; const top = Math.min(init.chunk || S.cfg.chunkBytes, S.cfg.chunkBytes);
+  let chunk = top, off = 0, fails = 0; // con mala señal el fragmento se achica (mín. 256 KB) y vuelve a crecer cuando mejora
   while (off < size) {
     if (item.status === 'canceled') throw Object.assign(new Error('c'), {name: 'AbortError'});
     await waitOnline();
     const end = Math.min(size, off + chunk);
     try {
       const r = await sendChunk(item, blob.slice(off, end), off, n => { item.sent = off + n; emit('progress', item); });
-      if (r.status === 200) { off = r.json.received; item.sent = off; fails = 0; emit('progress', item); continue; }
+      if (r.status === 200) { off = r.json.received; item.sent = off; fails = 0; chunk = Math.min(top, chunk * 2); emit('progress', item); continue; }
       if (r.status === 403 && /sesi[oó]n venci/i.test(r.json.error || '')) { await refreshCsrf(); continue; }
       if (r.status === 409) { off = (await status(item)); continue; }
-      if (r.status >= 400 && r.status < 500 && r.status !== 408 && r.status !== 429) throw new Fatal(r.json.error || 'El estudio no pudo recibir el archivo.');
+      if (r.status >= 400 && r.status < 500 && ![400, 408, 429].includes(r.status)) throw new Fatal(r.json.error || 'El estudio no pudo recibir el archivo.');
       throw new Error('servidor ' + r.status);
     } catch (e) {
       if (e instanceof Fatal || e.name === 'AbortError') throw e;
+      chunk = Math.max(262144, chunk >> 1);
       if (++fails > 6) throw new Fatal('Se perdió la conexión. Toca «Reintentar» cuando vuelva.');
       item.warn = 'Reconectando…'; emit('progress', item); await sleep(Math.min(1000 * 2 ** (fails - 1), 12000)); item.warn = '';
       try { off = await status(item); } catch { /* seguirá reintentando */ }
@@ -85,7 +86,8 @@ export function add(ref, files, {kind = 'source', role = 'customer', compress = 
     const k = kindOf(f), okType = k !== 'other' || /\.(pdf|txt)$/i.test(f.name) || f.type === 'application/pdf' || f.type === 'text/plain' || (role === 'admin' && /\.zip$/i.test(f.name));
     if (!okType || (k === 'other' && !OK_EXT.test(f.name) && !(role === 'admin' && /\.zip$/i.test(f.name)))) { rejected.push(`${f.name}: formato no admitido (usa foto, video, audio, PDF o texto)`); continue; }
     if (f.size === 0) { rejected.push(`${f.name}: está vacío`); continue; }
-    if (f.size > S.cfg.maxFileBytes) { rejected.push(`${f.name}: supera ${fmtBytes(S.cfg.maxFileBytes)}`); continue; }
+    const cap = role === 'customer' && compress && k === 'video' ? 3 * 1024 * 1048576 : S.cfg.maxFileBytes; // un video se reduce antes de enviarse
+    if (f.size > cap) { rejected.push(`${f.name}: supera ${fmtBytes(cap)}`); continue; }
     if (S.items.some(i => i.ref === ref && i.kind === kind && i.file.name === f.name && i.file.size === f.size && !['done', 'error', 'canceled'].includes(i.status))) continue;
     S.items.push({id: ++S.seq, ref, kind, role, compress, file: f, name: f.name, k, status: 'queued', prog: 0, sent: 0, phase: '', note: '', thumb: '', preset: compress ? S.preset : 'original'});
     makeThumb(S.items[S.items.length - 1]);
@@ -107,7 +109,7 @@ export function cancel(id) {
   if (i.uploadId && was !== 'done') json('upload-cancel', {id: i.uploadId}).catch(() => {});
   emit('structure'); pump();
 }
-export function retry(id) { const i = S.items.find(x => x.id === id); if (!i) return; Object.assign(i, {status: i.out ? 'ready' : 'queued', error: '', sent: 0, uploadId: ''}); emit('structure'); pump(); }
+export function retry(id) { const i = S.items.find(x => x.id === id); if (!i) return; if (i.uploadId) json('upload-cancel', {id: i.uploadId}).catch(() => {}); Object.assign(i, {status: i.out ? 'ready' : 'queued', error: '', sent: 0, uploadId: ''}); emit('structure'); pump(); }
 export function dismiss(id) { S.items = S.items.filter(i => i.id !== id || ['queued', 'preparing', 'ready', 'uploading'].includes(i.status)); emit('structure'); }
 export function setPreset(p) { if (!PRESETS[p]) return; S.preset = p; try { localStorage.setItem('fhb.preset', p); } catch { /* ok */ } S.items.filter(i => i.status === 'queued' && i.compress).forEach(i => i.preset = p); emit('structure'); }
 
@@ -125,13 +127,14 @@ async function prep(i) {
     const r = await prepareFile(i.file, {preset: i.preset, signal: i.abort.signal, onProgress: (p, label) => { i.prog = p; i.phase = label; emit('progress', i); }});
     if (i.status === 'canceled') return;
     i.out = r.blob; i.outName = r.name; i.note = r.note || ''; i.changed = r.changed; i.status = 'ready'; i.prog = 1; i.phase = '';
+    if (i.out.size > S.cfg.maxFileBytes) { i.status = 'error'; i.error = `Pesa ${fmtBytes(i.out.size)} y el máximo es ${fmtBytes(S.cfg.maxFileBytes)}. Prueba con «Ligero».`; i.out = null; }
   } catch (e) { if (i.status !== 'canceled') { i.out = i.file; i.outName = i.file.name; i.status = 'ready'; } }
   emit('structure'); pump();
 }
 async function send(i) {
   i.status = 'uploading'; i.sent = 0; i.error = ''; emit('structure');
   try { i.row = await upload(i); i.status = 'done'; S.ctx.onFileDone?.(i.row, i); }
-  catch (e) { if (i.status !== 'canceled') { i.status = 'error'; i.error = e.message || 'No se pudo enviar.'; } }
+  catch (e) { if (i.status !== 'canceled') { i.status = 'error'; i.error = e.message || 'No se pudo enviar.'; if (i.uploadId && e instanceof Fatal && !/conexi/i.test(e.message)) json('upload-cancel', {id: i.uploadId}).catch(() => {}); } }
   emit('structure'); pump();
 }
 function scheduleDone(ref) {
@@ -145,7 +148,7 @@ function scheduleDone(ref) {
     S.saved.set(ref, `Listo: ${fresh.length} ${fresh.length === 1 ? 'archivo enviado' : 'archivos enviados'}${saved > 1048576 ? ` · te ahorraste ${fmtBytes(saved)} de datos` : ''}.`);
     try { await S.ctx.onBatchDone?.(ref, fresh.length); } catch { /* la lista se actualizará en el siguiente sondeo */ }
     S.items = S.items.filter(i => !fresh.includes(i)); emit('structure'); // ya figuran en «enviados»
-  }, 1200));
+  }, 600));
 }
 addEventListener('beforeunload', e => { if (busy()) { e.preventDefault(); e.returnValue = ''; } });
 
@@ -189,9 +192,9 @@ function draw(m) {
 }
 function drawInner(m) {
   const el = m.el, items = S.items.filter(i => i.ref === m.ref && i.kind === m.kind && i.role === m.role);
-  const list = el.querySelector('[data-u-queue]'); if (list) list.innerHTML = items.map(rowHtml).join('');
+  const list = el.querySelector('[data-u-queue]'); if (list) { const h = items.map(rowHtml).join(''); if (list.dataset.h !== h) { list.innerHTML = h; list.dataset.h = h; } }
   const sent = el.querySelector('[data-u-sent]'); const files = (m.files || []).filter(f => m.role === 'customer' ? f.kind === 'source' : (m.kind ? f.kind === m.kind : true));
-  if (sent) sent.innerHTML = files.map(f => sentHtml(f, m)).join('');
+  if (sent) { const h = files.map(f => sentHtml(f, m)).join(''); if (sent.dataset.h !== h) { sent.innerHTML = h; sent.dataset.h = h; } }
   const count = el.parentElement?.querySelector('[data-u-count]'); if (count) { count.dataset.was ??= count.textContent; count.textContent = files.length ? `${files.length} ${files.length === 1 ? 'enviado' : 'enviados'}` : count.dataset.was; }
   const active = items.some(i => ['queued', 'preparing', 'ready', 'uploading'].includes(i.status));
   el.classList.toggle('is-busy', active);

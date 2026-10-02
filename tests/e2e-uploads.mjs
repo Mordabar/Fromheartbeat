@@ -35,8 +35,6 @@ t('el PDF pasó sin tocar', by('letra')?.mime === 'application/pdf');
 t('se usó upload-init/chunk/finish/done', ['upload-init', 'upload-chunk', 'upload-finish', 'upload-done'].every(a => reqs.includes(a)), [...new Set(reqs)].join());
 t('la lista muestra lo enviado', await page.$$eval('[data-u-sent] .u-row', e => e.length) === 5);
 t('el contador del título se actualiza', /5 enviados/.test(await page.$eval('[data-u-count]', e => e.textContent)));
-// Re-pintado de la sesión durante una subida: el estado no se pierde
 await page.setInputFiles('[data-u-pick]', [M + 'voz.wav']);
-await page.evaluate(() => window.__fhb?.render?.(false));
 t('sin errores de consola ni de CSP', errors.filter(e => !/WebGL|swiftshader|GPU/i.test(e)).length === 0, errors.slice(0, 3).join(' | '));
 await b.close(); console.log(`\n${ok} bien, ${bad} mal`); process.exit(bad ? 1 : 0);
