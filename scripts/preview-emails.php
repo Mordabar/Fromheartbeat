@@ -31,6 +31,7 @@ $cases=[
  'production-2-grabacion'=>['production',sample('full',['status'=>'in_production','production_stage'=>2]),$cust,[]],
  'production-3-produccion'=>['production',sample('full',['status'=>'in_production','production_stage'=>3]),$cust,[]],
  'production-4-master'=>['production',sample('full',['status'=>'in_production','production_stage'=>4]),$cust,[]],
+ 'production-5-entrega'=>['production',sample('full',['status'=>'in_production','production_stage'=>5]),$cust,['note'=>'Estamos subiendo tus archivos finales.']],
  'review'=>['review',sample('full',['status'=>'review','production_stage'=>4]),$cust,['note'=>$note]],
  'completed-listening'=>['completed',sample('full',['status'=>'completed','production_stage'=>5]),$cust,['files'=>$files,'note'=>'Fue un honor ponerle música a esta historia.']],
  'completed-dedicatoria'=>['completed',sample('dedicatoria',['status'=>'completed','production_stage'=>5]),$cust,['files'=>[$files[0],$files[2]]]],

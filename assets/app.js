@@ -1,4 +1,5 @@
 import {sessionMarkup,STATE,STAGE_INFO} from './session-ui.js';
+import {configure as configureUploads,mount as mountUploader,busy as uploadsBusy} from './uploader.js';
 import {Studio, MOODS} from './studio.js';
 import {StudioGesture, firstMissingBrief} from './spatial-controls.js';
 import {iconFor, iconSvg, LANGUAGE_BADGE} from './icons.js';
@@ -199,8 +200,10 @@ function frameStudio(){
  studio.setFree([left,top,right,Math.max(top+120,bottom)]);
  const off=Math.abs(studio.rig.yaw)+Math.abs(studio.rig.pitch)+Math.abs(studio.rig.zoom-1)>0.03;$('#reset-view').hidden=!off;
 }
-function render(enter=true){mountOptions();const keepScroll=!enter?(root.querySelector('.panel-body')?.scrollTop||0):0;root.innerHTML=(FLOW.includes(view)?()=>wizardView(view):{lobby,info:aboutView,about:aboutView,samples:samplesView,recover:recoverView,session:sessionView,terms:()=>legalView(false),privacy:()=>legalView(true)}[view]||lobby)();const panel=root.querySelector('.panel');if(panel&&enter)panel.classList.add('enter');document.body.dataset.view=view;if(keepScroll){const pb=root.querySelector('.panel-body');if(pb)pb.scrollTop=keepScroll;}sync3D();requestAnimationFrame(frameStudio);}
+function render(enter=true){mountOptions();const keepScroll=!enter?(root.querySelector('.panel-body')?.scrollTop||0):0;root.innerHTML=(FLOW.includes(view)?()=>wizardView(view):{lobby,info:aboutView,about:aboutView,samples:samplesView,recover:recoverView,session:sessionView,terms:()=>legalView(false),privacy:()=>legalView(true)}[view]||lobby)();const panel=root.querySelector('.panel');if(panel&&enter)panel.classList.add('enter');document.body.dataset.view=view;if(keepScroll){const pb=root.querySelector('.panel-body');if(pb)pb.scrollTop=keepScroll;}sync3D();mountUploads();requestAnimationFrame(frameStudio);}
 
+function mountUploads(){const el=root.querySelector('[data-uploader]');if(el&&currentOrder&&view==='session')mountUploader(el,{ref:currentOrder.reference,role:'customer',kind:'source',files:currentOrder.files,status:currentOrder.status});}
+async function refreshAfterUpload(ref){if(view!=='session'||currentOrder?.reference!==ref)return;try{currentOrder=(await api('order',null,'&reference='+encodeURIComponent(ref))).order;render(false);}catch{}}
 function go(next){
  if(!boot)return;
  const wasLegal=['terms','privacy'].includes(view),drawerWasOpen=optionsDialog.open;
@@ -273,8 +276,7 @@ document.addEventListener('click',async e=>{const el=e.target.closest('button');
  if(el.id==='refresh-order')loadOrder(currentOrder.reference).catch(e=>toast(e.message));
 });
 document.addEventListener('input',e=>{const t=e.target;if(t.closest?.('.field.invalid,.check.invalid'))clearFieldErrors();if(t.name&&t.name in draft){draft[t.name]=t.value;save();if(t.name==='story')$('#story-count').textContent=draft.story.length;if(t.name==='occasion')root.querySelectorAll('[data-pick=occasion]').forEach(b=>{const on=b.dataset.value===t.value;b.classList.toggle('on',on);b.setAttribute('aria-pressed',String(on));});if(['recipient','occasion','story'].includes(t.name))sync3D();}refreshFoot();});
-document.addEventListener('change',e=>{if(e.target.matches('#source-form input[type=file]')){const n=$('#s-file-name');if(n&&e.target.files[0])n.textContent=e.target.files[0].name;}
-if(e.target.name==='consent'){draft.consent=e.target.checked;save();refreshFoot();}});
+document.addEventListener('change',e=>{if(e.target.name==='consent'){draft.consent=e.target.checked;save();refreshFoot();}});
 document.addEventListener('submit',async e=>{e.preventDefault();const form=e.target;
  if(form.id==='story-form'){$('#next')?.click();return;}
  if(form.id==='checkout-form'&&(firstMissingBrief(draft)||!valid('checkout'))){checkoutProblem(form);return;}
@@ -289,8 +291,7 @@ document.addEventListener('submit',async e=>{e.preventDefault();const form=e.tar
    await loadOrder(order.reference);studio?.celebrate();return;}
   if(form.id==='recover-form'){const data=await api('recover',{email:form.elements.email.value});$('#recover-result').textContent=data.message;}
   if(form.id==='feedback-form'){if(form.elements.message.value.trim().length<3){const out=form.querySelector('.form-error');out.textContent='Escribe al menos unas palabras para tu productor.';form.elements.message.focus();return;}await api('feedback',{reference:currentOrder.reference,message:form.elements.message.value});await loadOrder(currentOrder.reference);toast('Tu comentario llegó al estudio.');}
-  if(form.id==='source-form'){const data=new FormData(form);data.append('reference',currentOrder.reference);const res=await fetch('api.php?action=upload',{method:'POST',headers:{'X-CSRF-Token':boot.csrf},body:data});const json=await res.json();if(!res.ok)throw Error(json.error);await loadOrder(currentOrder.reference);toast('Archivo guardado en tu sesión.');}
- }catch(error){tab?.close();const out=form.querySelector('.form-error, #upload-result');if(out)out.textContent=error.message;else toast(error.message);}finally{if(btn){btn.disabled=false;btn.removeAttribute('aria-busy');if(btn.dataset.idle){btn.innerHTML=btn.dataset.idle;delete btn.dataset.idle;}}}
+ }catch(error){tab?.close();const out=form.querySelector('.form-error');if(out)out.textContent=error.message;else toast(error.message);}finally{if(btn){btn.disabled=false;btn.removeAttribute('aria-busy');if(btn.dataset.idle){btn.innerHTML=btn.dataset.idle;delete btn.dataset.idle;}}}
 });
 // Wompi only returns to public HTTPS sites. Elsewhere (local sandbox) the checkout opens in a new tab while this tab
 // stays on the session and polls; the tab is opened during the click so the browser does not block it.
@@ -349,13 +350,13 @@ audio.onended=()=>playTrack(playing+1);
 $('#player-toggle').innerHTML=ic('play');
 
 async function loadOrder(ref){currentOrder=(await api('order',null,'&reference='+encodeURIComponent(ref))).order;go('session');}
-async function start(){try{boot=await api('bootstrap');if(Array.isArray(boot.tracks))tracks=boot.tracks;if(!catalogPerson().some(p=>p.code===draft.product))draft.product='personalizada';studio=new Studio($('#studio'));if(studio.light)document.body.classList.add('light-mode');studio.setContent(buildContent(boot,tracks,money));studio.setTracks(tracks);studio.setDraft(draft);if(draft.mood)studio.tone(draft.mood);hydrateIcons();render();frameStudio();if(studio.light)openOptions();
+async function start(){try{boot=await api('bootstrap');configureUploads({getCsrf:()=>boot.csrf,setCsrf:t=>{boot.csrf=t;},config:boot.uploads,onBatchDone:refreshAfterUpload});if(Array.isArray(boot.tracks))tracks=boot.tracks;if(!catalogPerson().some(p=>p.code===draft.product))draft.product='personalizada';studio=new Studio($('#studio'));if(studio.light)document.body.classList.add('light-mode');studio.setContent(buildContent(boot,tracks,money));studio.setTracks(tracks);studio.setDraft(draft);if(draft.mood)studio.tone(draft.mood);hydrateIcons();render();frameStudio();if(studio.light)openOptions();
  if(new URLSearchParams(location.search).has('e2e'))window.__fhb={studio,go,draft:()=>draft,view:()=>view,onAction};
  const params=new URLSearchParams(location.search);const ref=params.get('session');if(ref){const hash=new URLSearchParams(location.hash.slice(1));const token=hash.get('token');if(token){await api('exchange',{reference:ref,token});history.replaceState({},'',`?session=${encodeURIComponent(ref)}`);}if(params.get('id')){try{await api('reconcile',{reference:ref,transaction:params.get('id')});}catch(e){toast(e.message);}}await loadOrder(ref);}else{const map={terminos:'terms',privacidad:'privacy',info:'about'},k=params.get('ver'),v=Object.prototype.hasOwnProperty.call(map,k)?map[k]:null;if(v){history.replaceState({},'',location.pathname);go(v);}}}catch(e){if(boot){go('recover');toast(e.message);}else{root.innerHTML=shell({head:`<h1 id="panel-title">El estudio está <em>tomando aire.</em></h1>`,body:`<p class="lede">${esc(e.message)}</p>`,foot:`<button class="primary" id="retry-start">Volver a intentar ↻</button>`});mountOptions();openOptions();$('#retry-start').onclick=start;}}}
 start();
 // While a payment is open, check its result often (the server asks Wompi) and celebrate when it is approved.
 let lastOrderPoll=0;
-const pollOrder=async()=>{if(view!=='session'||!currentOrder||document.hidden||document.activeElement?.matches('input,textarea')||[...root.querySelectorAll('audio')].some(a=>!a.paused))return;const pending=['created','payment_pending'].includes(currentOrder.status);if(Date.now()-lastOrderPoll<(pending?4000:20000))return;lastOrderPoll=Date.now();const signature=o=>JSON.stringify([o.status,o.production_stage,o.files,o.history]);const before=currentOrder;try{const o=(await api('order',null,'&reference='+encodeURIComponent(currentOrder.reference))).order;if(signature(o)!==signature(before)){currentOrder=o;render(false);if(o.status==='paid'&&before.status!=='paid'){toast('¡Pago confirmado! Tu canción entra a producción.');studio?.celebrate();}}}catch{}};
+const pollOrder=async()=>{if(view!=='session'||!currentOrder||document.hidden||uploadsBusy()||document.activeElement?.matches('input,textarea')||[...root.querySelectorAll('audio')].some(a=>!a.paused))return;const pending=['created','payment_pending'].includes(currentOrder.status);if(Date.now()-lastOrderPoll<(pending?4000:20000))return;lastOrderPoll=Date.now();const signature=o=>JSON.stringify([o.status,o.production_stage,o.files,o.history]);const before=currentOrder;try{const o=(await api('order',null,'&reference='+encodeURIComponent(currentOrder.reference))).order;if(signature(o)!==signature(before)){currentOrder=o;render(false);if(o.status==='paid'&&before.status!=='paid'){toast('¡Pago confirmado! Tu canción entra a producción.');studio?.celebrate();}}}catch{}};
 setInterval(pollOrder,5000);addEventListener('focus',pollOrder);
 
 // Compact application navigation, with native modal focus containment and Escape support.

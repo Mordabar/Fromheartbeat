@@ -1,3 +1,4 @@
+import {uploaderHtml} from './uploader.js';
 // The customer's session, told like a recording session: where the song is, what happens next, what (if anything) is on you,
 // and the producer's messages as a conversation instead of a log. Pure markup: app.js owns the events.
 export const STAGE_INFO = [
@@ -97,9 +98,13 @@ export function sessionMarkup(o, {esc, money, ic, boot, testCard, now = Date.now
     <ol class="s-feed">${items.slice(0, 4).map(bubble).join('')}</ol>${items.length > 4 ? `<details class="s-more"><summary>Ver ${items.length - 4} anteriores</summary><ol class="s-feed">${items.slice(4).map(bubble).join('')}</ol></details>` : ''}</section>`;
 
   // 5. Materials (Full Experience) and the story, tucked away until needed.
-  const upload = o.product_code === 'full' && !pending ? `<form id="source-form" class="s-card"><h2 class="s-h"><span>Tus fotos y videos</span><b>Para tu video</b></h2><p class="s-says">Sube las fotos y clips que quieres ver en tu video vertical.</p>
-    <label class="s-file"><input class="sr-only" name="file" type="file" accept="image/jpeg,image/png,image/webp,video/mp4" required><span id="s-file-name">${ic('gift')} Elegir una foto o un video</span></label><small class="s-note">Hasta 50 MB por archivo. Puedes enviar varios, uno por uno.</small>
-    <button class="secondary">Enviar al estudio</button><p id="upload-result" role="status" class="form-note"></p>${sourceFiles.map(f => `<div class="s-filerow">${ic('check')}<span>${esc(f.original_name)}</span><a href="api.php?action=file&id=${f.id}&download=1">Descargar</a></div>`).join('')}</form>` : '';
+  const UP = {
+    full: ['Tus fotos y videos', 'Para tu video', 'Sube las fotos y clips que quieres ver en tu video vertical. Puedes elegir muchos a la vez, aunque sean pesados: los reducimos en tu teléfono antes de enviarlos.'],
+    business: ['El material de tu marca', 'Opcional', 'Logos, referencias, spots anteriores o cualquier archivo que nos ayude a entender tu marca. Puedes subir varios a la vez.'],
+    other: ['Material para tu canción', 'Opcional', 'Una nota de voz, fotos o un audio de referencia ayudan a contar tu historia. Puedes subir varios a la vez.'],
+  }[o.product_code === 'full' ? 'full' : o.audience === 'business' ? 'business' : 'other'];
+  const canSend = ['paid', 'in_production', 'review', 'completed'].includes(o.status);
+  const upload = canSend ? `<section id="s-upload" class="s-card s-up"><h2 class="s-h"><span>${UP[0]}</span><b data-u-count>${UP[1]}</b></h2><p class="s-says">${UP[2]}</p>${uploaderHtml(o.reference, {role: 'customer', kind: 'source'})}</section>` : '';
   const story = `<details class="s-card s-story"><summary>${ic('heart')} Tu historia, tal como la contaste</summary><p>${esc(o.brief.story)}</p></details>`;
 
   // Order: what to do now → the song → progress → talk → extras.

@@ -1,0 +1,18 @@
+Componentes de terceros de la compresión en el navegador
+=========================================================
+
+mediabunny.min.js
+  Mediabunny 1.61.0 (https://mediabunny.dev) — licencia MPL-2.0 (texto completo en https://www.mozilla.org/MPL/2.0/).
+  Es una versión empaquetada y minificada (esbuild) de las partes de lectura MP4/MOV/WebM/MKV, conversión y escritura MP4.
+  Reconstrucción: npm i mediabunny@1.61.0 esbuild; entrada con
+    export {Input,Output,BlobSource,BufferTarget,Mp4OutputFormat,Conversion,canEncodeVideo,canEncodeAudio} from 'mediabunny'
+    export const INPUT_FORMATS=[MP4,QTFF,MATROSKA,WEBM]
+  y: esbuild entrada.js --bundle --format=esm --minify --target=es2022 --legal-comments=none --outfile=mediabunny.min.js
+  El código fuente de MPL-2.0 está disponible en https://github.com/Vanilagy/mediabunny. Este archivo no se ha modificado más allá del empaquetado.
+
+lame.min.js
+  lamejs 1.2.1 (https://github.com/zhuker/lamejs), port a JavaScript de LAME — licencia LGPL-3.0.
+  Se incluye SIN modificar y como archivo independiente (se carga con <script>) para que pueda sustituirse por otra versión.
+  Texto de la licencia: https://www.gnu.org/licenses/lgpl-3.0.html
+
+Ambos se cargan sólo cuando alguien adjunta un video o un WAV; el resto de la web no los descarga.

@@ -3,8 +3,8 @@
 # Uso: tests/support/serve.sh   ->  imprime la carpeta de trabajo; admin: admin@x.co / pw12345678
 set -e
 R=$(cd "$(dirname "$0")/../.." && pwd); W=${FHB_WORK:-/tmp/fhb-harness}; PORT=${PORT:-8199}
-pkill -f "127.0.0.1:$PORT" 2>/dev/null || true; sleep 0.3
-rm -rf "$W"; mkdir -p "$W/app/private/config"; cp "$R/api.php" "$R/admin.html" "$R/index.html" "$W/app/"; ln -s "$R/assets" "$W/app/assets"
+pkill -f "^php -d upload_max_filesize=50M .*:$PORT"  2>/dev/null || true; sleep 0.3
+rm -rf "$W"; mkdir -p "$W/app/private/config"; cp "$R/api.php" "$W/app/"; ln -s "$R/admin.html" "$R/index.html" "$W/app/"; ln -s "$R/assets" "$W/app/assets"
 cp -r "$R/private/"*.php "$R/private/vendor" "$W/app/private/"; cp "$R/tests/support/sqlitedb.php" "$W/app/private/"
 python3 - "$W/app/private/bootstrap.php" <<'PY'
 import re,sys
