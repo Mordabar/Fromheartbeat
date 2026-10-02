@@ -102,7 +102,7 @@ async function prepVideo(file, p, onProgress, signal) {
     try { await conv.execute(); } catch (e) { if (signal?.aborted) throw new DOMException('Cancelado', 'AbortError'); throw e; } finally { signal?.removeEventListener('abort', stop); }
     const buf = output.target.buffer;
     if (!buf || buf.byteLength >= file.size * 0.85) return null;
-    return {blob: new File([buf], stem(file.name) + '.mp4', {type: 'video/mp4'}), name: stem(file.name) + '.mp4', note: `${fmtBytes(file.size)} → ${fmtBytes(buf.byteLength)}${codec === 'avc' ? '' : ' (' + codec.toUpperCase() + ')'}`, changed: true, codec};
+    return {blob: new File([buf], stem(file.name) + '.mp4', {type: 'video/mp4'}), name: stem(file.name) + '.mp4', note: `${fmtBytes(file.size)} → ${fmtBytes(buf.byteLength)}`, changed: true, codec};
   } finally { input.dispose?.(); }
 }
 async function pickVideoCodec(mb, width, height, bitrate) {

@@ -15,7 +15,7 @@ const ic = (n, c = '') => `<svg class="u-ic ${c}" viewBox="0 0 24 24" aria-hidde
 const ICON_FOR = {image: 'image', video: 'video', audio: 'audio'};
 const kindOfMime = m => String(m).startsWith('image/') ? 'image' : String(m).startsWith('video/') ? 'video' : String(m).startsWith('audio/') ? 'audio' : 'other';
 
-const S = {items: [], seq: 0, mounts: new Set(), cfg: {maxFileBytes: 1024 * 1048576, maxFiles: 120, chunkBytes: 4194304}, ctx: {}, preset: DEFAULT_PRESET, doneTimers: new Map()};
+const S = {saved: new Map(), items: [], seq: 0, mounts: new Set(), cfg: {maxFileBytes: 1024 * 1048576, maxFiles: 120, chunkBytes: 4194304}, ctx: {}, preset: DEFAULT_PRESET, doneTimers: new Map()};
 try { const p = localStorage.getItem('fhb.preset'); if (p && PRESETS[p]) S.preset = p; } catch { /* sin almacenamiento */ }
 
 /** ctx: {getCsrf(), setCsrf(t), config, onFileDone(row), onBatchDone(ref)} */
@@ -26,10 +26,11 @@ export const busy = ref => S.items.some(i => (!ref || i.ref === ref) && ['queued
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const waitOnline = async () => { while (navigator.onLine === false) await new Promise(r => addEventListener('online', r, {once: true})); };
 class Fatal extends Error {}
-async function refreshCsrf() { const r = await fetch('api.php?action=bootstrap', {credentials: 'same-origin'}); const j = await r.json(); if (j.csrf) S.ctx.setCsrf?.(j.csrf); return j.csrf; }
+async function refreshCsrf() { let r; try { r = await fetch('api.php?action=bootstrap', {credentials: 'same-origin'}); } catch { throw new Fatal(OFFLINE); } const j = await r.json(); if (j.csrf) S.ctx.setCsrf?.(j.csrf); return j.csrf; }
+const OFFLINE = 'Sin conexión con el estudio. Revisa tu internet y vuelve a intentarlo.';
 async function json(action, body, query = '') {
   for (let again = 0; ; again++) {
-    const r = await fetch('api.php?action=' + action + query, {method: 'POST', credentials: 'same-origin', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': S.ctx.getCsrf()}, body: JSON.stringify(body)});
+    let r; try { r = await fetch('api.php?action=' + action + query, {method: 'POST', credentials: 'same-origin', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': S.ctx.getCsrf()}, body: JSON.stringify(body)}); } catch { throw new Fatal(OFFLINE); }
     const j = await r.json().catch(() => ({}));
     if (r.status === 403 && again === 0 && /sesi[oó]n venci/i.test(j.error || '')) { await refreshCsrf(); continue; }
     if (!r.ok) { const e = new Error(j.error || 'No se pudo completar la solicitud.'); e.status = r.status; throw e; }
@@ -49,6 +50,7 @@ function sendChunk(item, blob, offset, onBytes) {
 
 async function upload(item) {
   const blob = item.out, size = blob.size;
+  await waitOnline();
   const init = await json('upload-init', {reference: item.ref, name: item.outName, size, kind: item.kind});
   item.uploadId = init.id; const chunk = Math.min(init.chunk || S.cfg.chunkBytes, S.cfg.chunkBytes);
   let off = 0, fails = 0;
@@ -66,14 +68,14 @@ async function upload(item) {
     } catch (e) {
       if (e instanceof Fatal || e.name === 'AbortError') throw e;
       if (++fails > 6) throw new Fatal('Se perdió la conexión. Toca «Reintentar» cuando vuelva.');
-      item.note = 'Reconectando…'; emit('progress', item); await sleep(Math.min(1000 * 2 ** (fails - 1), 12000)); item.note = '';
+      item.warn = 'Reconectando…'; emit('progress', item); await sleep(Math.min(1000 * 2 ** (fails - 1), 12000)); item.warn = '';
       try { off = await status(item); } catch { /* seguirá reintentando */ }
     }
   }
   const done = await json('upload-finish', {id: item.uploadId});
   return done.file;
 }
-async function status(item) { const r = await fetch(`api.php?action=upload-status&id=${item.uploadId}`, {credentials: 'same-origin'}); const j = await r.json(); if (!r.ok) throw new Fatal(j.error || 'La subida ya no existe.'); return j.received; }
+async function status(item) { let r; try { r = await fetch(`api.php?action=upload-status&id=${item.uploadId}`, {credentials: 'same-origin'}); } catch { throw new Error('red'); } const j = await r.json(); if (!r.ok) throw new Fatal(j.error || 'La subida ya no existe.'); return j.received; }
 
 // ------------------------------------------------------------------------------------------------------------ cola
 const OK_EXT = /\.(jpe?g|png|webp|gif|heic|heif|avif|mp4|m4v|mov|webm|3gp|mkv|mp3|wav|m4a|aac|ogg|opus|flac|aiff?|pdf|txt)$/i;
@@ -81,14 +83,14 @@ export function add(ref, files, {kind = 'source', role = 'customer', compress = 
   const rejected = [];
   for (const f of files) {
     const k = kindOf(f), okType = k !== 'other' || /\.(pdf|txt)$/i.test(f.name) || f.type === 'application/pdf' || f.type === 'text/plain' || (role === 'admin' && /\.zip$/i.test(f.name));
-    if (!okType || (k === 'other' && !OK_EXT.test(f.name) && !(role === 'admin' && /\.zip$/i.test(f.name)))) { rejected.push(`${f.name}: formato no admitido`); continue; }
+    if (!okType || (k === 'other' && !OK_EXT.test(f.name) && !(role === 'admin' && /\.zip$/i.test(f.name)))) { rejected.push(`${f.name}: formato no admitido (usa foto, video, audio, PDF o texto)`); continue; }
     if (f.size === 0) { rejected.push(`${f.name}: está vacío`); continue; }
     if (f.size > S.cfg.maxFileBytes) { rejected.push(`${f.name}: supera ${fmtBytes(S.cfg.maxFileBytes)}`); continue; }
     if (S.items.some(i => i.ref === ref && i.kind === kind && i.file.name === f.name && i.file.size === f.size && !['done', 'error', 'canceled'].includes(i.status))) continue;
     S.items.push({id: ++S.seq, ref, kind, role, compress, file: f, name: f.name, k, status: 'queued', prog: 0, sent: 0, phase: '', note: '', thumb: '', preset: compress ? S.preset : 'original'});
     makeThumb(S.items[S.items.length - 1]);
   }
-  clearTimeout(S.doneTimers.get(ref)); emit('structure'); pump();
+  S.saved.delete(ref); clearTimeout(S.doneTimers.get(ref)); emit('structure'); pump();
   return rejected;
 }
 async function makeThumb(item) {
@@ -139,8 +141,10 @@ function scheduleDone(ref) {
     const fresh = S.items.filter(i => i.ref === ref && i.status === 'done' && !i.reported); if (!fresh.length) return;
     fresh.forEach(i => i.reported = true);
     if (fresh.some(i => i.role === 'customer')) { try { await json('upload-done', {reference: ref}); } catch { /* el aviso es secundario */ } }
-    S.ctx.onBatchDone?.(ref, fresh.length);
-    setTimeout(() => { S.items = S.items.filter(i => !fresh.includes(i)); emit('structure'); }, 4000); // ya figuran en «enviados»
+    const saved = fresh.reduce((n, i) => n + (i.changed && i.out ? Math.max(0, i.file.size - i.out.size) : 0), 0);
+    S.saved.set(ref, `Listo: ${fresh.length} ${fresh.length === 1 ? 'archivo enviado' : 'archivos enviados'}${saved > 1048576 ? ` · te ahorraste ${fmtBytes(saved)} de datos` : ''}.`);
+    try { await S.ctx.onBatchDone?.(ref, fresh.length); } catch { /* la lista se actualizará en el siguiente sondeo */ }
+    S.items = S.items.filter(i => !fresh.includes(i)); emit('structure'); // ya figuran en «enviados»
   }, 1200));
 }
 addEventListener('beforeunload', e => { if (busy()) { e.preventDefault(); e.returnValue = ''; } });
@@ -161,7 +165,7 @@ function emit(type) {
 const pct = i => i.status === 'preparing' ? Math.round(i.prog * 100) : i.out?.size ? Math.min(100, Math.round(i.sent / i.out.size * 100)) : 0;
 function rowHtml(i) {
   const st = i.status, p = pct(i), icn = ICON_FOR[i.k] || 'file';
-  const label = {queued: 'En espera', preparing: i.phase || 'Preparando', ready: 'Listo para enviar', uploading: i.note || `Enviando · ${p}%`, done: i.changed ? `Enviado · ${i.note}` : 'Enviado', error: i.error || 'No se pudo enviar', canceled: 'Cancelado'}[st];
+  const label = {queued: 'En espera', preparing: `${i.phase || 'Preparando'} · ${p}%`, ready: 'Listo para enviar', uploading: i.warn || `Enviando · ${p}%`, done: i.changed ? 'Reducido y enviado' : 'Enviado', error: i.error || 'No se pudo enviar', canceled: 'Cancelado'}[st];
   const act = st === 'error' ? `<button type="button" class="u-btn" data-u-retry="${i.id}" aria-label="Reintentar ${esc(i.name)}">${ic('retry')}<span>Reintentar</span></button><button type="button" class="u-x" data-u-dismiss="${i.id}" aria-label="Quitar ${esc(i.name)}">${ic('x')}</button>`
     : ['done', 'canceled'].includes(st) ? `<button type="button" class="u-x" data-u-dismiss="${i.id}" aria-label="Quitar de la lista">${ic('x')}</button>`
     : `<button type="button" class="u-x" data-u-cancel="${i.id}" aria-label="Cancelar ${esc(i.name)}">${ic('x')}</button>`;
@@ -178,6 +182,12 @@ function sentHtml(f, m) {
    <a class="u-x" href="api.php?action=file&id=${f.id}&download=1" aria-label="Descargar ${esc(f.original_name)}">${ic('down')}</a>${mine && canDel ? `<button type="button" class="u-x" data-u-delete="${f.id}" aria-label="Retirar ${esc(f.original_name)}">${ic('trash')}</button>` : ''}</li>`;
 }
 function draw(m) {
+  const el = m.el, focus = el.contains(document.activeElement) ? document.activeElement.closest('[data-u-cancel],[data-u-retry],[data-u-dismiss],[data-u-delete]') : null;
+  const sel = focus && Object.keys(focus.dataset).filter(k => k.startsWith('u')).map(k => `[data-${k.replace(/[A-Z]/g, c => '-' + c.toLowerCase())}="${focus.dataset[k]}"]`)[0];
+  drawInner(m);
+  if (sel) (el.querySelector(sel) || el.querySelector('[data-u-pick]'))?.focus({preventScroll: true});
+}
+function drawInner(m) {
   const el = m.el, items = S.items.filter(i => i.ref === m.ref && i.kind === m.kind && i.role === m.role);
   const list = el.querySelector('[data-u-queue]'); if (list) list.innerHTML = items.map(rowHtml).join('');
   const sent = el.querySelector('[data-u-sent]'); const files = (m.files || []).filter(f => m.role === 'customer' ? f.kind === 'source' : (m.kind ? f.kind === m.kind : true));
@@ -185,10 +195,11 @@ function draw(m) {
   const count = el.parentElement?.querySelector('[data-u-count]'); if (count) { count.dataset.was ??= count.textContent; count.textContent = files.length ? `${files.length} ${files.length === 1 ? 'enviado' : 'enviados'}` : count.dataset.was; }
   const active = items.some(i => ['queued', 'preparing', 'ready', 'uploading'].includes(i.status));
   el.classList.toggle('is-busy', active);
-  const live = el.querySelector('[data-u-live]'); if (live) live.textContent = summary(items);
-  const opt = el.querySelector('[data-u-preset]'); if (opt && opt.value !== S.preset) opt.value = S.preset;
+  const live = el.querySelector('[data-u-live]'); if (live) live.textContent = summary(items) || S.saved.get(m.ref) || '';
+  const opt = el.querySelector(`[data-u-preset][value="${S.preset}"]`); if (opt && !opt.checked) opt.checked = true; const hint = el.querySelector('[data-u-hint]'); if (hint) hint.textContent = PRESETS[S.preset]?.hint || '';
 }
 function summary(items) {
+  if (items.length) S.saved.clear();
   const up = items.filter(i => ['queued', 'preparing', 'ready', 'uploading'].includes(i.status)).length, bad = items.filter(i => i.status === 'error').length, ok = items.filter(i => i.status === 'done').length;
   return up ? `Enviando ${up} ${up === 1 ? 'archivo' : 'archivos'}…` : bad ? `${bad} sin enviar. Puedes reintentar.` : ok ? `Listo: ${ok} ${ok === 1 ? 'archivo enviado' : 'archivos enviados'}.` : '';
 }
@@ -196,7 +207,7 @@ function patch(m) {
   for (const i of S.items) {
     if (i.ref !== m.ref) continue; const row = m.el.querySelector(`[data-u-id="${i.id}"]`); if (!row) continue; const p = pct(i);
     const bar = row.querySelector('.u-bar'); if (bar) { bar.firstElementChild.style.width = p + '%'; bar.setAttribute('aria-valuenow', p); }
-    const lab = row.querySelector('[data-u-label]'); if (lab && i.status === 'uploading') lab.textContent = i.note || `Enviando · ${p}%`; else if (lab && i.status === 'preparing') lab.textContent = `${i.phase || 'Preparando'} · ${p}%`;
+    const lab = row.querySelector('[data-u-label]'); if (lab && i.status === 'uploading') lab.textContent = i.warn || `Enviando · ${p}%`; else if (lab && i.status === 'preparing') lab.textContent = `${i.phase || 'Preparando'} · ${p}%`;
   }
 }
 
@@ -204,11 +215,11 @@ function patch(m) {
 export function uploaderHtml(ref, opts = {}) {
   const role = opts.role || 'customer', kind = opts.kind || 'source', admin = role === 'admin';
   const accept = admin ? 'image/*,video/*,audio/*,.wav,.mp3,.m4a,.flac,.pdf,.zip,.txt' : 'image/*,video/*,audio/*,.heic,.heif,.pdf,.txt';
-  const presets = !admin && !opts.noCompress ? `<label class="u-preset"><span>${ic('bolt')} Tamaño de envío</span><select data-u-preset aria-describedby="u-preset-hint-${esc(role)}">${Object.entries(PRESETS).map(([k, v]) => `<option value="${k}"${k === S.preset ? ' selected' : ''}>${esc(v.label)}</option>`).join('')}</select><small id="u-preset-hint-${esc(role)}">${esc(videoSupport() ? 'Reducimos fotos, videos y WAV en tu dispositivo antes de enviarlos. Tus originales no se tocan.' : 'Este navegador no puede reducir videos; se envían tal cual. Las fotos sí se optimizan.')}</small></label>` : '';
+  const presets = !admin && !opts.noCompress ? `<fieldset class="u-preset"><legend>${ic('bolt')} Tamaño de envío</legend><div class="u-seg">${Object.entries(PRESETS).map(([k, v]) => `<label><input type="radio" name="u-preset-${esc(ref)}" value="${k}" data-u-preset${k === S.preset ? ' checked' : ''}><span>${esc(v.label)}</span></label>`).join('')}</div><small data-u-hint>${esc(PRESETS[S.preset]?.hint || '')}</small><small>${esc(videoSupport() ? 'Reducimos fotos, videos y WAV en tu dispositivo. Tus originales no se tocan.' : 'Este navegador no puede reducir videos: se envían tal cual. Las fotos sí se optimizan.')}</small></fieldset>` : '';
   if (opts.listOnly) return `<div class="u ${admin ? 'u-admin' : ''}" data-uploader data-u-ref="${esc(ref)}" data-u-role="${role}" data-u-kind="${esc(kind)}"><ul class="u-list u-sentlist" data-u-sent></ul></div>`;
   return `<div class="u ${admin ? 'u-admin' : ''}" data-uploader data-u-ref="${esc(ref)}" data-u-role="${role}" data-u-kind="${esc(kind)}">
    <div class="u-drop" data-u-drop><input class="u-input" type="file" multiple accept="${accept}" data-u-pick aria-label="${esc(opts.pickLabel || 'Elegir archivos')}">
-    <span class="u-drop-ic">${ic('up')}</span><span class="u-drop-t"><b>${esc(opts.pickLabel || 'Elegir fotos, videos o audios')}</b><small>${esc(opts.dropHint || 'o arrástralos aquí · puedes elegir varios a la vez')}</small></span></div>
+    <span class="u-drop-ic">${ic('up')}</span><span class="u-drop-t"><b>${esc(opts.pickLabel || 'Elegir fotos, videos o audios')}</b><small>${opts.dropHint ? esc(opts.dropHint) : '<span class="u-or">o arrástralos aquí · </span>puedes elegir varios a la vez'}</small></span></div>
    ${presets}<p class="u-live" role="status" aria-live="polite" data-u-live></p><p class="u-err" role="alert" data-u-err></p>
    <ul class="u-list" data-u-queue></ul><ul class="u-list u-sentlist" data-u-sent></ul></div>`;
 }
@@ -226,7 +237,7 @@ export function mount(el, {ref, role = 'customer', kind = 'source', files = [], 
   ['dragenter', 'dragover'].forEach(t => drop?.addEventListener(t, e => { e.preventDefault(); drop.classList.add('over'); }));
   ['dragleave', 'drop'].forEach(t => drop?.addEventListener(t, e => { e.preventDefault(); drop.classList.remove('over'); }));
   drop?.addEventListener('drop', e => { if (e.dataTransfer?.files?.length) take(e.dataTransfer.files); });
-  el.querySelector('[data-u-preset]')?.addEventListener('change', e => setPreset(e.target.value));
+  el.querySelectorAll('[data-u-preset]').forEach(r => r.addEventListener('change', () => r.checked && setPreset(r.value)));
   el.addEventListener('click', async e => {
     const b = e.target.closest('[data-u-cancel],[data-u-retry],[data-u-dismiss],[data-u-delete]'); if (!b) return;
     if (b.dataset.uCancel) cancel(+b.dataset.uCancel); else if (b.dataset.uRetry) retry(+b.dataset.uRetry); else if (b.dataset.uDismiss) dismiss(+b.dataset.uDismiss);
@@ -240,3 +251,6 @@ export function mount(el, {ref, role = 'customer', kind = 'source', files = [], 
 }
 /** Para cuando el pedido se recarga: actualiza lo ya enviado en un cargador existente. */
 export function update(el, {files, status}) { for (const m of S.mounts) if (m.el === el) { m.files = files; m.status = status; draw(m); } }
+
+// Soltar un archivo fuera de la zona de envío haría que el navegador lo abra y saque a la persona de su sesión.
+['dragover', 'drop'].forEach(t => addEventListener(t, e => { if (e.dataTransfer?.types?.includes('Files') && !e.target.closest?.('[data-u-drop]')) e.preventDefault(); }));

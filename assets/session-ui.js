@@ -50,12 +50,14 @@ export function sessionMarkup(o, {esc, money, ic, boot, testCard, now = Date.now
   const last = o.history.length ? parseDate(o.history[o.history.length - 1].created_at) : null;
   const canTalk = ['in_production', 'review', 'completed'].includes(o.status);
 
+  const sentSources = o.files.filter(f => f.kind === 'source').length, needsMaterial = o.product_code === 'full' && !sentSources && ['paid', 'in_production'].includes(o.status);
   // 1. Hero: the one thing to know right now, and the one thing to do.
   let action = '';
   if (pending && boot.commerceReady) action = `<button id="resume-payment" class="primary big">${ic('lock')} ${waiting ? 'Abrir el pago otra vez' : 'Ir al pago seguro'}</button>`;
   else if (pending) action = '<p class="s-note">Los pagos en línea se están configurando: te avisaremos por correo para completarlo.</p>';
   else if (o.status === 'review' && audio.length) action = '<a class="primary big" href="#s-room">' + ic('play') + ' Escuchar mi canción</a>';
   else if (o.status === 'completed' && audio.length) action = '<a class="primary big" href="#s-room">' + ic('play') + ' Escuchar y descargar</a>';
+  else if (needsMaterial) action = `<a class="primary big" href="#s-upload">${ic('gift')} Subir mis fotos y videos</a><p class="s-note">${ic('check')} Tu video las necesita. Lo demás lo hacemos nosotros y te avisamos por correo.</p>`;
   else if (o.status === 'in_production' || o.status === 'paid') action = '<p class="s-note">' + ic('check') + ' No tienes que hacer nada. Te avisamos por correo en cada avance.</p>';
   if (boot.support && (dead || ['created', 'payment_pending', 'paid'].includes(o.status))) action += `<a class="s-help" href="mailto:${esc(boot.support)}?subject=${encodeURIComponent('Sesión ' + o.reference)}">${ic('mail')} ${dead ? 'Escribir al estudio' : '¿Necesitas ayuda? Escríbenos'}</a>`;
   const hero = `<section class="s-hero tone-${st.tone}" aria-labelledby="panel-title">
@@ -103,10 +105,12 @@ export function sessionMarkup(o, {esc, money, ic, boot, testCard, now = Date.now
     business: ['El material de tu marca', 'Opcional', 'Logos, referencias, spots anteriores o cualquier archivo que nos ayude a entender tu marca. Puedes subir varios a la vez.'],
     other: ['Material para tu canción', 'Opcional', 'Una nota de voz, fotos o un audio de referencia ayudan a contar tu historia. Puedes subir varios a la vez.'],
   }[o.product_code === 'full' ? 'full' : o.audience === 'business' ? 'business' : 'other'];
+  const late = ['review', 'completed'].includes(o.status);
+  if (late) UP[2] = o.product_code === 'full' && !sentSources ? 'Si todavía quieres tu video, sube aquí tus fotos y clips. Puedes elegir muchos a la vez.' : 'Aunque la canción ya esté lista, puedes seguir enviándonos archivos. Puedes subir varios a la vez.';
   const canSend = ['paid', 'in_production', 'review', 'completed'].includes(o.status);
   const upload = canSend ? `<section id="s-upload" class="s-card s-up"><h2 class="s-h"><span>${UP[0]}</span><b data-u-count>${UP[1]}</b></h2><p class="s-says">${UP[2]}</p>${uploaderHtml(o.reference, {role: 'customer', kind: 'source'})}</section>` : '';
   const story = `<details class="s-card s-story"><summary>${ic('heart')} Tu historia, tal como la contaste</summary><p>${esc(o.brief.story)}</p></details>`;
 
   // Order: what to do now → the song → progress → talk → extras.
-  return `<div class="s-wrap">${hero}${o.status === 'review' || o.status === 'completed' ? room + line : line + room}${chat}${upload}${story}</div>`;
+  return `<div class="s-wrap">${hero}${o.status === 'review' || o.status === 'completed' ? room + line : line + room}${needsMaterial ? upload + chat : chat + upload}${story}</div>`;
 }
