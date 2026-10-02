@@ -76,7 +76,7 @@ ex("update orders set status='created' where reference=?",ref);code,r=c.upload(r
 paid(ref);n=q('select count(*) n from deliverables')[0]['n']
 code,r=c.upload(ref,'a.jpg',M['jpg']);t('subida normal tras volver a pagado',code==201)
 code,r=c.post('upload-done',dict(reference=ref));t('upload-done avisa al equipo',code==200 and r['count']>=1 and any(m['dedupe_key'].startswith('files:'+ref) for m in q('select dedupe_key from mail_queue')),(code,r))
-code,r=c.post('upload-done',dict(reference=ref));t('no duplica el aviso en 15 min',len([m for m in q('select dedupe_key from mail_queue') if m['dedupe_key'].startswith('files:')])==1)
+code,r=c.post('upload-done',dict(reference=ref));t('no duplica el aviso en 15 min',len([m for m in q('select dedupe_key from mail_queue') if m['dedupe_key'].startswith('files:'+ref)])==1)
 t('marca la sesión para atención',q('select requires_attention a from orders where reference=?',ref)[0]['a']==1)
 tm=[m for m in q("select body from mail_queue where dedupe_key like 'files:%'")][0]['body'];t('el aviso al equipo es HTML con marca',tm.startswith('<!--fhb:html-->') and 'archivo' in tm)
 

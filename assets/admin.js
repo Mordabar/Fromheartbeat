@@ -1,11 +1,12 @@
 // Studio control room. The same language as the customer's session: one colour per state, six production stages,
 // messages as a conversation. Everything the server needs is unchanged (same endpoints, same payloads).
 import {STAGE_INFO, STATE, ago, parseDate, who} from './session-ui.js';
+import {configure as configureUploads, mount as mountUploader, uploaderHtml, busy as uploadsBusy} from './uploader.js';
 
 const root = document.querySelector('#admin-content');
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
 const money = n => new Intl.NumberFormat('es-CO', {style: 'currency', currency: 'COP', maximumFractionDigits: 0}).format(n / 100);
-const transitions = {created: ['created', 'cancelled'], payment_pending: ['payment_pending', 'cancelled'], paid: ['paid', 'in_production'], in_production: ['in_production', 'review'], review: ['review', 'in_production', 'completed'], completed: ['completed', 'review'], cancelled: ['cancelled']};
+const transitions = {created: ['created', 'cancelled'], payment_pending: ['payment_pending', 'cancelled'], paid: ['paid', 'in_production'], in_production: ['in_production', 'review', 'completed'], review: ['review', 'in_production', 'completed'], completed: ['completed', 'review'], cancelled: ['cancelled']};
 const LABEL = {created: 'Esperando el pago', payment_pending: 'Esperando el pago', paid: 'Pagada · por empezar', in_production: 'En producción', review: 'Esperando al cliente', completed: 'Entregada', cancelled: 'Cancelada'};
 const stages = STAGE_INFO.map(s => s[0]);
 let boot, order, orders = [], filter = 'all', query = '', shown = 20, listSeq = 0, boardScroll = 0;
@@ -104,7 +105,7 @@ const TEMPLATES = {
   reply: 'Gracias por tus comentarios. Ya estamos ajustándolo y te avisamos en cuanto esté la nueva versión.',
   start: '¡Bienvenido al estudio! Recibimos tu pago y tu historia. Un productor ya la está leyendo.',
 };
-const isUpload = h => /^(Versión disponible|Archivo añadido):/.test(h.note);
+const isUpload = h => /^(Versión disponible|Archivo añadido|Archivo retirado):/.test(h.note);
 // The last thing the customer said that no one from the studio has answered (internal notes, uploads and payments do not count).
 function unanswered(o) {
   for (let i = o.history.length - 1; i >= 0; i--) {
@@ -115,15 +116,27 @@ function unanswered(o) {
   return null;
 }
 // Same rules as the server for "completed" (api.php), so the producer is told before writing, not after.
+// One list drives both the checklist the producer sees and the gate on the buttons.
+function deliveryList(o) {
+  const files = o.files.filter(f => f.kind === 'delivery'), pick = (...mimes) => files.filter(f => mimes.includes(f.mime)).pop();
+  const list = [{key: 'mp3', label: 'MP3 para escuchar y compartir', file: pick('audio/mpeg'), need: 'review'}];
+  if (o.product_code !== 'dedicatoria') list.push({key: 'wav', label: 'WAV de alta calidad', file: pick('audio/wav', 'audio/x-wav'), need: 'completed'});
+  if (o.audience === 'person') list.push({key: 'cover', label: 'Portada', file: pick('image/png', 'image/jpeg', 'image/webp'), need: 'completed'});
+  if (o.product_code === 'full') list.push({key: 'mp4', label: 'Video MP4 (Full Experience)', file: pick('video/mp4'), need: 'completed'});
+  return list;
+}
 function missingFiles(o, forStatus) {
-  const m = o.files.filter(f => f.kind === 'delivery').map(f => f.mime), has = (...x) => x.some(v => m.includes(v)), out = [];
-  if (!has('audio/mpeg')) out.push('el MP3');
-  if (forStatus === 'completed') {
-    if (o.product_code !== 'dedicatoria' && !has('audio/wav', 'audio/x-wav')) out.push('el WAV');
-    if (o.audience === 'person' && !has('image/png', 'image/jpeg', 'image/webp')) out.push('la portada');
-    if (o.product_code === 'full' && !has('video/mp4')) out.push('el video MP4');
-  }
-  return out;
+  const names = {mp3: 'el MP3', wav: 'el WAV', cover: 'la portada', mp4: 'el video MP4'};
+  return deliveryList(o).filter(d => !d.file && (d.need === 'review' || forStatus === 'completed')).map(d => names[d.key]);
+}
+function deliverCard(o) {
+  const list = deliveryList(o), done = list.filter(d => d.file).length, ready = list.length === done;
+  const mine = o.files.filter(f => f.kind === 'source');
+  return `<section id="deliver" class="a-card"><h2 class="a-h">Entrega al cliente <b>${ready ? 'Todo listo' : `${done} de ${list.length} listos`}</b></h2>
+   <ul class="a-deliv" aria-label="Archivos de la entrega">${list.map(d => `<li class="${d.file ? 'ok' : ''}"><span class="d-st" aria-hidden="true">${d.file ? '✓' : '·'}</span><b>${esc(d.label)}</b><small>${d.file ? esc(d.file.original_name) : 'Falta'}</small></li>`).join('')}</ul>
+   <p class="a-muted">Arrastra todos los archivos juntos: cada uno se reconoce por su contenido. Sube versiones nuevas con el nombre <code>Cancion-v2.mp3</code>; el cliente ve la última y conserva las anteriores. Se envían tal cual, sin compresión.</p>
+   ${uploaderHtml(o.reference, {role: 'admin', kind: 'delivery', pickLabel: 'Elegir los archivos de entrega', dropHint: 'WAV, MP3, video, portada… varios a la vez · hasta 1 GB cada uno'})}
+   ${mine.length ? `<details class="a-more a-src"><summary>Material que envió el cliente · ${mine.length}</summary>${uploaderHtml(o.reference, {role: 'admin', kind: 'source', listOnly: true})}</details>` : ''}</section>`;
 }
 function nextActions(o) {
   const s = Number(o.production_stage), a = [], waiting = unanswered(o) !== null;
@@ -133,6 +146,7 @@ function nextActions(o) {
   if (o.status === 'in_production') {
     if (s < 4) a.push({label: `Avanzar a «${stages[Math.max(s, 0) + 1]}»`, icon: 'arrow', status: 'in_production', stage: Math.max(s, 0) + 1, text: TEMPLATES[Math.max(s, 0) + 1], primary: !waiting});
     else a.push(gate({label: 'Enviar a revisión del cliente', icon: 'headphones', status: 'review', stage: 5, text: TEMPLATES.review, primary: !waiting}, 'review'));
+    if (s >= 4) a.push(gate({label: 'Entregar ahora, sin revisión', icon: 'star', status: 'completed', stage: 5, text: TEMPLATES.completed}, 'completed'));
   }
   if (o.status === 'review') {
     a.push(gate({label: 'El cliente aprobó: marcar entregada', icon: 'star', status: 'completed', stage: 5, text: TEMPLATES.completed, primary: !waiting}, 'completed'));
@@ -142,7 +156,7 @@ function nextActions(o) {
 }
 
 function thread(o) {
-  const items = o.history.slice().reverse();
+  const items = o.history.filter(h => !isUpload(h)).reverse();
   return `<ol class="a-feed">${items.map(h => {
     const w = who(h.actor), t = parseDate(h.created_at), internal = Number(h.visible) === 0 && w !== 'system', stg = STAGE_INFO[Number(h.stage)]?.[0] || '';
     if (w === 'system') return `<li class="a-ev"><span>${ic(/pago/i.test(h.note) ? 'card' : 'check')}</span><p>${esc(h.note)}</p><time>${esc(ago(t))}</time></li>`;
@@ -160,11 +174,7 @@ async function detail(ref, keep = {}) {
   const briefKeys = {genre: 'Género', mood: 'Emoción', voice: 'Voz', language: 'Idioma', tempo: 'Ritmo', recipient: 'Para', occasion: 'Ocasión', brand: 'Marca', campaign: 'Campaña', channels: 'Canales', license_scope: 'Licencia solicitada', agreed_scope: 'Alcance acordado', details: 'Detalles'};
   const chips = ['genre', 'mood', 'voice', 'language', 'tempo'].filter(k => o.brief[k]).map(k => `<span class="a-tag"><small>${briefKeys[k]}</small>${esc(o.brief[k])}</span>`).join('');
   const rest = Object.entries(o.brief).filter(([k, v]) => v && !['genre', 'mood', 'voice', 'language', 'tempo', 'story'].includes(k));
-  const wantsUpload = ['in_production', 'review'].includes(o.status), uploadCard = o.status === 'cancelled' ? '' : `<form id="upload" class="a-card"><h2 class="a-h">Entregables y archivos</h2><p class="a-muted">Nombra cada archivo con su versión: <code>Cancion-v2.mp3</code>. El cliente verá la última como principal y conserva las anteriores.</p>
-    <fieldset class="a-seg"><legend class="sr-only">Tipo de archivo</legend><label><input type="radio" name="kind" value="delivery" checked><span>Para el cliente</span></label><label><input type="radio" name="kind" value="source"><span>Material del cliente</span></label></fieldset>
-    <label class="a-drop"><input class="sr-only" name="file" type="file" required accept="audio/mpeg,audio/wav,image/jpeg,image/png,image/webp,video/mp4"><span>${ic('upload')} <b id="a-file-name">Elegir archivo</b><small>MP3, WAV, JPG, PNG, WebP o MP4 · hasta 50 MB</small></span></label>
-    <button class="primary full-width">${ic('upload')} Subir archivo</button><p class="form-error" role="alert"></p>
-    <ul class="a-files">${o.files.map(f => `<li><span class="a-tag">${f.kind === 'delivery' ? 'Entrega' : 'Origen'}</span><span class="a-fn">${esc(f.original_name)}</span><a href="api.php?action=file&id=${Number(f.id)}&download=1" aria-label="Descargar ${esc(f.original_name)}">${ic('arrow', 'down')}</a></li>`).join('') || '<li class="a-muted">Aún no hay archivos.</li>'}</ul></form>`;
+  const wantsUpload = ['in_production', 'review'].includes(o.status), uploadCard = ['paid', 'in_production', 'review', 'completed'].includes(o.status) ? deliverCard(o) : '';
   root.innerHTML = `${adminNav('orders')}<button class="a-back" id="back">${ic('back')} Todas las sesiones</button>
   <header class="a-detail-head tone-${st.tone}"><span class="o-badge big" aria-hidden="true">${ic(st.icon)}</span><div><p class="a-eyebrow">${esc(o.reference)}</p><h1>${esc(o.customer.name)}</h1><p class="a-muted">${esc(o.product_name)} · ${money(o.amount_in_cents)} COP</p></div>${chip(o)}</header>
   <div class="a-layout"><div class="a-col">
@@ -194,6 +204,7 @@ async function detail(ref, keep = {}) {
    ${wantsUpload ? '' : uploadCard}
    <section class="a-card"><h2 class="a-h">Pagos</h2>${o.payments.map(p => `<div class="a-pay"><b>${money(p.amount_in_cents)} ${esc(p.currency)}</b><span class="a-chip tone-${p.status === 'APPROVED' ? 'done' : p.status === 'PENDING' ? 'pay' : 'off'}">${esc({APPROVED: 'Aprobado', PENDING: 'Pendiente', DECLINED: 'Rechazado', VOIDED: 'Anulado', ERROR: 'Error'}[p.status] || p.status)}</span><small>${esc(p.transaction_id || 'Aún sin transacción')}<br>${esc(p.reference)}</small></div>`).join('') || '<p class="a-muted">No hay intentos de pago.</p>'}</section>
   </div></div>`;
+  document.querySelectorAll('[data-uploader]').forEach(el => mountUploader(el, {ref: o.reference, role: 'admin', kind: el.dataset.uKind, files: o.files, status: o.status}));
   const cf = document.querySelector('#update'); if (cf) syncCompose(cf);
 }
 
@@ -224,11 +235,10 @@ document.addEventListener('input', e => {
   const f = e.target.closest('#update'); if (f) syncCompose(f);
   if (e.target.id === 'a-q') { query = e.target.value; renderBoard(); clearTimeout(searchTimer); searchTimer = setTimeout(() => list(query, true).catch(err => tell(err.message, true)), 350); }
 });
-document.addEventListener('change', e => { if (e.target.matches('#upload input[type=file]')) { const n = document.querySelector('#a-file-name'); n.textContent = e.target.files[0]?.name || 'Elegir archivo'; }
+document.addEventListener('change', e => {
   const f = e.target.closest('#update'); if (f) { if (e.target.name === 'status') syncStage(f); syncCompose(f); } });
 
 // Uploads: checked before sending, with real progress and a readable error.
-const MAX_MB = 50, TYPES = ['audio/mpeg', 'audio/wav', 'audio/x-wav', 'image/jpeg', 'image/png', 'image/webp', 'video/mp4'];
 function sendForm(action, fd, onProgress) {
   return new Promise((resolve, reject) => {
     const x = new XMLHttpRequest(); x.open('POST', 'api.php?action=' + action); x.setRequestHeader('X-CSRF-Token', boot.csrf);
@@ -237,7 +247,7 @@ function sendForm(action, fd, onProgress) {
     x.onload = () => { let j = {}; try { j = JSON.parse(x.responseText); } catch {}
       if (x.status >= 200 && x.status < 300) return Object.keys(j).length ? resolve(j) : reject(Error('El servidor no confirmó que se guardara. Revisa y vuelve a intentarlo.'));
       if (x.status === 401) { stash(); login(); return reject(Error('Tu sesión expiró. Entra de nuevo y seguimos donde ibas.')); }
-      reject(Error(j.error || (x.status === 413 ? `El archivo es demasiado grande para el servidor (máximo ${MAX_MB} MB).` : 'No se pudo completar la acción. Inténtalo de nuevo.'))); };
+      reject(Error(j.error || (x.status === 413 ? 'El archivo es demasiado grande para este formulario.' : 'No se pudo completar la acción. Inténtalo de nuevo.'))); };
     x.send(fd);
   });
 }
@@ -291,18 +301,10 @@ document.addEventListener('submit', async e => {
       try { await detail(order.reference); tell(sent); } catch { f.elements.note.value = ''; tell(sent + ' No pude refrescar la pantalla: recárgala.'); }
     }
     if (f.id === 'quote') { await api('admin-quote', {reference: order.reference, amount: Math.round(Number(d.amount) * 100), scope: d.scope}); await detail(order.reference); tell('Propuesta guardada. Correo en cola.'); }
-    if (f.id === 'upload') {
-      const file = f.elements.file.files[0]; if (!file) { say('Elige un archivo primero.'); return; }
-      if (file.size > MAX_MB * 2 ** 20) { say(`«${file.name}» pesa ${(file.size / 2 ** 20).toFixed(0)} MB. El máximo es ${MAX_MB} MB.`); return; }
-      if (!TYPES.includes(file.type) && !/\.(mp3|wav|jpe?g|png|webp|mp4)$/i.test(file.name)) { say('Ese tipo de archivo no se puede subir. Usa MP3, WAV, JPG, PNG, WebP o MP4.'); return; }
-      const fd = new FormData(f); fd.append('reference', order.reference);
-      await sendForm('upload', fd, p => { b.textContent = `Subiendo… ${p} %`; });
-      await detail(order.reference, readDraft()); tell('Archivo subido.');
-    }
   } catch (error) { say(error.message); } finally { if (b && b.isConnected) { b.disabled = false; if (idle) b.innerHTML = idle; } }
 });
 document.querySelector('#logout').onclick = async () => { await api('logout', {}); location.reload(); };
-try { boot = await api('bootstrap'); if (boot.admin) await list(); else login(); } catch (e) { root.innerHTML = `<div class="a-empty"><p><b>No se pudo conectar con el estudio.</b></p><p class="a-muted">${esc(e.message)}</p><button class="primary" id="retry">Reintentar</button></div>`; document.querySelector('#retry').onclick = () => location.reload(); }
+try { boot = await api('bootstrap'); configureUploads({getCsrf: () => boot.csrf, setCsrf: t => { boot.csrf = t; }, config: boot.uploads, onBatchDone: ref => { if (order?.reference === ref && !uploadsBusy(ref)) detail(ref, readDraft()).catch(() => {}); }}); if (boot.admin) await list(); else login(); } catch (e) { root.innerHTML = `<div class="a-empty"><p><b>No se pudo conectar con el estudio.</b></p><p class="a-muted">${esc(e.message)}</p><button class="primary" id="retry">Reintentar</button></div>`; document.querySelector('#retry').onclick = () => location.reload(); }
 
 async function musicList(id=''){
  const tracks=(await api('admin-music')).tracks;const t=tracks.find(t=>t.id===id);document.querySelector('#logout').hidden=false;

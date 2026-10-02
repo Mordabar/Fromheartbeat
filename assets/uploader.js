@@ -140,6 +140,7 @@ function scheduleDone(ref) {
     fresh.forEach(i => i.reported = true);
     if (fresh.some(i => i.role === 'customer')) { try { await json('upload-done', {reference: ref}); } catch { /* el aviso es secundario */ } }
     S.ctx.onBatchDone?.(ref, fresh.length);
+    setTimeout(() => { S.items = S.items.filter(i => !fresh.includes(i)); emit('structure'); }, 4000); // ya figuran en «enviados»
   }, 1200));
 }
 addEventListener('beforeunload', e => { if (busy()) { e.preventDefault(); e.returnValue = ''; } });
@@ -204,6 +205,7 @@ export function uploaderHtml(ref, opts = {}) {
   const role = opts.role || 'customer', kind = opts.kind || 'source', admin = role === 'admin';
   const accept = admin ? 'image/*,video/*,audio/*,.wav,.mp3,.m4a,.flac,.pdf,.zip,.txt' : 'image/*,video/*,audio/*,.heic,.heif,.pdf,.txt';
   const presets = !admin && !opts.noCompress ? `<label class="u-preset"><span>${ic('bolt')} Tamaño de envío</span><select data-u-preset aria-describedby="u-preset-hint-${esc(role)}">${Object.entries(PRESETS).map(([k, v]) => `<option value="${k}"${k === S.preset ? ' selected' : ''}>${esc(v.label)}</option>`).join('')}</select><small id="u-preset-hint-${esc(role)}">${esc(videoSupport() ? 'Reducimos fotos, videos y WAV en tu dispositivo antes de enviarlos. Tus originales no se tocan.' : 'Este navegador no puede reducir videos; se envían tal cual. Las fotos sí se optimizan.')}</small></label>` : '';
+  if (opts.listOnly) return `<div class="u ${admin ? 'u-admin' : ''}" data-uploader data-u-ref="${esc(ref)}" data-u-role="${role}" data-u-kind="${esc(kind)}"><ul class="u-list u-sentlist" data-u-sent></ul></div>`;
   return `<div class="u ${admin ? 'u-admin' : ''}" data-uploader data-u-ref="${esc(ref)}" data-u-role="${role}" data-u-kind="${esc(kind)}">
    <div class="u-drop" data-u-drop><input class="u-input" type="file" multiple accept="${accept}" data-u-pick aria-label="${esc(opts.pickLabel || 'Elegir archivos')}">
     <span class="u-drop-ic">${ic('up')}</span><span class="u-drop-t"><b>${esc(opts.pickLabel || 'Elegir fotos, videos o audios')}</b><small>${esc(opts.dropHint || 'o arrástralos aquí · puedes elegir varios a la vez')}</small></span></div>

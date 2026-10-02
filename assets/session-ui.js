@@ -83,7 +83,7 @@ export function sessionMarkup(o, {esc, money, ic, boot, testCard, now = Date.now
     : pending ? '' : `<section class="s-room empty"><h2 class="s-h"><span>Tu canción</span><b>Aparecerá aquí</b></h2><p class="s-says">Cuando esté lista, la escucharás en este mismo lugar, sin salir de la sesión.</p></section>`;
 
   // 4. The producer's messages as a conversation. Newest first; the system's own events stay small.
-  const items = o.history.slice().reverse();
+  const items = o.history.filter(h => !/^(Versión disponible|Archivo añadido|Archivo retirado):/.test(h.note)).reverse();
   const bubble = h => {
     const w = who(h.actor), when = parseDate(h.created_at), stg = STAGE_INFO[Number(h.stage)]?.[0] || '';
     const text = w === 'me' ? h.note.replace(/^Comentario del cliente:\s*/, '') : h.note;
