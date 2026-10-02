@@ -21,7 +21,7 @@ function notifyOrder(array $o,string $subject,string $message,string $key):void 
 function orderView(array $o,bool $isAdmin=false):array {
  $o['brief']=json_decode($o['brief'],true); unset($o['idempotency_key'],$o['request_hash'],$o['token_hash']);
  $o['customer']=customerFor($o); $o['product']=catalog()[$o['product_code']];
- $o['history']=sql('SELECT status,stage,note,actor,created_at FROM order_history WHERE order_id=?'.($isAdmin?'':' AND visible=1').' ORDER BY id',[$o['id']])->fetchAll();
+ $o['history']=sql('SELECT status,stage,note,actor,created_at'.($isAdmin?',visible':'').' FROM order_history WHERE order_id=?'.($isAdmin?'':' AND visible=1').' ORDER BY id',[$o['id']])->fetchAll();
  $o['files']=sql('SELECT id,original_name,mime,size_bytes,kind,created_at FROM deliverables WHERE order_id=? ORDER BY id',[$o['id']])->fetchAll();
  if($isAdmin)$o['payments']=sql('SELECT * FROM payment_attempts WHERE order_id=? ORDER BY id DESC',[$o['id']])->fetchAll();
  return $o;

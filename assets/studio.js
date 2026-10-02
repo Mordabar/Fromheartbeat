@@ -87,7 +87,6 @@ export class Studio {
     const W = innerWidth, H = innerHeight, c = (v, lo, hi) => Math.min(hi, Math.max(lo, Number.isFinite(v) ? v : lo));
     let [x0, y0, x1, y1] = rect; x0 = c(x0, 0, Math.max(0, W - 160)); x1 = c(x1, x0 + 160, W); y0 = c(y0, 0, Math.max(0, H - 160)); y1 = c(y1, y0 + 160, H);
     if (x1 - x0 < Math.min(W * 0.4, 240)) { x0 = 0; x1 = W; }          // a sliver is a measurement accident, not a layout
-    if (y1 - y0 < Math.min(H * 0.25, 200)) { y0 = 0; y1 = H; }
     const next = [x0, y0, x1, y1].map(Math.round);
     if (this.free && next.every((v, i) => Math.abs(v - this.free[i]) < 2)) return;
     const first = !this.free; this.free = next;
@@ -109,7 +108,7 @@ export class Studio {
     const st = this.stations[STATION_OF[view] || 'stage'], portrait = this.portrait;
     const spec = st.shot(portrait, view, this), fov = this.baseFov();
     const W = innerWidth, H = innerHeight, [x0, y0, x1, y1] = this.free || [0, 0, W, H];
-    const fw = Math.max(80, x1 - x0), fh = Math.max(80, y1 - y0), t = Math.tan(fov * RAD / 2);
+    const fw = Math.max(80, x1 - x0), fh = Math.max(80, y1 - y0, H * 0.26), t = Math.tan(fov * RAD / 2);
     const dist = Math.max((spec.h / 2) / (t * fh / H), (spec.w / 2) / (t * fw / H)) * (spec.margin || 1.06) + (spec.extra || 0);
     const az = spec.az * RAD, p = spec.pitch, cp = Math.cos(p);
     const fwd = new THREE.Vector3(Math.sin(az) * cp, Math.sin(p), -Math.cos(az) * cp);
