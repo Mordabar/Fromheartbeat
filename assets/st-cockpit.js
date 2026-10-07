@@ -133,7 +133,7 @@ export function buildCockpit(s) {
   }, {px: 120});
   st.board.group.position.set(0, 9.3, -1.5); deck.add(st.board.group);
   st.fileHits = Array.from({length: 4}, (_, i) => {
-    const hit = new THREE.Mesh(new THREE.PlaneGeometry(7.7, 0.86), m.hit); hit.position.set(0, 9.3 + (0.5 - (0.255 + i * 0.17)) * 5.4, -1.36); hit.visible = false;
+    const hit = new THREE.Mesh(new THREE.PlaneGeometry(7.9, 0.9), m.hit); hit.position.set(0, 9.3 + (0.5 - (0.255 + i * 0.17)) * 5.4, -1.36); hit.visible = false;
     hit.userData = {action: null, id: `session:file:${i}`, target: {i}}; deck.add(hit); s.pickables.push(hit); return hit;
   });
   st.now = makeScreen(s, 6.8, 1.9, (c, w, h, state) => {
@@ -226,6 +226,7 @@ export function buildCockpit(s) {
     st.payPill.set({text: o?.status === 'payment_pending' ? 'Abrir el pago otra vez' : 'Ir al pago seguro'});
     const canTalk = !!o && ['in_production', 'review', 'completed'].includes(o.status);   // a button that cannot do anything is not shown
     st.talkPill.group.visible = canTalk; st.talkPill.hit.visible = canTalk; st.playPill.group.visible = !!audio; st.playPill.hit.visible = !!audio;
+    msgHit.visible = canTalk; platterHit.visible = !!audio;   // nothing to touch where nothing can happen
   };
   st.setCommerce = ready => { st.commerceReady = ready; if (st.order) { sig = ''; st.setOrder(st.order); } };
   st.setPlaying = on => { st.playing = on; st.refreshPlay(); };
@@ -246,7 +247,7 @@ export function buildCockpit(s) {
   // ================================================================= Camera
   st.shot = (portrait, view) => {
     const at = (g, x, y, z) => g.localToWorld(new THREE.Vector3(x, y, z));
-    if (view === 'session-song') return {focus: at(deck, 0, 5.2, 1.0), az: AZ.deck, pitch: -0.22, w: portrait ? 9.0 : 9.6, h: portrait ? 11.6 : 11.8, limits: {yaw: 24, pMin: -6, pMax: 20}};
+    if (view === 'session-song') return {focus: at(deck, 0, 5.2, 1.0), az: AZ.deck, pitch: -0.22, w: portrait ? 8.4 : 9.6, h: portrait ? 11.6 : 11.8, limits: {yaw: 24, pMin: -6, pMax: 20}};
     if (view === 'session-talk') return {focus: at(wall, 0, 4.8, 1.0), az: AZ.wall, pitch: -0.22, w: portrait ? 9.2 : 9.6, h: portrait ? 11.6 : 11.8, limits: {yaw: 24, pMin: -6, pMax: 20}};
     if (view === 'session-files') return {focus: at(core, 7.6, 2.9, 1.4), az: AZ.core, pitch: -0.3, w: portrait ? 6.2 : 7.4, h: portrait ? 6.4 : 5.4, limits: {yaw: 20, pMin: -14, pMax: 12}};
     if (portrait) return {focus: at(core, 0, 6.4, 0.5), az: AZ.core, pitch: 0.04, w: 11.6, h: 12.4, limits: {yaw: 70, pMin: -8, pMax: 16}};
