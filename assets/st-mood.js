@@ -49,7 +49,7 @@ export function buildMood(s) {
     st.relayout(s.portrait); st.setDraft(st.draft || {});
   };
   st.relayout = portrait => {
-    const n = st.orbs.length || 1, rx = portrait ? 4.1 : 5.7, ry = portrait ? 6.1 : 5.5;
+    const n = st.orbs.length || 1, rx = portrait ? 4.1 : 5.7, ry = portrait ? 5.6 : 5.0;
     st.orbs.forEach((o, i) => { const a = i / n * Math.PI * 2; o.base.set(Math.sin(a) * rx, Math.cos(a) * ry, 0); });
     st.portrait = portrait;
   };
@@ -63,7 +63,7 @@ export function buildMood(s) {
     if (state?.name) { neonText(c, state.name.toUpperCase(), w / 2, h * 0.5, {size: h * 0.36, color: state.color, blur: 22, maxW: w * 0.86}); c.fillStyle = '#f2eaff'; fit(c, state.sub || '', w * 0.86, h * 0.17, 600); c.fillText(state.sub || '', w / 2, h * 0.8); }
     else neonText(c, '¿Cómo quieres que se sienta?', w / 2, h * 0.58, {size: h * 0.3, color: '#d5bcff', blur: 16, maxW: w * 0.9});
   }, {px: 130});
-  st.plaque.mesh.position.set(0, 1.9, 5.6); stage.add(st.plaque.mesh); st.plaque.mesh.visible = false;
+  st.plaque.mesh.position.set(0, 0.9, 5.6); stage.add(st.plaque.mesh); st.plaque.mesh.visible = false;
 
   // ---- Checkout ticket ---------------------------------------------------------------------------------------------
   st.ticket = textPlane(5.6, 7.4, (c, w, h, state) => {

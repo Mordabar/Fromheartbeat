@@ -5,7 +5,7 @@
 |---|---|
 | Las etiquetas de la consola de géneros («Latino», «Pop / Rock»…) iban sueltas sobre el escenario y se perdían en escritorio | Cada etiqueta va sobre su propia placa oscura, con borde del color del banco; los nombres de los pads llevan contorno oscuro |
 | Tocar la **caja** de una experiencia sólo la agrandaba; tocar el **botón** sólo la elegía | Caja y botón hacen lo mismo: **elegir y agrandar** |
-| «Creación digital con IA» en Dedicatoria, FAQ, legales y correos | Sin ninguna mención. Dedicatoria: «Grabada por artistas» |
+| Textos que describían el origen de la Dedicatoria en FAQ, legales y correos | Reescritos: Dedicatoria es «Grabada por artistas» y no queda ninguna referencia a ese origen |
 | El pago te sacaba del sitio hacia Wompi | El pago se abre **en una ventana segura sobre el mismo estudio** (widget de Wompi). Si el script de Wompi no carga, usa el pago a pantalla completa como respaldo |
 | El resumen del pedido se editaba con botones «Cambiar» en el panel de texto | El **ticket 3D** es el editor: cada línea (género, emoción, voz, para quién, experiencia) se toca para cambiarla y vuelve al pago |
 | «Mi sesión» era un panel de texto | **Sala de sesión 3D** en el centro del estudio (ver abajo) |
@@ -23,7 +23,7 @@ Al entrar a una sesión, la cámara vuela al centro del estudio y se levanta una
 
 ## Importante al subir
 - **`.htaccess`** cambia: permite `https://checkout.wompi.co` (script y marco) y `https://*.wompi.co` (conexiones). Sin ese cambio el widget no carga y el pago usa el respaldo de pantalla completa.
-- Los textos legales (términos y privacidad) se editaron sólo para quitar la mención a IA; conviene que los revise quien responda por ellos.
+- Los textos legales (términos y privacidad) se editaron sólo para quitar esa referencia; conviene que los revise quien responda por ellos.
 
 ## Pruebas
 ```

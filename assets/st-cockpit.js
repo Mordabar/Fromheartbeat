@@ -76,7 +76,7 @@ export function buildCockpit(s) {
   });
 
   // Desk with six real faders.
-  box(core, 16.6, 1.7, 4.6, m.panel, 0, 0.85, 0.5); box(core, 16.7, 0.06, 0.06, m.accent, 0, 1.74, 2.82); box(core, 16.7, 0.06, 0.06, m.neon, 0, 0.12, 2.82);
+  box(core, 20, 1.7, 4.6, m.panel, 0, 0.85, 0.5); box(core, 20.1, 0.06, 0.06, m.accent, 0, 1.74, 2.82); box(core, 20.1, 0.06, 0.06, m.neon, 0, 0.12, 2.82);
   st.channels.forEach((ch, i) => {
     box(core, 0.26, 0.05, 2.2, m.dark, chX(i), 1.72, 0.3);
     ch.cap = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.2, 0.46), new THREE.MeshStandardMaterial({color: 0x5d5088, metalness: 0.8, roughness: 0.3, emissive: 0x000000})); ch.cap.position.set(chX(i), 1.84, 1.2); core.add(ch.cap);
@@ -90,13 +90,13 @@ export function buildCockpit(s) {
     c.setLineDash([h * 0.06, h * 0.045]); c.lineWidth = 4; c.strokeStyle = color; c.shadowColor = color; c.shadowBlur = state?.hot || need ? 18 : 6; roundRect(c, 14, 14, w - 28, h - 28, h * 0.08); c.stroke(); c.setLineDash([]); c.shadowBlur = 0;
     c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillStyle = '#cbb8f2'; c.font = `800 ${h * 0.085}px ${FONT.sans}`; c.fillText('MATERIAL', w * 0.07, h * 0.17);
     // upload arrow
-    c.strokeStyle = color; c.lineWidth = h * 0.035; c.lineCap = 'round'; c.lineJoin = 'round'; const ax = w * 0.14, ay = h * 0.6, as = h * 0.17; c.beginPath(); c.moveTo(ax, ay + as); c.lineTo(ax, ay - as); c.moveTo(ax - as * 0.7, ay - as * 0.3); c.lineTo(ax, ay - as); c.lineTo(ax + as * 0.7, ay - as * 0.3); c.stroke();
+    c.strokeStyle = color; c.lineWidth = h * 0.035; c.lineCap = 'round'; c.lineJoin = 'round'; const ax = w * 0.13, ay = h * 0.6, as = h * 0.15; c.beginPath(); c.moveTo(ax, ay + as); c.lineTo(ax, ay - as); c.moveTo(ax - as * 0.7, ay - as * 0.3); c.lineTo(ax, ay - as); c.lineTo(ax + as * 0.7, ay - as * 0.3); c.stroke();
     c.fillStyle = '#ffffff'; c.textAlign = 'left';
     const lines = !can ? ['Disponible cuando', 'se confirme el pago'] : up.active ? [`Subiendo… ${Math.round(up.progress * 100)}%`, `${up.active} ${up.active === 1 ? 'archivo' : 'archivos'}`] : need ? ['Sube tus fotos', 'y videos'] : count ? [`${count} ${count === 1 ? 'archivo' : 'archivos'} enviados`, 'Toca para añadir más'] : [state?.full ? 'Subir fotos y videos' : 'Enviar material', state?.full ? '' : '(opcional)'];
-    c.font = `800 ${h * 0.125}px ${FONT.sans}`; lines.forEach((l, k) => { if (l) { fit(c, l, w * 0.64, h * 0.125, 800); c.fillText(l, w * 0.27, h * (0.5 + k * 0.17)); } });
+    c.font = `800 ${h * 0.125}px ${FONT.sans}`; lines.forEach((l, k) => { if (l) { fit(c, l, w * 0.6, h * 0.125, 800); c.fillText(l, w * 0.29, h * (0.5 + k * 0.17)); } });
     if (can && up.active) { c.fillStyle = 'rgba(255,255,255,.14)'; roundRect(c, w * 0.07, h * 0.86, w * 0.86, h * 0.05, h * 0.025); c.fill(); c.fillStyle = color; roundRect(c, w * 0.07, h * 0.86, Math.max(h * 0.05, w * 0.86 * up.progress), h * 0.05, h * 0.025); c.fill(); }
   }, {px: 140});
-  const padG = new THREE.Group(); padG.position.set(6.3, 2.0, 1.45); padG.rotation.x = 0.5; core.add(padG);
+  const padG = new THREE.Group(); padG.position.set(7.7, 2.6, 1.3); padG.rotation.x = 0.5; core.add(padG);
   box(padG, 4.5, 0.35, 2.6, m.metal, 0, -0.18, 0); padG.add(st.pad.mesh); st.pad.mesh.rotation.x = -Math.PI / 2; st.pad.mesh.position.y = 0.01;
   // the pad lies on its tilted base; its plane faces up in local space, the group tilts it toward the visitor
   const padHit = new THREE.Mesh(new THREE.PlaneGeometry(4.5, 2.6), m.hit); padHit.rotation.x = -Math.PI / 2; padHit.position.y = 0.04; padHit.userData = {action: {type: 'session-files'}, id: 'session:pad', target: st.pad}; padG.add(padHit); s.pickables.push(padHit);
@@ -108,18 +108,18 @@ export function buildCockpit(s) {
 
   // ================================================================= DECK: the song and its files
   back(deck, 10, 12.4);
-  st.board = makeScreen(s, 7.8, 4.8, (c, w, h, state) => {
+  st.board = makeScreen(s, 8.4, 5.4, (c, w, h, state) => {
     const bg = c.createLinearGradient(0, 0, w, h); bg.addColorStop(0, '#1e1040'); bg.addColorStop(1, '#0a0520'); c.fillStyle = bg; c.fillRect(0, 0, w, h);
     c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillStyle = '#cbb8f2'; c.font = `800 ${h * 0.065}px ${FONT.sans}`; c.fillText('TU ENTREGA', w * 0.05, h * 0.08);
-    const files = state?.files || [], fits = files.length > 5 ? 4 : files.length;
+    const files = state?.files || [], fits = files.length > 4 ? 3 : files.length;
     if (!files.length) {
       neonText(c, state?.waiting ? 'Aún no hay archivos' : 'Todavía no hay entrega', w * 0.05, h * 0.36, {size: h * 0.115, color: '#d5bcff', align: 'left', blur: 14, maxW: w * 0.9});
       c.fillStyle = '#efe6ff'; c.font = `600 ${h * 0.065}px ${FONT.sans}`; wrap(c, state?.hint || 'Cuando el estudio suba tu canción, la escuchas desde este disco y descargas cada archivo aquí.', w * 0.9).slice(0, 4).forEach((l, k) => c.fillText(l, w * 0.05, h * 0.52 + k * h * 0.085));
       return;
     }
     const row = (i, f, extra) => {
-      const y = h * (0.255 + i * 0.145), hot = state?.hot === i;
-      roundRect(c, w * 0.04, y - h * 0.06, w * 0.92, h * 0.12, h * 0.03); c.fillStyle = hot ? 'rgba(198,162,255,.24)' : 'rgba(198,162,255,.09)'; c.fill(); c.lineWidth = 2; c.strokeStyle = hot ? 'rgba(198,162,255,.9)' : 'rgba(198,162,255,.25)'; c.stroke();
+      const y = h * (0.255 + i * 0.17), hot = state?.hot === i;
+      roundRect(c, w * 0.04, y - h * 0.072, w * 0.92, h * 0.144, h * 0.03); c.fillStyle = hot ? 'rgba(198,162,255,.24)' : 'rgba(198,162,255,.09)'; c.fill(); c.lineWidth = 2; c.strokeStyle = hot ? 'rgba(198,162,255,.9)' : 'rgba(198,162,255,.25)'; c.stroke();
       c.textAlign = 'left'; c.textBaseline = 'middle';
       if (extra) { c.fillStyle = '#fff'; c.font = `800 ${h * 0.065}px ${FONT.sans}`; c.fillText(extra, w * 0.08, y + 1); return; }
       const tag = kindTag(f); roundRect(c, w * 0.07, y - h * 0.036, w * 0.13, h * 0.072, h * 0.036); c.fillStyle = '#c6a2ff33'; c.fill(); c.fillStyle = '#e9dcff'; c.font = `800 ${h * 0.04}px ${FONT.sans}`; c.textAlign = 'center'; c.fillText(tag, w * 0.135, y + 1);
@@ -127,11 +127,11 @@ export function buildCockpit(s) {
       c.textAlign = 'right'; c.fillStyle = '#cbb8f2'; c.font = `700 ${h * 0.048}px ${FONT.sans}`; c.fillText(kb(Number(f.size_bytes)), w * 0.86, y + 1);
       drawIcon(c, 'arrow', w * 0.915, y + 1, h * 0.06, {color: hot ? '#fff' : '#c6a2ff', width: 2.2});
     };
-    files.slice(0, fits).forEach((f, i) => row(i, f)); if (files.length > 5) row(4, null, `+ ${files.length - 4} archivos más: ver todos en texto`);
+    files.slice(0, fits).forEach((f, i) => row(i, f)); if (files.length > 4) row(3, null, `+ ${files.length - 3} archivos más: ver todos en texto`);
   }, {px: 120});
-  st.board.group.position.set(0, 9.0, -1.5); deck.add(st.board.group);
-  st.fileHits = Array.from({length: 5}, (_, i) => {
-    const hit = new THREE.Mesh(new THREE.PlaneGeometry(7.2, 0.62), m.hit); hit.position.set(0, 9.0 + (0.5 - (0.255 + i * 0.145)) * 4.8, -1.36); hit.visible = false;
+  st.board.group.position.set(0, 9.3, -1.5); deck.add(st.board.group);
+  st.fileHits = Array.from({length: 4}, (_, i) => {
+    const hit = new THREE.Mesh(new THREE.PlaneGeometry(7.7, 0.86), m.hit); hit.position.set(0, 9.3 + (0.5 - (0.255 + i * 0.17)) * 5.4, -1.36); hit.visible = false;
     hit.userData = {action: null, id: `session:file:${i}`, target: {i}}; deck.add(hit); s.pickables.push(hit); return hit;
   });
   st.now = makeScreen(s, 6.8, 1.9, (c, w, h, state) => {
@@ -139,7 +139,7 @@ export function buildCockpit(s) {
     const f = state?.file, on = state?.on; c.textAlign = 'left'; c.textBaseline = 'middle';
     c.fillStyle = on ? '#ff9be8' : '#cbb8f2'; c.font = `800 ${h * 0.115}px ${FONT.sans}`; c.fillText(on ? '▶ SONANDO AHORA' : f ? 'TU CANCIÓN' : 'TU CANCIÓN · AÚN NO', w * 0.05, h * 0.2);
     if (!f) { c.fillStyle = '#fff'; c.font = `600 ${h * 0.15}px ${FONT.sans}`; wrap(c, 'Cuando esté lista, aquí la escuchas.', w * 0.9).slice(0, 2).forEach((l, k) => c.fillText(l, w * 0.05, h * 0.55 + k * h * 0.2)); return; }
-    neonText(c, f.original_name.replace(/\.[^.]+$/, ''), w * 0.05, h * 0.52, {size: h * 0.3, color: on ? '#ff8de6' : '#ffffff', align: 'left', blur: 14, maxW: w * 0.9});
+    neonText(c, state?.title || f.original_name.replace(/\.[^.]+$/, ''), w * 0.05, h * 0.52, {size: h * 0.28, color: on ? '#ff8de6' : '#ffffff', align: 'left', blur: 14, maxW: w * 0.9});
     c.fillStyle = '#e9dcff'; c.font = `700 ${h * 0.13}px ${FONT.sans}`; c.fillText(on ? 'Toca el disco para pausar' : 'Toca el disco para escucharla', w * 0.05, h * 0.84);
   }, {px: 120});
   st.now.group.position.set(0, 5.4, -1.5); deck.add(st.now.group);
@@ -206,8 +206,8 @@ export function buildCockpit(s) {
     const o = st.order, files = delivery(o);
     st.board.surface.redraw({files, hot: st.fileHot, waiting: !pending(o), hint: pending(o) ? 'Tu entrega aparecerá aquí cuando el estudio termine tu canción.' : null});
     st.fileHits.forEach((hit, i) => {
-      const f = files[i], extra = files.length > 5 && i === 4;
-      hit.visible = !!f && files.length <= 5 || (files.length > 5 && i <= 4);
+      const f = files[i], extra = files.length > 4 && i === 3;
+      hit.visible = (!!f && files.length <= 4) || (files.length > 4 && i <= 3);
       hit.userData.action = extra ? {type: 'session-plain'} : f ? {type: 'session-file', id: f.id} : null;
     });
   };
@@ -221,10 +221,13 @@ export function buildCockpit(s) {
     if ((cover?.id ?? null) !== coverId) { coverId = cover?.id ?? null; if (cover) loader.load(siteUrl(`api.php?action=file&id=${cover.id}`), t => { t.colorSpace = THREE.SRGBColorSpace; st.label.material.map = t; st.label.material.color.set(0xffffff); st.label.material.needsUpdate = true; }); else { st.label.material.map = null; st.label.material.color.set(0x3a2370); st.label.material.needsUpdate = true; } }
     const payNow = !!o && ['created', 'payment_pending'].includes(o.status) && !!st.commerceReady; st.payPill.group.visible = payNow; st.payPill.hit.visible = payNow;
     st.payPill.set({text: o?.status === 'payment_pending' ? 'Abrir el pago otra vez' : 'Ir al pago seguro'});
+    const canTalk = !!o && ['in_production', 'review', 'completed'].includes(o.status);   // a button that cannot do anything is not shown
+    st.talkPill.group.visible = canTalk; st.talkPill.hit.visible = canTalk; st.playPill.group.visible = !!audio; st.playPill.hit.visible = !!audio;
   };
   st.setCommerce = ready => { st.commerceReady = ready; if (st.order) { sig = ''; st.setOrder(st.order); } };
   st.setPlaying = on => { st.playing = on; st.refreshPlay(); };
-  st.redrawNow = () => st.now.surface.redraw({file: audioOf(st.order)[0] || null, on: st.playing});
+  st.songTitle = () => { const b = st.order?.brief; return b?.recipient ? `Para ${b.recipient}${b.occasion ? ' · ' + b.occasion : ''}` : null; };
+  st.redrawNow = () => st.now.surface.redraw({file: audioOf(st.order)[0] || null, on: st.playing, title: st.songTitle()});
   st.refreshPlay = () => { st.redrawNow?.(); st.playPill.set({on: st.playing, text: !st.hasSong ? 'Aún sin canción' : st.playing ? 'Pausar' : 'Escuchar mi canción'}); };
   st.setUpload = u => { st.upload = u; st.redrawPad(); };
   st.handle = a => {
@@ -240,16 +243,16 @@ export function buildCockpit(s) {
   // ================================================================= Camera
   st.shot = (portrait, view) => {
     const at = (g, x, y, z) => g.localToWorld(new THREE.Vector3(x, y, z));
-    if (view === 'session-song') return {focus: at(deck, 0, 4.9, 1.0), az: AZ.deck, pitch: -0.22, w: portrait ? 9.2 : 9.6, h: portrait ? 11.6 : 11.8, limits: {yaw: 24, pMin: -6, pMax: 20}};
+    if (view === 'session-song') return {focus: at(deck, 0, 5.2, 1.0), az: AZ.deck, pitch: -0.22, w: portrait ? 9.0 : 9.6, h: portrait ? 11.6 : 11.8, limits: {yaw: 24, pMin: -6, pMax: 20}};
     if (view === 'session-talk') return {focus: at(wall, 0, 4.8, 1.0), az: AZ.wall, pitch: -0.22, w: portrait ? 9.2 : 9.6, h: portrait ? 11.6 : 11.8, limits: {yaw: 24, pMin: -6, pMax: 20}};
-    if (view === 'session-files') return {focus: at(core, 6.2, 2.4, 1.5), az: AZ.core, pitch: -0.3, w: portrait ? 6.2 : 7.4, h: portrait ? 6.4 : 5.4, limits: {yaw: 20, pMin: -14, pMax: 12}};
-    if (portrait) return {focus: at(core, 1.2, 5.8, 0.5), az: AZ.core, pitch: 0.04, w: 17, h: 14, limits: {yaw: 70, pMin: -8, pMax: 16}};
+    if (view === 'session-files') return {focus: at(core, 7.6, 2.9, 1.4), az: AZ.core, pitch: -0.3, w: portrait ? 6.2 : 7.4, h: portrait ? 6.4 : 5.4, limits: {yaw: 20, pMin: -14, pMax: 12}};
+    if (portrait) return {focus: at(core, 0, 6.4, 0.5), az: AZ.core, pitch: 0.04, w: 11.6, h: 12.4, limits: {yaw: 70, pMin: -8, pMax: 16}};
     return {focus: at(core, 0, 5.6, 0.5), az: AZ.core, pitch: 0.05, w: 34, h: 13.6, limits: {yaw: 70, pMin: -8, pMax: 16}};
   };
 
   st.update = (dt, t, c) => {
     const inside = SESSION_VIEWS.includes(s.view);
-    st.appear = damp(st.appear, inside ? 1 : 0, 5, dt);
+    st.appear = s.still ? (inside ? 1 : 0) : damp(st.appear, inside ? 1 : 0, 5, dt);
     root.visible = st.appear > 0.02; if (!root.visible) return;
     root.scale.setScalar(0.94 + 0.06 * st.appear); st.wallFront.visible = s.view !== 'session-files';
     [core, deck, wall].forEach((g, i) => { const k = Math.max(0, Math.min(1, st.appear * 2.4 - i * 0.55)); g.position.y = (1 - k) * (1 - k) * -5; });   // the three corners rise from the floor one after another

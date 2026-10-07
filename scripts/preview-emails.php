@@ -42,7 +42,7 @@ $cases=[
  'hostile-injection'=>['update',sample('full',['status'=>'in_production','production_stage'=>2,'brief'=>json_encode(array_merge($brief,['recipient'=>'<script>alert(1)</script>','occasion'=>'"><img src=x onerror=alert(2)>']))]),['name'=>'<img src=x onerror=alert(3)> Eva','email'=>'e@example.com','phone'=>'1'],['note'=>"</td></tr><script>alert(4)</script> & \"comillas\" 'simples' <b>negrita</b>\nlínea 2"]],
  'hostile-longstring'=>['update',sample('full',['status'=>'review','production_stage'=>4]),['name'=>'Maria de los Angeles Fernandez de la Torre Sotomayor','email'=>'m@example.com','phone'=>'1'],['note'=>str_repeat('Supercalifragilisticoespialidoso',12)]],
  'noname'=>['received',sample('full'),['name'=>'','email'=>'x@example.com','phone'=>'1'],[]],
- // business journey (6 steps) and product-aware copy (Dedicatoria is the AI product: no singer, no master, no adjustment round)
+ // business journey (6 steps) and product-aware copy (Dedicatoria is the essential package: no mix/master and no adjustment round promised)
  'paid-business'=>['paid',sample('jingle',['status'=>'paid']),$cust,['at'=>'2026-09-30 13:34:00','transaction'=>'11979929-1790775282-73584']],
  'production-business-2'=>['production',sample('jingle',['status'=>'in_production','production_stage'=>2]),$cust,[]],
  'review-business'=>['review',sample('campaign',['status'=>'review','production_stage'=>4]),$cust,[]],

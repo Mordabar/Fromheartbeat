@@ -36,7 +36,7 @@ console.log('== sala de sesión (3D)');
   await page.screenshot({path: `${OUT}/room-${mode}-song.png`});
   await tap('session:play'); await sleep(900);
   const aud = await F(() => ({src: document.getElementById('sample-audio').src, dock: !document.getElementById('audio-dock').hidden, name: document.getElementById('track-name').textContent}));
-  t('tocar el disco prepara la canción de ESTA sesión (MP3) en el reproductor', /action=file&id=\d+$/.test(aud.src) && aud.dock && aud.name === 'cancion', JSON.stringify(aud));
+  t('tocar el disco prepara la canción de ESTA sesión (MP3) en el reproductor', /action=file&id=\d+$/.test(aud.src) && aud.dock && /^Para /.test(aud.name), JSON.stringify(aud));
   await tap('session:file:2').catch(() => {}); // descargar portada: navegación de descarga, no debe sacar de la sala
   t('seguimos en la sala tras tocar un archivo', await F(() => window.__fhb.view() === 'session'));
   // mensajes
@@ -104,8 +104,16 @@ console.log('== experiencias y ticket');
   await show(1); await tap('product-choose:1'); await adv(1);
   t('tocar el BOTÓN elige y agranda la misma experiencia', await chosen() === 'personalizada' && await focus() === 1, `${await chosen()} ${await focus()}`);
   await F(() => window.__fhb.go('checkout')); await adv(3.5);
+  if (mobile) {
+    const g = await F(() => { const a = window.__fhb.studio.screenOf('ticket:genre'), b = window.__fhb.studio.screenOf('ticket:mood'); return {open: document.getElementById('options-dialog').open, gap: Math.abs(b.y - a.y)}; });
+    t('en el teléfono el ticket queda libre (el formulario no se abre solo) y sus líneas se pueden tocar (≥ 30 px)', !g.open && g.gap >= 30, JSON.stringify(g));
+    await page.screenshot({path: `${OUT}/room-${mode}-ticket.png`});
+  }
   await tap('ticket:voice'); await adv(2.5);
   t('tocar una línea del ticket lleva a ese paso y vuelve al pago', await F(() => window.__fhb.view() === 'voice') && /volver al pago/i.test(await page.$eval('#j-next', e => e.textContent)), await page.$eval('#j-next', e => e.textContent));
+  await F(() => window.__fhb.go('checkout')); await adv(3);
+  await page.click('.j-next'); await sleep(500);
+  t('«Completar mis datos» abre el formulario cuando el cliente lo pide', await F(() => document.getElementById('options-dialog').open) && await page.$('#checkout-form') !== null);
   await ctx.close();
 }
 t('sin errores de consola', errors.length === 0, errors.slice(0, 3).join(' | '));

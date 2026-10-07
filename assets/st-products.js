@@ -43,8 +43,8 @@ function drawSpec(c, w, h, st) {
   c.lineWidth = 5; c.strokeStyle = color; c.shadowColor = color; c.shadowBlur = st.focus ? 20 : 6; roundRect(c, 6, 6, w - 12, h - 12, 44); c.stroke(); c.shadowBlur = 0;
   c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillStyle = color; c.font = `800 ${w * 0.045}px ${FONT.sans}`; c.fillText('QUÉ INCLUYE', w * 0.08, h * 0.075);
   // Fit every feature: shrink the type until the list fits the panel.
-  const maxH = h * 0.82; let size = w * 0.05, rows;
-  for (; size > w * 0.032; size -= 1) {
+  const maxH = h * 0.82; let size = w * 0.056, rows;
+  for (; size > w * 0.034; size -= 1) {
     c.font = `600 ${size}px ${FONT.sans}`;
     rows = p.features.map(f => wrap(c, f, w * 0.75));
     const total = rows.reduce((a, r) => a + r.length * size * 1.22 + size * 0.5, 0);
@@ -135,8 +135,8 @@ export function buildProducts(s) {
       it.group.position.set(it.x, 0, it.z); it.group.rotation.y = it.rot; it.group.scale.setScalar(it.sc);
       const float = s.still ? 0 : Math.sin(t * 0.7 + i) * 0.09;
       it.card.position.set(0, 7.75 + float + it.hov * 0.15, 0);
-      it.spec.position.set(0, 3.2, 0.04); it.spec.scale.setScalar(Math.max(0.001, it.specSc)); it.spec.visible = it.specSc > 0.03;
-      it.pill.group.position.set(0, 0.95, 0.5); it.pill.group.scale.setScalar(Math.max(0.001, it.specSc)); it.pill.group.visible = it.specSc > 0.03; it.pill.hit.visible = it.specSc > 0.5;
+      it.spec.position.set(0, 3.5, 0.04); it.spec.scale.setScalar(Math.max(0.001, it.specSc)); it.spec.visible = it.specSc > 0.03;
+      it.pill.group.position.set(0, 1.2, 0.5); it.pill.group.scale.setScalar(Math.max(0.001, it.specSc)); it.pill.group.visible = it.specSc > 0.03; it.pill.hit.visible = it.specSc > 0.5;
       it.pill.group.scale.multiplyScalar(1); it.pill.update(dt, c.hovered);
       it.face.material.color.setScalar(0.55 + 0.45 * it.dim); it.spec.material.opacity = Math.min(1, it.dim + 0.2);
       it.glow.material.opacity = 0.14 + (focused ? 0.22 : 0) + c.energy * 0.1;
@@ -144,7 +144,7 @@ export function buildProducts(s) {
     });
     // Arrows only exist in the carousel
     const show = st.portrait && n > 1;
-    for (const [k, x] of [[st.prev, -2.55], [st.next, 2.55]]) { if (!k) continue; k.group.visible = show; k.group.position.set(x, 0.95, 0.9); k.update(dt, c.hovered); }
+    for (const [k, x] of [[st.prev, -2.55], [st.next, 2.55]]) { if (!k) continue; k.group.visible = show; k.group.position.set(x, 1.2, 0.9); k.update(dt, c.hovered); }
   };
   st.shot = portrait => {
     const cx = 0; const n = st.items.length || 3;

@@ -257,6 +257,9 @@ export class Studio {
     } else if (!this.shown) this.shown = {pos: this.cam.pos.clone(), yaw: this.cam.yaw, pitch: this.cam.pitch, fov: this.cam.fov, offset: this.cam.offset.clone()};
     this.rig.update(dt);
     this.applyCamera();
+    // Inside a session the rest of the studio steps out of the way: it neither shows nor answers touches (the room is its own place).
+    const hide = this.view.startsWith('session') && !this.tween;
+    if (hide !== this.othersHidden) { this.othersHidden = hide; for (const [k, st] of Object.entries(this.stations)) if (k !== 'cockpit' && st.group) st.group.visible = !hide; if (this.stage?.group) this.stage.group.visible = !hide; }
 
     // Mood colour, key light following the active station
     this.accent.lerp(this.accentTarget, Math.min(1, dt * 3));

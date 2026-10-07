@@ -21,9 +21,9 @@ export function buildConsole(s) {
       const rim = put(g, new THREE.TorusGeometry(r, 0.03, 6, 32), m.accent, x, y, 0.62);
     }
   }
-  const desk = box(g, 13.4, 1.6, 4.2, m.panel, 0, 0.8, 2.3);        // console desk
-  box(g, 13.5, 0.06, 0.06, m.accent, 0, 1.62, 4.4); box(g, 13.5, 0.06, 0.06, m.neon, 0, 0.16, 4.4);
-  for (let i = 0; i < 18; i++) { const x = -6 + i * 0.7; box(g, 0.08, 0.5, 0.06, i % 3 ? m.neon : m.pink, x, 1.66, 3.4); }
+  const desk = box(g, 13.4, 0.9, 4.2, m.panel, 0, 0.45, 2.3);        // console desk (low: the bank labels sit above it)
+  box(g, 13.5, 0.06, 0.06, m.accent, 0, 0.92, 4.4); box(g, 13.5, 0.06, 0.06, m.neon, 0, 0.1, 4.4);
+  for (let i = 0; i < 18; i++) { const x = -6 + i * 0.7; box(g, 0.08, 0.3, 0.06, i % 3 ? m.neon : m.pink, x, 1.0, 3.4); }
 
   // Bank buttons on an upright strip in front of the desk
   st.strip = new THREE.Group(); g.add(st.strip);
