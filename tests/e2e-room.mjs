@@ -112,8 +112,8 @@ console.log('== experiencias y ticket');
   await tap('ticket:voice'); await adv(2.5);
   t('tocar una línea del ticket lleva a ese paso y vuelve al pago', await F(() => window.__fhb.view() === 'voice') && /volver al pago/i.test(await page.$eval('#j-next', e => e.textContent)), await page.$eval('#j-next', e => e.textContent));
   await F(() => window.__fhb.go('checkout')); await adv(3);
-  await page.click('.j-next'); await sleep(500);
-  t('«Completar mis datos» abre el formulario cuando el cliente lo pide', await F(() => document.getElementById('options-dialog').open) && await page.$('#checkout-form') !== null);
+  if (mobile) await page.click('.j-next'); await sleep(500);
+  t(mobile ? '«Completar mis datos» abre el formulario cuando el cliente lo pide' : 'en escritorio el formulario está abierto junto al ticket', await F(() => document.getElementById('options-dialog').open) && await page.$('#checkout-form') !== null);
   await ctx.close();
 }
 t('sin errores de consola', errors.length === 0, errors.slice(0, 3).join(' | '));

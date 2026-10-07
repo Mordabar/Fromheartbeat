@@ -41,6 +41,7 @@ await step('keyboard: every 3D option is reachable and selectable', async () => 
 await step('checkout submits and lands in the session (mocked server)', async () => {
   await F(() => Object.assign(window.__fhb.draft(), {genre: 'Salsa', mood: 'Alegre', voice: 'Dúo', recipient: 'Luna', occasion: 'Boda', story: 'Una historia lo bastante larga para pasar la validación mínima.'}));
   await F(() => window.__fhb.go('checkout')); await sleep(400);
+  if (t.mobile) { await page.click('.j-next'); await sleep(400); }   // on a phone the ticket comes first; the form opens on request
   await page.fill('[name=name]', 'Ana Prueba'); await page.fill('[name=email]', 'ana@example.com'); await page.fill('[name=phone]', '3001234567'); await page.check('[name=consent]');
   await page.click('#next'); await t.settle(3.5); expect((await t.state()).view === 'session', 'no session'); await t.shot('e1-after-order');
 });

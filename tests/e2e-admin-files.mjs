@@ -9,7 +9,7 @@ const seed = JSON.parse(execFileSync('python3', [new URL('./support/seed.py', im
 execFileSync('python3', ['-c', `import sys;sys.path.insert(0,'${new URL('./support', import.meta.url).pathname}');from drv import *;ex("update orders set production_stage=4 where reference=?","${seed.ref}")`]);
 const b = await chromium.launch({headless: true, args: ['--no-sandbox']}), ctx = await b.newContext({viewport: {width, height}, hasTouch: mobile, isMobile: mobile}), page = await ctx.newPage();
 const errors = []; let ok = 0, bad = 0;
-page.on('pageerror', e => errors.push(String(e))); page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
+page.on('pageerror', e => errors.push(String(e))); page.on('console', m => { if (m.type() === 'error' && !/ERR_TUNNEL_CONNECTION_FAILED|ERR_INTERNET_DISCONNECTED/.test(m.text())) errors.push(m.text()); });
 const t = (n, c, x = '') => { if (c) { ok++; console.log('  ok  ', n); } else { bad++; console.log('  FAIL', n, x); } };
 const q = sql => execFileSync('python3', ['-c', `import sys,json;sys.path.insert(0,'${new URL('./support', import.meta.url).pathname}');from drv import *;print(json.dumps(q(${JSON.stringify(sql)})))`]).toString();
 await page.goto(BASE + '/admin.html'); await page.waitForSelector('input[type=email]');

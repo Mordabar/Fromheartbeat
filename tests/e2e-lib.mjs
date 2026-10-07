@@ -26,7 +26,7 @@ export async function open(browser, mode = 'mobile', query = 'e2e') {
   const page = await ctx.newPage();
   const log = {errors: [], failed: []};
   page.on('pageerror', e => log.errors.push(String(e)));
-  page.on('console', m => { if (m.type() === 'error') log.errors.push(m.text()); });
+  page.on('console', m => { if (m.type() === 'error' && !/ERR_TUNNEL_CONNECTION_FAILED|ERR_INTERNET_DISCONNECTED/.test(m.text())) log.errors.push(m.text()); });
   page.on('response', r => { if (r.status() >= 400) log.failed.push(r.status() + ' ' + r.url()); });
   await page.goto(`${BASE_URL}/?${query}`, {waitUntil: 'load'});
   await page.waitForFunction(() => window.__fhb?.studio?.renderer, null, {timeout: 40000});

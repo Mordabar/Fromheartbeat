@@ -108,10 +108,17 @@ function applyPayment(array $t,string $checksum):array {
   $a=sql('SELECT * FROM payment_attempts WHERE reference=? FOR UPDATE',[$t['reference']??''])->fetch();need((bool)$a,'Referencia desconocida.',422);
   $o=sql('SELECT * FROM orders WHERE id=? FOR UPDATE',[$a['order_id']])->fetch();
   need((int)($t['amount_in_cents']??-1)===(int)$a['amount_in_cents'] && ($t['currency']??'')===$a['currency'],'El importe o la moneda no corresponden.',422);
-  need(!$a['transaction_id'] || $a['transaction_id']===$t['id'],'La referencia pertenece a otra transacción.',409);
+  // A reference can see more than one transaction (the customer reopens the window after a PENDING one). An APPROVED one always counts;
+  // any other transaction that is not the one already on record is refused.
+  $other=$a['transaction_id'] && $a['transaction_id']!==$t['id'];
+  need(!$other || ($t['status']??'')==='APPROVED','La referencia pertenece a otra transacción.',409);
   need(in_array($t['status']??'', ['PENDING','APPROVED','DECLINED','ERROR','VOIDED'],true),'Estado de pago desconocido.');
   if(sql('SELECT checksum FROM webhook_events WHERE checksum=?',[$checksum])->fetch()){db()->commit();return $o;}
   sql('INSERT INTO webhook_events(checksum,transaction_id) VALUES(?,?)',[$checksum,$t['id']]);
+  if($other && $a['status']==='APPROVED'){ // a second approved transaction on an attempt that was already paid: the studio must reconcile it (possible double charge)
+   sql('UPDATE orders SET requires_attention=1 WHERE id=?',[$o['id']]);history($o,'Se recibió una segunda aprobación para el mismo intento de pago. Conciliar posible pago duplicado.','wompi',false);enqueue('duplicate:'.$t['id'],env('TEAM_EMAIL'),'Revisar pago adicional '.$o['reference'],'Revisar transacción '.$t['id'].' en Wompi antes de realizar cualquier reembolso.');
+   db()->commit();return $o;
+  }
   if($a['status']!=='APPROVED')sql('UPDATE payment_attempts SET transaction_id=?,status=? WHERE id=?',[$t['id'],$t['status'],$a['id']]);
   if($t['status']==='APPROVED' && $a['status']!=='APPROVED') {
    if(in_array($o['status'],['created','payment_pending','cancelled'],true)) {

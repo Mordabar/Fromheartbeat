@@ -7,12 +7,13 @@ const mode = process.argv[2] || 'mobile', [width, height, mobile] = SIZES[mode];
 const seed = JSON.parse(execFileSync('python3', [new URL('./support/seed.py', import.meta.url).pathname, 'full', 'in_production']).toString());
 const b = await launch(), ctx = await b.newContext({viewport: {width, height}, hasTouch: mobile, isMobile: mobile}), page = await ctx.newPage();
 const errors = [], reqs = []; let ok = 0, bad = 0;
-page.on('pageerror', e => errors.push(String(e))); page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
+page.on('pageerror', e => errors.push(String(e))); page.on('console', m => { if (m.type() === 'error' && !/ERR_TUNNEL_CONNECTION_FAILED|ERR_INTERNET_DISCONNECTED/.test(m.text())) errors.push(m.text()); });
 page.on('request', r => { const m = r.url().match(/action=(upload-[a-z]+|file-delete)/); if (m) reqs.push(m[1]); });
 const t = (name, cond, extra = '') => { if (cond) { ok++; console.log('  ok  ', name); } else { bad++; console.log('  FAIL', name, extra); } };
-await page.goto(BASE + seed.link, {waitUntil: 'load'});
-await page.waitForSelector('#s-upload [data-u-pick]', {state: 'attached', timeout: 60000});
-await page.locator('#s-upload').scrollIntoViewIfNeeded();
+await page.goto(BASE + seed.link.replace('?session=', '?e2e&session='), {waitUntil: 'load'});
+await page.waitForFunction(() => window.__fhb?.view?.() === 'session', null, {timeout: 60000});
+await page.evaluate(() => { window.__fhb.onAction({type: 'session-files'}); window.__fhb.onAction({type: 'session-files'}); });   // the material pad of the 3D room: first touch brings the camera, second opens the uploader
+await page.waitForSelector('[data-u-pick]', {state: 'attached', timeout: 30000});
 await page.screenshot({path: `${OUT}/up-${mode}-1-vacio.png`});
 t('el cargador aparece con selector múltiple', await page.$eval('[data-u-pick]', i => i.multiple));
 const files = ['foto-pesada.jpg', 'captura.png', 'voz.wav', 'big.webm', 'letra.pdf'].map(f => M + f);

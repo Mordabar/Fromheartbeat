@@ -229,7 +229,7 @@ function frameStudio(){
  studio.setFree([left,top,right,Math.max(top+120,bottom)]);
  const off=Math.abs(studio.rig.yaw)+Math.abs(studio.rig.pitch)+Math.abs(studio.rig.zoom-1)>0.03;$('#reset-view').hidden=!off;
 }
-function render(enter=true){mountOptions();const keepScroll=!enter?(root.querySelector('.panel-body')?.scrollTop||0):0;root.innerHTML=(FLOW.includes(view)?()=>wizardView(view):{lobby,info:aboutView,about:aboutView,samples:samplesView,recover:recoverView,session:sessionView,terms:()=>legalView(false),privacy:()=>legalView(true)}[view]||lobby)();const panel=root.querySelector('.panel');if(panel&&enter)panel.classList.add('enter');document.body.dataset.view=view;if(keepScroll){const pb=root.querySelector('.panel-body');if(pb)pb.scrollTop=keepScroll;}sync3D();mountUploads();requestAnimationFrame(frameStudio);}
+function render(enter=true){mountOptions();const keepMsg=root.querySelector('#s-msg')?.value||'';const keepScroll=!enter?(root.querySelector('.panel-body')?.scrollTop||0):0;root.innerHTML=(FLOW.includes(view)?()=>wizardView(view):{lobby,info:aboutView,about:aboutView,samples:samplesView,recover:recoverView,session:sessionView,terms:()=>legalView(false),privacy:()=>legalView(true)}[view]||lobby)();const panel=root.querySelector('.panel');if(panel&&enter)panel.classList.add('enter');document.body.dataset.view=view;if(keepScroll){const pb=root.querySelector('.panel-body');if(pb)pb.scrollTop=keepScroll;}const msgBox=root.querySelector('#s-msg');if(msgBox&&keepMsg)msgBox.value=keepMsg;sync3D();mountUploads();requestAnimationFrame(frameStudio);}
 
 function mountUploads(){const el=root.querySelector('[data-uploader]');if(el&&currentOrder&&view==='session')mountUploader(el,{ref:currentOrder.reference,role:'customer',kind:'source',files:currentOrder.files,status:currentOrder.status});}
 async function refreshAfterUpload(ref){if(view!=='session'||currentOrder?.reference!==ref)return;const inUp=!!document.activeElement?.closest?.('#s-upload');try{currentOrder=(await api('order',null,'&reference='+encodeURIComponent(ref))).order;render(false);if(inUp)root.querySelector('[data-u-pick]')?.focus({preventScroll:true});}catch{}}
@@ -317,7 +317,7 @@ document.addEventListener('click',async e=>{const el=e.target.closest('button');
  if(el.id==='resume-payment'){resumePayment(el);return;}
  if(el.dataset.quick){const t=el.closest('form').elements.message;if(!t.value.includes(el.dataset.quick))t.value=(t.value?t.value+' ':'')+el.dataset.quick+'. ';t.focus();return;}
  if(el.dataset.readmore!==undefined){const p=el.previousElementSibling,open=p.classList.toggle('clamp')===false;el.textContent=open?'Mostrar menos':'Leer completa';el.setAttribute('aria-expanded',String(open));return;}
- if(el.id==='refresh-order')loadOrder(currentOrder.reference).catch(e=>toast(e.message));
+ if(el.id==='refresh-order')refreshOrder().catch(e=>toast(e.message));
 });
 document.addEventListener('input',e=>{const t=e.target;if(t.closest?.('.field.invalid,.check.invalid'))clearFieldErrors();if(t.name&&t.name in draft){draft[t.name]=t.value;save();if(t.name==='story')$('#story-count').textContent=draft.story.length;if(t.name==='occasion')root.querySelectorAll('[data-pick=occasion]').forEach(b=>{const on=b.dataset.value===t.value;b.classList.toggle('on',on);b.setAttribute('aria-pressed',String(on));});if(['recipient','occasion','story'].includes(t.name))sync3D();}refreshFoot();});
 document.addEventListener('change',e=>{if(e.target.name==='consent'){draft.consent=e.target.checked;save();refreshFoot();}});
@@ -351,10 +351,11 @@ async function startPayment(pay,ref){
  if(tx?.id){try{await api('reconcile',{reference:ref,transaction:String(tx.id)});}catch{/* the webhook and the session poll settle it */}}
  return tx?'done':'closed';
 }
+let payingNow=false;
 async function resumePayment(btn){
- if(btn)btn.disabled=true;
+ if(payingNow)return;payingNow=true;if(btn)btn.disabled=true;
  try{const pay=await api('checkout',{reference:currentOrder.reference});const r=await startPayment(pay,currentOrder.reference);if(r!=='redirect'){await loadOrder(currentOrder.reference);if(currentOrder.status==='paid')studio?.celebrate();}}
- catch(e){toast(e.message);}finally{if(btn)btn.disabled=false;}
+ catch(e){toast(e.message);}finally{payingNow=false;if(btn)btn.disabled=false;}
 }
 
 // Gestures: one finger looks around (exactly, with limits), two fingers pinch, a tap touches an object.
@@ -429,13 +430,16 @@ const pollOrder=async()=>{if(view!=='session'||!currentOrder||document.hidden||u
 setInterval(pollOrder,5000);addEventListener('focus',pollOrder);
 
 // Compact application navigation, with native modal focus containment and Escape support.
+// If the browser takes WebGL away mid-visit, the studio falls to light mode: bring up the text version so nobody is left without a screen.
+let lastLight=false;
+setInterval(()=>{if(!studio||studio.light===lastLight)return;lastLight=studio.light;if(!studio.light)return;document.body.classList.add('light-mode');if(view==='session'){sessionPanel='full';plainMode=true;}render(false);openOptions();},1000);
 const menu=$('#studio-menu');
 function closeMenu(){if(menu?.open)menu.close();$('#menu-toggle')?.setAttribute('aria-expanded','false');}
 $('#menu-toggle').onclick=()=>{menu.showModal();$('#menu-toggle').setAttribute('aria-expanded','true');};
 $('#menu-close').onclick=closeMenu;
 menu.addEventListener('close',()=>$('#menu-toggle').setAttribute('aria-expanded','false'));
 menu.addEventListener('click',e=>{if(e.target===menu)closeMenu();});
-$('#quality-toggle').onclick=()=>{if(!studio)return;studio.setLight(!studio.light);document.body.classList.toggle('light-mode',studio.light);if(view==='session'){sessionPanel=studio.light?'full':null;plainMode=studio.light;}render(false);if(studio.light)openOptions();else closeOptions();sync3D();$('#quality-toggle').textContent=studio.light?'Activar estudio 3D':'Usar modo ligero';if(menu.open)menu.close();requestAnimationFrame(frameStudio);};
+$('#quality-toggle').onclick=()=>{if(!studio)return;studio.setLight(!studio.light);lastLight=studio.light;document.body.classList.toggle('light-mode',studio.light);if(view==='session'){sessionPanel=studio.light?'full':null;plainMode=studio.light;}render(false);if(studio.light)openOptions();else closeOptions();sync3D();$('#quality-toggle').textContent=studio.light?'Activar estudio 3D':'Usar modo ligero';if(menu.open)menu.close();requestAnimationFrame(frameStudio);};
 new ResizeObserver(()=>requestAnimationFrame(frameStudio)).observe(optionsDialog);
 document.fonts?.ready?.then(()=>requestAnimationFrame(frameStudio));
 document.addEventListener('focusin',e=>{if(e.target.matches('input,textarea')){document.body.classList.add('editing');requestAnimationFrame(frameStudio);}});

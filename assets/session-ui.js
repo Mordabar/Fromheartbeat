@@ -10,6 +10,8 @@ export const STAGE_INFO = [
   ['Entrega', 'Tu canción queda lista para escuchar y descargar.'],
 ];
 
+// The essential package (Dedicatoria) does not promise mixing and mastering: its fifth stage reads as a final review.
+export const stageInfoFor = o => o?.product_code === 'dedicatoria' ? STAGE_INFO.map((x, i) => i === 4 ? ['Revisión final', 'Hacemos una última revisión de calidad antes de entregarte tu canción.'] : x) : STAGE_INFO;
 // One look per state, used everywhere (hero, list, 3D terminal, admin): colour + icon + the words a stranger understands.
 export const STATE = {
   created: {tone: 'pay', icon: 'card', label: 'Falta el pago', title: 'Tu historia está guardada', says: 'Completa el pago para que el estudio empiece a trabajar en tu canción.'},
@@ -41,13 +43,13 @@ const QUICK_FOR = (o) => o.status === 'in_production' ? ['Tengo una duda', 'Quie
 
 // `part` picks what to show: everything (the plain-text session), only the conversation, or only the material uploader.
 export function sessionMarkup(o, {esc, money, ic, boot, testCard, now = Date.now(), part = 'all'}) {
-  const st = STATE[o.status] || STATE.created;
+  const st = STATE[o.status] || STATE.created, SI = stageInfoFor(o);
   // While the customer reviews or has received the song, the studio is at the last stage whatever the admin left selected.
   const stage = ['review', 'completed'].includes(o.status) ? 5 : Number(o.production_stage) || 0, dead = o.status === 'cancelled';
   const pending = ['created', 'payment_pending', 'cancelled'].includes(o.status), waiting = o.status === 'payment_pending' && boot.commerceReady;
   const delivery = o.files.filter(f => f.kind === 'delivery'), audio = delivery.filter(f => f.mime.startsWith('audio/')).slice().reverse();
   const cover = delivery.find(f => f.mime.startsWith('image/')), others = delivery.filter(f => !f.mime.startsWith('audio/'));
-  const says = o.status === 'in_production' ? (stage === 5 ? 'Estamos en el último paso: preparamos la entrega de tu canción.' : STAGE_INFO[stage][1]) : st.says;
+  const says = o.status === 'in_production' ? (stage === 5 ? 'Estamos en el último paso: preparamos la entrega de tu canción.' : SI[stage][1]) : st.says;
   const last = o.history.length ? parseDate(o.history[o.history.length - 1].created_at) : null;
   const canTalk = ['in_production', 'review', 'completed'].includes(o.status);
 
@@ -71,7 +73,7 @@ export function sessionMarkup(o, {esc, money, ic, boot, testCard, now = Date.now
 
   // 2. The production line: six stages, the current one lit, each in plain words.
   const line = `<section class="s-line" aria-label="Avance de tu canción"><h2 class="s-h"><span>En qué punto estamos</span><b>${dead ? 'Sin avance' : pending ? 'Aún no empieza' : o.status === 'completed' ? 'Completado' : `Etapa ${stage + 1} de 6`}</b></h2>
-    <div class="s-meter" role="img" aria-label="${dead ? 'La sesión fue cancelada' : pending ? 'La producción aún no empieza' : `Etapa ${stage + 1} de 6: ${STAGE_INFO[stage][0]}`}">${STAGE_INFO.map((_, i) => `<i class="${o.status === 'completed' || (!pending && i < stage) ? 'on' : !pending && i === stage ? 'now' : ''}"></i>`).join('')}</div>
+    <div class="s-meter" role="img" aria-label="${dead ? 'La sesión fue cancelada' : pending ? 'La producción aún no empieza' : `Etapa ${stage + 1} de 6: ${SI[stage][0]}`}">${STAGE_INFO.map((_, i) => `<i class="${o.status === 'completed' || (!pending && i < stage) ? 'on' : !pending && i === stage ? 'now' : ''}"></i>`).join('')}</div>
     <ol class="s-stages">${STAGE_INFO.map(([name, text], i) => {
       const state = o.status === 'completed' || (!pending && i < stage) ? 'done' : !pending && i === stage ? 'now' : 'next';
       return `<li class="${state}"${state === 'now' ? ' aria-current="step"' : ''}><span class="s-dot" aria-hidden="true">${state === 'done' ? ic('check') : i + 1}</span><div><b>${esc(name)}</b><small>${state === 'now' ? esc(o.status === 'review' && i === 5 ? 'Escucha tu canción y dinos si cambiarías algo.' : text) : state === 'done' ? 'Listo' : 'Pronto'}</small></div></li>`;
@@ -88,7 +90,7 @@ export function sessionMarkup(o, {esc, money, ic, boot, testCard, now = Date.now
   // 4. The producer's messages as a conversation. Newest first; the system's own events stay small.
   const items = o.history.filter(h => !/^(Versión disponible|Archivo añadido|Archivo retirado):/.test(h.note)).reverse();
   const bubble = h => {
-    const w = who(h.actor), when = parseDate(h.created_at), stg = STAGE_INFO[Number(h.stage)]?.[0] || '';
+    const w = who(h.actor), when = parseDate(h.created_at), stg = SI[Number(h.stage)]?.[0] || '';
     const text = w === 'me' ? h.note.replace(/^Comentario del cliente:\s*/, '') : h.note;
     if (w === 'system') return `<li class="s-ev"><span>${ic(/pago/i.test(h.note) ? 'card' : 'check')}</span><p>${esc(h.note)}</p><time datetime="${esc(when.toISOString())}">${esc(ago(when, now))}</time></li>`;
     return `<li class="s-msg ${w}"><div class="s-av" aria-hidden="true">${w === 'me' ? 'Tú' : 'P'}</div><div class="s-bub"><p class="s-who">${w === 'me' ? 'Tú' : 'Tu productor'}${stg && w === 'studio' ? ` · <span>${esc(stg)}</span>` : ''}<time datetime="${esc(when.toISOString())}">${esc(ago(when, now))}</time></p><p class="s-text${text.length > 320 ? ' clamp' : ''}">${esc(text)}</p>${text.length > 320 ? '<button type="button" class="s-readmore" data-readmore aria-expanded="false">Leer completa</button>' : ''}</div></li>`;

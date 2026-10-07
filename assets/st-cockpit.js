@@ -8,13 +8,14 @@ import {Surface, textPlane, neonText, roundRect, fit, wrap, glowSprite, damp, si
 import {drawIcon} from './icons.js';
 import {stationGroup} from './layout.js';
 import {put, box, neonFrame, makeScreen, Pill} from './st-kit.js';
-import {STATE, STAGE_INFO, parseDate, ago, who} from './session-ui.js';
+import {STATE, STAGE_INFO, stageInfoFor, parseDate, ago, who} from './session-ui.js';
 
 export const SESSION_VIEWS = ['session', 'session-song', 'session-talk', 'session-files'];
 const TONE = {pay: '#ffc857', make: '#c9a0ff', review: '#38e1ff', done: '#3dffc5', off: '#a79bb8'};
 const SHORT = ['Historia', 'Letra', 'Grabación', 'Producción', 'Mezcla', 'Entrega'];
 const UPLOAD_NOTE = /^(Versión disponible|Archivo añadido|Archivo retirado):/;
 const R = 12, AZ = {core: 0, deck: -58, wall: 58};
+const shortFor = o => o?.product_code === 'dedicatoria' ? SHORT.map((x, i) => i === 4 ? 'Revisión' : x) : SHORT;
 const kb = b => b >= 1048576 ? (b / 1048576 >= 10 ? Math.round(b / 1048576) : (b / 1048576).toFixed(1)) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB';
 const kindTag = f => f.mime === 'audio/mpeg' ? 'MP3' : /wav/.test(f.mime) ? 'WAV' : f.mime.startsWith('video/') ? 'VIDEO' : f.mime.startsWith('image/') ? 'PORTADA' : 'ARCHIVO';
 
@@ -43,17 +44,17 @@ export function buildCockpit(s) {
     c.fillStyle = '#cbb8f2'; c.font = `800 ${h * 0.055}px ${FONT.sans}`; c.fillText(o ? `TU SESIÓN · ${o.reference}` : 'FROMHEARTBEAT · SALA PRIVADA', px, h * 0.09);
     if (!o) { neonText(c, 'Mi sesión', px, h * 0.4, {size: h * 0.2, color: '#c9a8ff', align: 'left', blur: 20}); return; }
     const look = STATE[o.status] || STATE.created, tone = TONE[look.tone], stage = ['review', 'completed'].includes(o.status) ? 5 : Number(o.production_stage) || 0, pending = ['created', 'payment_pending', 'cancelled'].includes(o.status);
-    const hint = state?.hint >= 0 ? STAGE_INFO[state.hint] : null;
+    const SI = stageInfoFor(o), names = shortFor(o), hint = state?.hint >= 0 ? SI[state.hint] : null;
     if (hint) {
       neonText(c, hint[0].toUpperCase(), px, h * 0.27, {size: h * 0.15, color: '#d9c0ff', align: 'left', blur: 16, maxW: w * 0.9});
       c.fillStyle = '#ffffff'; c.font = `600 ${h * 0.07}px ${FONT.sans}`; wrap(c, hint[1], w * 0.9).slice(0, 3).forEach((l, k) => c.fillText(l, px, h * 0.46 + k * h * 0.085));
     } else {
       neonText(c, look.label, px, h * 0.26, {size: h * 0.16, color: tone, align: 'left', blur: 18, maxW: w * 0.9});
-      const says = o.status === 'in_production' ? (stage === 5 ? 'Estamos en el último paso: preparamos la entrega de tu canción.' : STAGE_INFO[stage][1]) : look.says;
+      const says = o.status === 'in_production' ? (stage === 5 ? 'Estamos en el último paso: preparamos la entrega de tu canción.' : SI[stage][1]) : look.says;
       c.fillStyle = '#ffffff'; c.font = `600 ${h * 0.068}px ${FONT.sans}`; wrap(c, says, w * 0.9).slice(0, 3).forEach((l, k) => c.fillText(l, px, h * 0.46 + k * h * 0.088));
     }
     const chip = (text, x, color) => { c.font = `800 ${h * 0.05}px ${FONT.sans}`; const tw = c.measureText(text).width + h * 0.09; roundRect(c, x, h * 0.82, tw, h * 0.115, h * 0.057); c.fillStyle = color + '2a'; c.fill(); c.lineWidth = 2; c.strokeStyle = color; c.stroke(); c.fillStyle = '#fff'; c.textAlign = 'left'; c.fillText(text, x + h * 0.045, h * 0.8785); return x + tw + h * 0.04; };
-    let x = chip(o.productName || '', px, '#c9a0ff'); if (!pending) chip(o.status === 'completed' ? 'Entregada' : `Etapa ${stage + 1} de 6 · ${SHORT[stage]}`, x, tone);
+    let x = chip(o.productName || '', px, '#c9a0ff'); if (!pending) chip(o.status === 'completed' ? 'Entregada' : `Etapa ${stage + 1} de 6 · ${names[stage]}`, x, tone);
   }, {px: 120});
   st.monitor.group.position.set(0, 9.9, -1.7); core.add(st.monitor.group);
   const monitorHit = new THREE.Mesh(new THREE.PlaneGeometry(10, 5), m.hit); monitorHit.position.set(0, 9.9, -1.5); monitorHit.userData = {action: {type: 'session-plain'}, id: 'session:monitor', target: st.monitor}; core.add(monitorHit); s.pickables.push(monitorHit);
@@ -68,7 +69,8 @@ export function buildCockpit(s) {
     const plate = textPlane(1.64, 0.5, (c, w, h, state) => {
       const k = state?.state || 'next', color = k === 'done' ? '#3dffc5' : k === 'now' ? '#d9c0ff' : '#8f7cb8';
       roundRect(c, 3, 3, w - 6, h - 6, h * 0.4); c.fillStyle = 'rgba(9,4,22,.95)'; c.fill(); c.lineWidth = 3; c.strokeStyle = color; c.stroke();
-      c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = k === 'next' ? '#cbbce8' : '#fff'; fit(c, `${i + 1} · ${label}`, w * 0.9, h * 0.5, 800); c.fillText(`${i + 1} · ${label}`, w / 2, h / 2 + 1);
+      const name = `${i + 1} · ${state?.label || label}`;
+      c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = k === 'next' ? '#cbbce8' : '#fff'; fit(c, name, w * 0.9, h * 0.5, 800); c.fillText(name, w / 2, h / 2 + 1);
     }, {px: 150});
     plate.mesh.position.set(chX(i), 3.08, -1.28); core.add(plate.mesh); plate.surface.redraw({state: 'next'});
     const hit = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 4.0), m.hit); hit.position.set(chX(i), 4.75, -1.2); hit.userData = {action: {type: 'session-stage', index: i}, id: `stage:${i}`, target: plate}; core.add(hit); s.pickables.push(hit);
@@ -191,7 +193,7 @@ export function buildCockpit(s) {
   const audioOf = o => { const a = delivery(o).filter(f => f.mime.startsWith('audio/')).slice().reverse(); return a.filter(f => f.mime === 'audio/mpeg').concat(a.filter(f => f.mime !== 'audio/mpeg')); };
   st.audioFile = () => audioOf(st.order)[0] || null;
   const talkAll = o => (o?.history || []).filter(h => who(h.actor) !== 'system' && !UPLOAD_NOTE.test(h.note) && Number(h.visible ?? 1) !== 0);
-  const talkList = o => talkAll(o).slice(-3).map(h => ({who: who(h.actor), text: who(h.actor) === 'me' ? h.note.replace(/^Comentario del cliente:\s*/, '') : h.note, when: ago(parseDate(h.created_at))}));
+  const talkList = o => talkAll(o).slice(-3).map(h => ({who: who(h.actor), text: (who(h.actor) === 'me' ? h.note.replace(/^Comentario del cliente:\s*/, '') : h.note).slice(0, 500), when: ago(parseDate(h.created_at))}));
   const studioCount = o => (o?.history || []).filter(h => who(h.actor) === 'studio' && !UPLOAD_NOTE.test(h.note)).length;
   const seenKey = o => 'fhb-seen-' + o.reference;
   st.markSeen = () => { if (!st.order) return; try { sessionStorage.setItem(seenKey(st.order), String(studioCount(st.order))); } catch { /* ok */ } st.redrawMsgs(); };
@@ -211,10 +213,11 @@ export function buildCockpit(s) {
       hit.userData.action = extra ? {type: 'session-plain'} : f ? {type: 'session-file', id: f.id} : null;
     });
   };
-  st.redrawMonitor = () => st.monitor.surface.redraw({order: st.order && {reference: st.order.reference, status: st.order.status, productName: st.order.product_name, production_stage: st.order.production_stage}, hint: st.hint});
+  st.redrawMonitor = () => st.monitor.surface.redraw({order: st.order && {reference: st.order.reference, status: st.order.status, productName: st.order.product_name, production_stage: st.order.production_stage, product_code: st.order.product_code}, hint: st.hint});
   st.setOrder = o => {
-    st.order = o || null; const next = sigOf(o); if (next === sig) return; sig = next;
-    const states = channelStates(o); st.channels.forEach((ch, i) => { if (ch.state !== states[i]) { ch.state = states[i]; ch.plate.surface.redraw({state: states[i]}); } });
+    st.order = o || null; if ((o?.reference || '') !== (st.refKey || '')) { st.refKey = o?.reference || ''; st.upload = {active: 0, progress: 0}; }
+    const next = sigOf(o); if (next === sig) return; sig = next;
+    const states = channelStates(o), names = shortFor(o); st.channels.forEach((ch, i) => { if (ch.state !== states[i] || ch.name !== names[i]) { ch.state = states[i]; ch.name = names[i]; ch.plate.surface.redraw({state: states[i], label: names[i]}); } });
     st.redrawMonitor(); st.redrawBoard(); st.redrawMsgs(); st.redrawPad();
     const audio = audioOf(o)[0], cover = delivery(o).filter(f => f.mime.startsWith('image/')).pop();
     st.hasSong = !!audio; st.refreshPlay(); st.redrawNow();
