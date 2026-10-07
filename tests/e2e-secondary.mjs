@@ -9,6 +9,7 @@ const expect = (c, m) => { if (!c) throw new Error(m); };
 const order = {reference: 'FHB-TEST1', status: 'in_production', production_stage: 2, product_name: 'Canción Personalizada', product_code: 'personalizada', amount_in_cents: 12990000,
   brief: {story: 'Recordamos aquel viaje a la playa.'}, files: [], history: [{created_at: '2026-09-14 10:00:00', note: 'Pago confirmado. Empezamos la letra.'}], product: {listening: true}};
 const json = body => r => r.fulfill({status: 200, contentType: 'application/json', body: JSON.stringify(body)});
+await page.route('**/api.php?action=checkout', r => r.fulfill({status: 503, contentType: 'application/json', body: JSON.stringify({error: 'Los pagos aún no están disponibles.'})}));
 await page.route('**/api.php?action=orders', r => r.fulfill({status: 201, contentType: 'application/json', body: JSON.stringify({order})}));
 await page.route('**/api.php?action=order&*', json({order}));
 await page.route('**/api.php?action=my-orders', json({orders: [{reference: order.reference, status: order.status, product_name: order.product_name, amount_in_cents: order.amount_in_cents}]}));
@@ -46,5 +47,5 @@ await step('checkout submits and lands in the session (mocked server)', async ()
   await page.click('#next'); await t.settle(3.5); expect((await t.state()).view === 'session', 'no session'); await t.shot('e1-after-order');
 });
 
-t.log.errors = t.log.errors.filter(e => !/api\.php/.test(e));
+t.log.errors = t.log.errors.filter(e => !/api\.php|status of 503/.test(e));
 await b.close(); finish(t.log);

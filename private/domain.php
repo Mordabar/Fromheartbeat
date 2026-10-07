@@ -19,7 +19,7 @@ function notifyOrder(array $o,string $subject,string $message,string $key):void 
  enqueue($key.':team',env('TEAM_EMAIL'),$subject,"Pedido {$o['reference']}\n$message\nRevisar en ".appUrl('/admin.html'));
 }
 function orderView(array $o,bool $isAdmin=false):array {
- $o['brief']=json_decode($o['brief'],true); unset($o['idempotency_key'],$o['request_hash'],$o['token_hash']);
+ $o['brief']=json_decode($o['brief'],true); unset($o['idempotency_key'],$o['request_hash'],$o['token_hash']); if(!$isAdmin)unset($o['requires_attention']);
  $o['customer']=customerFor($o); $o['product']=catalog()[$o['product_code']];
  $o['history']=sql('SELECT status,stage,note,actor,created_at'.($isAdmin?',visible':'').' FROM order_history WHERE order_id=?'.($isAdmin?'':' AND visible=1').' ORDER BY id',[$o['id']])->fetchAll();
  $o['files']=sql('SELECT id,original_name,mime,size_bytes,kind,created_at FROM deliverables WHERE order_id=? ORDER BY id',[$o['id']])->fetchAll();

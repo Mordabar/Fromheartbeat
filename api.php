@@ -34,11 +34,12 @@ try {
   foreach($orders as $o)notifyJourney($o,'recover',[],'recover:'.$o['reference'].':'.intdiv(time(),3600));
   jsonResponse(['message'=>'Si hay sesiones activas con ese correo, recibirás sus enlaces privados.']);
  }
- if($action==='order'&&$method==='GET'){$o=accessOrder((string)($_GET['reference']??''));$last=$_SESSION['synced'][$o['reference']]??0;if(in_array($o['status'],['created','payment_pending'],true)&&time()-$last>=4){$_SESSION['synced'][$o['reference']]=time();try{$o=syncPayments($o);}catch(Throwable $e){error_log('FHB sync '.$e->getMessage());}}jsonResponse(['order'=>orderView($o)]);}
- if($action==='my-orders'&&$method==='GET'){$refs=array_keys($_SESSION['orders']??[]);$rows=$refs?sql('SELECT reference,product_name,amount_in_cents,status,production_stage,created_at FROM orders WHERE reference IN ('.implode(',',array_fill(0,count($refs),'?')).') ORDER BY id DESC',$refs)->fetchAll():[];jsonResponse(['orders'=>$rows]);}
+ if($action==='order'&&$method==='GET'){$o=accessOrder((string)($_GET['reference']??''));$last=$_SESSION['synced'][$o['reference']]??0;if(in_array($o['status'],['created','payment_pending'],true)&&time()-$last>=4){$_SESSION['synced'][$o['reference']]=time();session_write_close();try{$o=syncPayments($o);}catch(Throwable $e){error_log('FHB sync '.$e->getMessage());}}jsonResponse(['order'=>orderView($o)]);}
+ if($action==='my-orders'&&$method==='GET'){$refs=array_keys($_SESSION['orders']??[]);$rows=$refs?sql('SELECT reference,product_code,product_name,amount_in_cents,status,production_stage,created_at FROM orders WHERE reference IN ('.implode(',',array_fill(0,count($refs),'?')).') ORDER BY id DESC',$refs)->fetchAll():[];jsonResponse(['orders'=>$rows]);}
  if($action==='checkout'&&$method==='POST'){$in=input();jsonResponse(checkout(accessOrder(field($in,'reference',1,40))));}
  if($action==='reconcile'&&$method==='POST') {
-  rate('reconcile',30,900);$in=input();$o=accessOrder(field($in,'reference',1,40));$t=fetchTransaction(field($in,'transaction',1,100));
+  rate('reconcile',30,900);$in=input();$o=accessOrder(field($in,'reference',1,40));session_write_close(); // the session lock must not wait for Wompi
+  $t=fetchTransaction(field($in,'transaction',1,100));
   need((bool)sql('SELECT id FROM payment_attempts WHERE reference=? AND order_id=?',[$t['reference'],$o['id']])->fetch(),'La transacción no pertenece a esta sesión.',403);
   applyPayment($t,hash('sha256','reconcile:'.$t['id'].':'.$t['status']));jsonResponse(['ok'=>true]);
  }
@@ -98,9 +99,10 @@ try {
  }
  if($action==='file'&&$method==='GET') {
   $f=sql('SELECT d.*,o.reference FROM deliverables d JOIN orders o ON o.id=d.order_id WHERE d.id=?',[(int)($_GET['id']??0)])->fetch();need((bool)$f,'Archivo no encontrado.',404);accessOrder($f['reference']);$path=storage().'/'.$f['storage_name'];need(is_file($path),'Archivo no disponible.',404);
-  session_write_close();header('Content-Type: '.$f['mime']);header('Accept-Ranges: bytes');header_remove('Pragma');header_remove('Expires');header('Cache-Control: private, max-age=3600');header("Content-Disposition: ".(isset($_GET['download'])?'attachment':'inline')."; filename*=UTF-8''".rawurlencode($f['original_name']));
+  session_write_close();header('Content-Type: '.$f['mime']);header('Accept-Ranges: bytes');header("Content-Disposition: ".(isset($_GET['download'])?'attachment':'inline')."; filename*=UTF-8''".rawurlencode($f['original_name']));
   $size=filesize($path);$start=0;$end=$size-1;
   if(isset($_SERVER['HTTP_RANGE'])){need((bool)preg_match('/^bytes=(\d*)-(\d*)$/',$_SERVER['HTTP_RANGE'],$m),'Rango inválido.',416);if($m[1]===''){$start=max(0,$size-(int)$m[2]);}else{$start=(int)$m[1];if($m[2]!=='')$end=min($end,(int)$m[2]);}need($start<=$end&&$start<$size,'Rango inválido.',416);http_response_code(206);header("Content-Range: bytes $start-$end/$size");}
+  header_remove('Pragma');header_remove('Expires');header('Cache-Control: private, max-age=3600');
   header('Content-Length: '.($end-$start+1));$fp=fopen($path,'rb');fseek($fp,$start);$left=$end-$start+1;while($left>0&&!feof($fp)){ $chunk=fread($fp,min(65536,$left));echo $chunk;$left-=strlen($chunk);}fclose($fp);exit;
  }
  throw new HttpError(404,'Ruta no encontrada.');

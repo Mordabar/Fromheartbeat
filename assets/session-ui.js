@@ -74,7 +74,7 @@ export function sessionMarkup(o, {esc, money, ic, boot, testCard, now = Date.now
   // 2. The production line: six stages, the current one lit, each in plain words.
   const line = `<section class="s-line" aria-label="Avance de tu canción"><h2 class="s-h"><span>En qué punto estamos</span><b>${dead ? 'Sin avance' : pending ? 'Aún no empieza' : o.status === 'completed' ? 'Completado' : `Etapa ${stage + 1} de 6`}</b></h2>
     <div class="s-meter" role="img" aria-label="${dead ? 'La sesión fue cancelada' : pending ? 'La producción aún no empieza' : `Etapa ${stage + 1} de 6: ${SI[stage][0]}`}">${STAGE_INFO.map((_, i) => `<i class="${o.status === 'completed' || (!pending && i < stage) ? 'on' : !pending && i === stage ? 'now' : ''}"></i>`).join('')}</div>
-    <ol class="s-stages">${STAGE_INFO.map(([name, text], i) => {
+    <ol class="s-stages">${SI.map(([name, text], i) => {
       const state = o.status === 'completed' || (!pending && i < stage) ? 'done' : !pending && i === stage ? 'now' : 'next';
       return `<li class="${state}"${state === 'now' ? ' aria-current="step"' : ''}><span class="s-dot" aria-hidden="true">${state === 'done' ? ic('check') : i + 1}</span><div><b>${esc(name)}</b><small>${state === 'now' ? esc(o.status === 'review' && i === 5 ? 'Escucha tu canción y dinos si cambiarías algo.' : text) : state === 'done' ? 'Listo' : 'Pronto'}</small></div></li>`;
     }).join('')}</ol></section>`;
