@@ -8,7 +8,7 @@ export const OCCASIONS = ['Aniversario', 'Cumpleaños', 'Declaración de amor', 
 export const BANK_COLOR = {'Latino': '#ff8a3d', 'Pop y rock': '#ff4fd8', 'Urbano': '#22e4ff', 'Electrónica': '#a78bff', 'Raíces y más': '#ffd23f', 'Sin decidir': '#3dffc5'};
 export const BANK_LABEL = {'Latino': 'Latino', 'Pop y rock': 'Pop / Rock', 'Urbano': 'Urbano', 'Electrónica': 'Electro', 'Raíces y más': 'Raíces', 'Sin decidir': 'Libre'};
 export const PRODUCT_COLOR = {dedicatoria: '#9b5cff', personalizada: '#ff4fd8', full: '#22e4ff'};
-export const PRODUCT_POINTS = {dedicatoria: ['Creación digital con IA', 'Entrega más rápida'], personalizada: ['Cantante real', '1 ronda de ajustes'], full: ['Canción + video', 'Presentación especial']};
+export const PRODUCT_POINTS = {dedicatoria: ['Grabada por artistas', 'Entrega más rápida'], personalizada: ['Cantante real', '1 ronda de ajustes'], full: ['Canción + video', 'Presentación especial']};
 export const PRODUCT_TAG_INDEX = {dedicatoria: '01 · ESENCIAL', personalizada: '02 · SIGNATURE', full: '03 · CINEMA'};
 
 // Everything the 3D studio needs, from the server bootstrap.

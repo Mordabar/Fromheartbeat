@@ -120,9 +120,11 @@ for (const f of files) {
 const read = n => { const p = path.join(dir, n + '.html'); return fs.existsSync(p) ? fs.readFileSync(p, 'utf8') + '\n' + fs.readFileSync(path.join(dir, n + '.txt'), 'utf8') : null; };
 const must = (n, re, why) => { const t = read(n); if (t === null) return; if (!re.test(t)) failures.push(`${n}: contrato roto, debe contener ${re}: ${why}`); };
 const mustNot = (n, re, why) => { const t = read(n); if (t === null) return; if (re.test(t)) failures.push(`${n}: contrato roto, NO debe contener ${re}: ${why}`); };
-const AI_PROMISES = /cantante|dirección humana|mezcla y master|masterizamos|master final|revisado por el equipo|sin plantillas|ronda de ajustes|rondas de ajustes|qué cambiarías/i;
-for (const n of ['received-dedicatoria', 'paid-dedicatoria', 'production-ai-2', 'production-ai-4', 'review-dedicatoria', 'completed-dedicatoria']) mustNot(n, AI_PROMISES, 'Dedicatoria es el producto con IA: no promete cantante, master ni cambios');
-must('production-ai-2', /con IA/, 'transparencia: es un flujo con IA');
+const AI_PROMISES = /mezcla y master|masterizamos|master final|revisado por el equipo|sin plantillas|ronda de ajustes|rondas de ajustes|qué cambiarías/i;
+for (const n of ['received-dedicatoria', 'paid-dedicatoria', 'production-express-2', 'production-express-4', 'review-dedicatoria', 'completed-dedicatoria']) mustNot(n, AI_PROMISES, 'Dedicatoria es el paquete esencial: no promete master ni rondas de cambios');
+must('production-express-2', /artistas/, 'la Dedicatoria la graban artistas');
+const NO_AI = /\bIA\b|inteligencia artificial|creación digital|flujo (de creación )?digital/i;
+for (const f of fs.readdirSync(dir).filter(x => x.endsWith('.html') && fs.existsSync(path.join(dir, x.replace('.html', '.txt'))))) mustNot(f.replace('.html', ''), NO_AI, 'ningún correo menciona IA ni «creación digital»');
 must('review-full', /1 ronda de ajustes para la canción y 1 para el video/, 'Full tiene dos rondas');
 must('production-full-nosources', /Aún falta tu material para el video[\s\S]*Subir mis fotos y clips/, 'sin material, Full lo pide');
 mustNot('production-full-sources', /Aún falta tu material/, 'con material no se vuelve a pedir');

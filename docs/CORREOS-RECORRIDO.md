@@ -28,7 +28,7 @@ Las notas internas (las que no son visibles para el cliente) **nunca** se envía
 
 ## Qué se promete en cada producto
 El texto depende del producto y nunca promete lo que no incluye:
-- **Dedicatoria Musical** (flujo digital con IA): no menciona cantante real, mezcla, master ni rondas de ajuste.
+- **Dedicatoria Musical** (paquete esencial, grabada por nuestros artistas): no promete mezcla, master ni rondas de ajuste.
 - **Canción Personalizada / Full Experience:** voces reales, mezcla y master; rondas de ajuste leídas del catálogo
   (Full: 1 para la canción y 1 para el video; si todavía no subió fotos y clips, el correo se los pide).
 - **Empresas (Jingle / Campaign Sound):** recorrido de 6 pasos (Brief, Propuesta, Pago, Estudio, Revisión, Entrega).

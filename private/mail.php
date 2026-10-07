@@ -55,8 +55,8 @@ function mailOrphan(string $escaped): string { return (string)preg_replace('/ (\
 function mailThin(int $h): string { return 'font-size:1px;line-height:'.$h.'px;mso-line-height-rule:exactly;'; }
 
 // ---------------------------------------------------------------- product knowledge (copy must never promise what the product does not include)
-/** 'ai' = Dedicatoria Musical (digital/AI flow, no human singer, no master); 'studio' = singer + mix/master; 'business' = jingle/campaign. */
-function mailProductKind(array $o): string { return $o['audience']==='business'?'business':(($o['product_code']??'')==='dedicatoria'?'ai':'studio'); }
+/** 'express' = Dedicatoria Musical (essential package: MP3 + cover, no mix/master or adjustment round promised); 'studio' = singer + mix/master; 'business' = jingle/campaign. */
+function mailProductKind(array $o): string { return $o['audience']==='business'?'business':(($o['product_code']??'')==='dedicatoria'?'express':'studio'); }
 /** Adjustment rounds the package really includes, read from the catalog text ("1 ronda de ajustes", "2 rondas…"). */
 function mailRounds(array $o): int { foreach(($o['product']['features']??[]) as $f)if(preg_match('/(\d+)\s+rondas?\s+de\s+ajustes/iu',(string)$f,$m))return (int)$m[1];return 0; }
 /** Full Experience inherits the song round of Canción Personalizada and adds one for the video (see catalog FAQ). */
@@ -68,23 +68,23 @@ function mailJourney(array $o): array {
  return $o['audience']==='business'?['Brief','Propuesta','Pago','Estudio','Revisión','Entrega']:['Historia','Pago','Producción','Revisión','Entrega'];
 }
 function mailStatusLabel(string $s): string { return ['created'=>'Sesión guardada','payment_pending'=>'Confirmando el pago','paid'=>'Pago confirmado','in_production'=>'En producción','review'=>'En revisión','completed'=>'Tu canción está lista','cancelled'=>'Sesión cancelada'][$s]??'En curso'; }
-function mailStageNames(string $pk): array { return $pk==='ai'?[1=>'Letra',2=>'Composición',3=>'Pulido',4=>'Revisión final']:[1=>'Letra',2=>'Grabación',3=>'Arreglos',4=>'Mezcla y master']; }
+function mailStageNames(string $pk): array { return $pk==='express'?[1=>'Letra',2=>'Grabación',3=>'Producción',4=>'Revisión final']:[1=>'Letra',2=>'Grabación',3=>'Arreglos',4=>'Mezcla y master']; }
 function mailStageCopy(int $stage,string $pk): array { // [title, preheader, lead]
- $biz=$pk==='business';$ai=$pk==='ai';
+ $biz=$pk==='business';$express=$pk==='express';
  return match($stage){
   1=>$biz?['Estamos escribiendo *la letra.*','Concepto y letra a partir del brief de tu marca.','Leímos el brief de tu marca y lo estamos convirtiendo en el concepto y la letra de tu pieza.']
      :['Estamos escribiendo *tu letra.*','Cada verso nace de lo que nos contaste.','Leímos tu historia con calma y la estamos convirtiendo en versos que suenen a ustedes: sus palabras, sus detalles, su manera de decir las cosas.'],
   2=>$biz?['Tu pieza *está en cabina.*','Las voces y los instrumentos ya están sonando.','Estamos grabando las voces y los instrumentos de tu pieza.']
-     :($ai?['Tu canción *empieza a sonar.*','Estamos componiendo la música y la voz.','Con tu letra lista, estamos componiendo la música y la voz de tu canción con nuestro flujo de creación digital con IA.']
+     :($express?['Tu canción *está en cabina.*','Nuestros artistas ya la están grabando.','Con tu letra lista, nuestros artistas están grabando tu canción.']
      :['Tu canción *está en cabina.*','Las voces y los instrumentos ya están sonando.','Tu letra ya tiene melodía. Estamos grabando las voces y los instrumentos que le dan vida a tu historia.']),
   3=>$biz?['Tu pieza *toma forma.*','Arreglos, ritmo y capas alrededor de tu marca.','Estamos armando los arreglos, el ritmo y las capas que sostienen la identidad sonora de tu marca.']
-     :($ai?['Tu canción *toma forma.*','Revisamos y ajustamos la composición.','Estamos revisando la composición y ajustándola para que se sienta completa y suene como la imaginaste.']
+     :($express?['Tu canción *toma forma.*','Le damos carácter y sonido final.','Estamos produciendo tu canción para que se sienta completa y suene como la imaginaste.']
      :['Tu canción *toma forma.*','Ritmo, arreglos y capas alrededor de tu historia.','Estamos armando los arreglos, las capas y el ritmo que sostienen tu canción. Ya se empieza a sentir completa.']),
   4=>$biz?['Afinando *los últimos detalles.*','Mezcla, master y preparación de tus archivos.','Equilibramos cada voz y cada instrumento, damos el master final y preparamos los archivos de entrega.']
-     :($ai?['Última *revisión de calidad.*','Antes de entregarte tu canción.','Hacemos una última revisión de calidad para que tu MP3 y tu portada lleguen listos para compartir.']
+     :($express?['Última *revisión de calidad.*','Antes de entregarte tu canción.','Hacemos una última revisión de calidad para que tu MP3 y tu portada lleguen listos para compartir.']
      :['Afinando *los últimos detalles.*','Mezcla y master: el pulido final.','Equilibramos cada voz y cada instrumento y damos el master final para que suene increíble en cualquier parlante.']),
   5=>$biz?['Preparando *tu entrega.*','Dejamos listos los archivos finales de tu pieza.','Estamos dejando listos los archivos finales de tu pieza para subirlos a tu sesión.']
-     :($ai?['Preparando *tu entrega.*','Tu MP3 y tu portada están por llegar.','Estamos dejando listos tu MP3 y tu portada para subirlos a tu sesión.']
+     :($express?['Preparando *tu entrega.*','Tu MP3 y tu portada están por llegar.','Estamos dejando listos tu MP3 y tu portada para subirlos a tu sesión.']
      :['Preparando *tu entrega.*','Tu canción ya casi está en tus manos.','Tu canción está terminada. Estamos dejando listos los archivos finales para subirlos a tu sesión.']),
   default=>[$biz?'Tu pieza *sigue en marcha.*':'Tu sesión *sigue en marcha.*','Seguimos trabajando en tu canción.','Tu sesión sigue avanzando en el estudio. Aquí tienes cómo va.']
  };
@@ -93,10 +93,10 @@ function mailStageCopy(int $stage,string $pk): array { // [title, preheader, lea
 function mailStageNext(int $stage,string $pk): ?array {
  $t=[
   'studio'=>[1=>['Lo que sigue: grabación','Cuando la letra esté lista, pasa a cabina para grabar las voces. Si recuerdas un detalle que falte (un apodo, una fecha), cuéntalo desde tu sesión.'],2=>['Lo que sigue: arreglos','Con las voces grabadas, armamos los arreglos y las capas de producción.'],3=>['Lo que sigue: mezcla y master','Cuando la producción esté lista, equilibramos y masterizamos. Después podrás escuchar tu primera versión.'],4=>['Lo que sigue: tu primera escucha','Al terminar el master subimos una versión a tu sesión y te escribimos para que la escuches.']],
-  'ai'=>[1=>['Lo que sigue: composición','Con tu letra lista, creamos la música y la voz con nuestro flujo de creación digital con IA. ¿Falta un detalle? Cuéntalo desde tu sesión.'],2=>['Lo que sigue: pulido','Revisamos la composición y la ajustamos para que suene como la imaginaste.'],3=>['Lo que sigue: revisión final','Hacemos una última revisión de calidad de tu MP3 y tu portada.'],4=>['Lo que sigue: tu entrega','Subimos tu MP3 y tu portada a tu sesión y te avisamos por correo.']],
+  'express'=>[1=>['Lo que sigue: grabación','Con tu letra lista, nuestros artistas graban tu canción. ¿Falta un detalle? Cuéntalo desde tu sesión.'],2=>['Lo que sigue: producción','Con la grabación lista, producimos el sonido final de tu canción.'],3=>['Lo que sigue: revisión final','Hacemos una última revisión de calidad de tu MP3 y tu portada.'],4=>['Lo que sigue: tu entrega','Subimos tu MP3 y tu portada a tu sesión y te avisamos por correo.']],
   'business'=>[1=>['Lo que sigue: grabación','Cuando la letra esté lista, grabamos las voces y los instrumentos de tu pieza.'],2=>['Lo que sigue: arreglos','Con las grabaciones listas, armamos los arreglos y las capas.'],3=>['Lo que sigue: mezcla y master','Mezcla, master y preparación de tus adaptaciones.'],4=>['Lo que sigue: tu revisión','Subimos una versión a tu sesión para que la revises y nos cuentes qué ajustarías.'],5=>['Lo que sigue: tu entrega','Cuando los archivos estén listos, te avisamos por correo y los descargas desde tu sesión.']],
  ];
- foreach(['studio','ai'] as $k)$t[$k][5]=['Lo que sigue: tu entrega','Cuando los archivos estén listos, te avisamos por correo y los descargas desde tu sesión.'];
+ foreach(['studio','express'] as $k)$t[$k][5]=['Lo que sigue: tu entrega','Cuando los archivos estén listos, te avisamos por correo y los descargas desde tu sesión.'];
  return $t[$pk][$stage]??null;
 }
 function mailKindLabel(string $mime): string {
@@ -296,7 +296,7 @@ function mailModel(string $kind,array $o,array $c,array $ctx=[]): array {
  $trust=['trust'=>['Pago seguro con Wompi','Sin cuenta ni contraseña','Enlace privado y personal']];
  switch($kind){
   case 'received':
-   $craft=$pk==='ai'?'Letra y música con nuestro flujo de creación digital con IA.':'Letra, voces, producción y mezcla, con dirección humana en cada paso.';
+   $craft=$pk==='express'?'Letra y grabación con nuestros artistas, con dirección humana.':'Letra, voces, producción y mezcla, con dirección humana en cada paso.';
    if(($o['product_code']??'')==='full')$craft.=' Para tu video emocional, sube tus fotos y clips desde tu sesión.';
    $step1=$pay?['Completa el pago seguro','Con Wompi: tarjeta, PSE, Nequi y más. Tu historia queda guardada mientras tanto.']:['Te avisamos cuando abramos los pagos','Tu historia queda guardada. Te escribiremos apenas puedas completar el pago.'];
    $m+=['subject'=>'Tu historia ya está en el estudio · '.$ref,'preheader'=>$pay?'Guardamos tu sesión. Completa el pago para empezar a producir tu canción.':'Guardamos tu sesión. Te avisaremos cuando puedas completar el pago.','title'=>'Tu historia ya *está en el estudio.*'];
@@ -334,7 +334,7 @@ function mailModel(string $kind,array $o,array $c,array $ctx=[]): array {
   case 'paid':
    $full=($o['product_code']??'')==='full';
    $items=match($pk){
-    'ai'=>[['Escribimos tu letra','Con lo que nos contaste, a tu medida.'],['Creamos tu canción','Con nuestro flujo de creación digital con IA.'],['Te la entregamos en tu sesión','Tu MP3 y tu portada llegan ahí, y te avisamos por correo.']],
+    'express'=>[['Escribimos tu letra','Con lo que nos contaste, a tu medida.'],['Grabamos tu canción','La interpretan nuestros artistas.'],['Te la entregamos en tu sesión','Tu MP3 y tu portada llegan ahí, y te avisamos por correo.']],
     'business'=>[['Concepto y letra','A partir del brief de tu marca y la propuesta acordada.'],['Producción','Voces, arreglos, mezcla y master.'],['Revisión y entrega','Escuchas, nos cuentas y te entregamos los archivos con su licencia.']],
     default=>array_merge($full?[['Sube tus fotos y clips','Desde tu sesión, para que armemos el video emocional de tu Full Experience.']]:[],[['Escribimos tu letra','Con lo que nos contaste, a tu medida.'],['Producimos tu canción','Voces, arreglos, mezcla y master, con dirección humana.'],['Te avisamos en cada etapa','Y cuando esté lista para escuchar, te escribimos aquí.']])
    };
@@ -347,7 +347,7 @@ function mailModel(string $kind,array $o,array $c,array $ctx=[]): array {
   case 'production':
    [$title,$pre,$text]=mailStageCopy($stage,$pk);$staged=$stage>=1&&$stage<=5;$names=mailStageNames($pk)+[5=>'Entrega'];
    $m+=['subject'=>($staged?rtrim(strip_tags(str_replace('*','',$title)),'. '):'Novedades de tu canción').' · '.$ref,'preheader'=>$pre,'title'=>$title,'hero'=>'hero-production.jpg'];
-   if($staged&&($pk!=='ai'||$stage===1)&&mailHasAsset('hero-production-'.$stage.'.jpg'))$m['hero']='hero-production-'.$stage.'.jpg';
+   if($staged&&($pk!=='express'||$stage===1)&&mailHasAsset('hero-production-'.$stage.'.jpg'))$m['hero']='hero-production-'.$stage.'.jpg';
    $recap=mailRecapLine($o);$next=$staged?mailStageNext($stage,$pk):null;
    $isFull=($o['product_code']??'')==='full';$needsMaterial=$isFull&&isset($ctx['sources'])&&(int)$ctx['sources']===0;$gotMaterial=$isFull&&isset($ctx['sources'])&&(int)$ctx['sources']>0;
    $m['blocks']=array_values(array_filter([['lead'=>$lead($text)],$tracker($prod,false,$staged&&$stage<=4?['at'=>$stage-1,'count'=>4]:null,$staged?' · '.$names[$stage].($stage<=4?' ('.$stage.' de 4)':''):''),
@@ -361,7 +361,7 @@ function mailModel(string $kind,array $o,array $c,array $ctx=[]): array {
   case 'review':
    $rt=mailRoundsText($o);
    $adj=$rt!==''?'Tu paquete incluye '.$rt.': reúne todos tus comentarios y envíalos juntos.':'Escríbenos y lo revisamos contigo.';
-   if($pk==='ai'){
+   if($pk==='express'){
     $m+=['subject'=>'Tu canción ya se puede escuchar · '.$ref,'preheader'=>'Tu canción está en tu sesión, lista para escucharla con calma.','title'=>'Tu canción *ya se puede escuchar.*'];
     $intro=$lead('subimos tu canción a tu sesión privada. Escúchala con calma, mejor con audífonos.');
     $items=[['Abre tu sesión y dale play','Escúchala completa, sin prisa.'],['Si algo no te cuadra',$adj]];$cta='Escuchar mi canción';$rhint='No necesitas responder si todo suena bien.';
@@ -380,8 +380,8 @@ function mailModel(string $kind,array $o,array $c,array $ctx=[]): array {
    $where=($listening?'Tu Listening Room privado ya tiene '.($biz?'tu pieza':'tu canción').': está dentro de tu sesión.':'Tu entrega ya está en tu sesión.').' Escúchala y descarga tus archivos; guárdalos en un lugar seguro, porque tu enlace privado puede vencer.';
    $m+=['subject'=>($biz?'Tu pieza está lista · ':'Tu canción está lista · ').$ref,'preheader'=>'Ya puedes escucharla y descargarla desde tu sesión.','title'=>$biz?'Tu pieza *está lista.*':'Tu canción *está lista.*'];
    $isFull=($o['product_code']??'')==='full';$cLabel=$biz?'Escuchar y descargar mi pieza':($isFull?'Ver y descargar mi Full Experience':'Escuchar y descargar mi canción');
-   $m['blocks']=array_values(array_filter([['lead'=>$lead($biz?'tu pieza ya está terminada. Aquí tienes tus archivos y la licencia acordada.':($pk==='ai'?'tu canción ya está terminada: tu MP3 y tu portada están listos para compartir.':($isFull?'tu canción y tu video ya están terminados. Gracias por confiarnos una historia tan tuya: ahora es de ustedes.':'tu canción ya está terminada. Gracias por confiarnos una historia tan tuya: ahora es de ustedes.')))],$tracker($last,true),
-    ['cta'=>['label'=>$cLabel,'url'=>$url,'link'=>[$pk==='ai'?'¿Dudas con tu entrega? Escríbenos':'¿Algo que ajustar? Escríbenos','mailto:'.$support.'?subject='.rawurlencode('Sobre mi entrega · '.$ref)]]],
+   $m['blocks']=array_values(array_filter([['lead'=>$lead($biz?'tu pieza ya está terminada. Aquí tienes tus archivos y la licencia acordada.':($pk==='express'?'tu canción ya está terminada: tu MP3 y tu portada están listos para compartir.':($isFull?'tu canción y tu video ya están terminados. Gracias por confiarnos una historia tan tuya: ahora es de ustedes.':'tu canción ya está terminada. Gracias por confiarnos una historia tan tuya: ahora es de ustedes.')))],$tracker($last,true),
+    ['cta'=>['label'=>$cLabel,'url'=>$url,'link'=>[$pk==='express'?'¿Dudas con tu entrega? Escríbenos':'¿Algo que ajustar? Escríbenos','mailto:'.$support.'?subject='.rawurlencode('Sobre mi entrega · '.$ref)]]],
     $files?['files'=>['title'=>'Tu entrega','items'=>$files,'more'=>$more]]:null,
     $scope!==''?['note'=>['label'=>'Licencia acordada','text'=>$scope,'plain'=>true]]:null,
     $note!==''?['note'=>['label'=>'Mensaje del estudio','text'=>$note]]:null,['p'=>$where]]));
