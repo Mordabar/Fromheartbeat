@@ -15,11 +15,18 @@ const ic = (n, c = '') => `<svg class="u-ic ${c}" viewBox="0 0 24 24" aria-hidde
 const ICON_FOR = {image: 'image', video: 'video', audio: 'audio'};
 const kindOfMime = m => String(m).startsWith('image/') ? 'image' : String(m).startsWith('video/') ? 'video' : String(m).startsWith('audio/') ? 'audio' : 'other';
 
-const S = {saved: new Map(), items: [], seq: 0, mounts: new Set(), cfg: {maxFileBytes: 1024 * 1048576, maxFiles: 120, chunkBytes: 4194304}, ctx: {}, preset: DEFAULT_PRESET, doneTimers: new Map()};
+const S = {subs: new Set(), lastStat: new Map(), saved: new Map(), items: [], seq: 0, mounts: new Set(), cfg: {maxFileBytes: 1024 * 1048576, maxFiles: 120, chunkBytes: 4194304}, ctx: {}, preset: DEFAULT_PRESET, doneTimers: new Map()};
 try { const p = localStorage.getItem('fhb.preset'); if (p && PRESETS[p]) S.preset = p; } catch { /* sin almacenamiento */ }
 
 /** ctx: {getCsrf(), setCsrf(t), config, onFileDone(row), onBatchDone(ref)} */
 export function configure(ctx) { S.ctx = ctx; if (ctx.config) S.cfg = {...S.cfg, ...ctx.config}; }
+/** Live numbers for the 3D room: {ref, active, progress 0..1}. */
+export const stats = ref => {
+  const it = S.items.filter(i => i.ref === ref && ['queued', 'preparing', 'ready', 'uploading'].includes(i.status)); let sent = 0, total = 0;
+  for (const i of it) { total += i.file.size; sent += i.status === 'uploading' ? (i.sent / (i.out?.size || 1)) * i.file.size : i.status === 'preparing' ? i.prog * i.file.size * 0.5 : 0; }
+  return {ref, active: it.length, progress: total ? Math.min(1, sent / total) : 0};
+};
+export const subscribe = fn => { S.subs.add(fn); return () => S.subs.delete(fn); };
 export const busy = ref => S.items.some(i => (!ref || i.ref === ref) && ['queued', 'preparing', 'ready', 'uploading'].includes(i.status));
 
 // ------------------------------------------------------------------------------------------------------------ red
@@ -162,6 +169,7 @@ function emit(type) {
   if (raf) return;
   raf = requestAnimationFrame(() => {
     raf = 0; const t = pending; pending = 'progress';
+    for (const ref of new Set(S.items.map(i => i.ref).concat([...S.lastStat.keys()]))) { const n = stats(ref), o = S.lastStat.get(ref); if (!o || o.active !== n.active || Math.abs(o.progress - n.progress) >= 0.01) { S.lastStat.set(ref, n); S.subs.forEach(f => f(n)); } }
     for (const m of S.mounts) {
       if (!m.el.isConnected) { S.mounts.delete(m); continue; }
       if (t === 'structure') draw(m); else patch(m);

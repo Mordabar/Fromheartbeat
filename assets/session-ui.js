@@ -39,7 +39,8 @@ export const who = actor => actor === 'customer' ? 'me' : String(actor).startsWi
 export const QUICK_REPLIES = ['¡Me encanta! No cambiaría nada', 'Quisiera ajustar el ritmo', 'Quisiera cambiar una parte de la letra', 'Tengo una duda'];
 const QUICK_FOR = (o) => o.status === 'in_production' ? ['Tengo una duda', 'Quiero añadir un detalle a mi historia'] : o.product_code === 'dedicatoria' ? [QUICK_REPLIES[0], QUICK_REPLIES[3]] : QUICK_REPLIES;
 
-export function sessionMarkup(o, {esc, money, ic, boot, testCard, now = Date.now()}) {
+// `part` picks what to show: everything (the plain-text session), only the conversation, or only the material uploader.
+export function sessionMarkup(o, {esc, money, ic, boot, testCard, now = Date.now(), part = 'all'}) {
   const st = STATE[o.status] || STATE.created;
   // While the customer reviews or has received the song, the studio is at the last stage whatever the admin left selected.
   const stage = ['review', 'completed'].includes(o.status) ? 5 : Number(o.production_stage) || 0, dead = o.status === 'cancelled';
@@ -111,6 +112,8 @@ export function sessionMarkup(o, {esc, money, ic, boot, testCard, now = Date.now
   const upload = canSend ? `<section id="s-upload" class="s-card s-up"><h2 class="s-h"><span>${UP[0]}</span><b data-u-count>${UP[1]}</b></h2><p class="s-says">${UP[2]}</p>${uploaderHtml(o.reference, {role: 'customer', kind: 'source'})}</section>` : '';
   const story = `<details class="s-card s-story"><summary>${ic('heart')} Tu historia, tal como la contaste</summary><p>${esc(o.brief.story)}</p></details>`;
 
+  if (part === 'talk') return `<div class="s-wrap">${chat}</div>`;
+  if (part === 'files') return `<div class="s-wrap">${upload || '<p class="s-says">Podrás enviar tus archivos cuando el pago esté confirmado.</p>'}</div>`;
   // Order: what to do now → the song → progress → talk → extras.
   return `<div class="s-wrap">${hero}${o.status === 'review' || o.status === 'completed' ? room + line : line + room}${needsMaterial ? upload + chat : chat + upload}${story}</div>`;
 }

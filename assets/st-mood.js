@@ -34,6 +34,8 @@ class Orb {
 import {MOOD_ICON} from './icons.js';
 const MOOD_ICON_FOR = m => MOOD_ICON[m] || 'sparkle';
 
+const TICKET_ROWS = [['sliders', 'GÉNERO', 'genre'], ['sparkle', 'EMOCIÓN', 'mood'], ['mic', 'VOZ', 'voice'], ['heart', 'PARA', 'story'], ['star', 'EXPERIENCIA', 'products']];
+
 export function buildMood(s) {
   const stage = s.stage.group, m = s.m;
   const st = {group: new THREE.Group(), orbs: [], draft: null, view: 'lobby', appear: 0, ticketAppear: 0};
@@ -69,22 +71,31 @@ export function buildMood(s) {
     const bg = c.createLinearGradient(0, 0, 0, h); bg.addColorStop(0, '#221244'); bg.addColorStop(1, '#0d0620');
     roundRect(c, 8, 8, w - 16, h - 16, 40); c.fillStyle = bg; c.fill(); c.lineWidth = 6; c.strokeStyle = '#c6a2ff'; c.shadowColor = '#c6a2ff'; c.shadowBlur = 18; c.stroke(); c.shadowBlur = 0;
     c.textAlign = 'left'; c.textBaseline = 'middle';
-    c.fillStyle = '#a992d9'; c.font = `700 ${w * 0.042}px ${FONT.sans}`; c.fillText('FROMHEARTBEAT · TU SESIÓN', w * 0.1, h * 0.075);
-    c.setLineDash([10, 10]); c.strokeStyle = 'rgba(198,162,255,.4)'; c.lineWidth = 3; c.beginPath(); c.moveTo(w * 0.08, h * 0.115); c.lineTo(w * 0.92, h * 0.115); c.stroke(); c.setLineDash([]);
-    const rows = [['icon:sliders', 'SONIDO', [d.genre, d.mood].filter(Boolean).join(' · ') || '—'], ['icon:mic', 'VOZ', [d.voice, d.language, d.tempo].filter(Boolean).join(' · ') || '—'], ['icon:heart', 'PARA', [d.recipient, d.occasion].filter(Boolean).join(' · ') || '—'], ['icon:star', 'EXPERIENCIA', p ? p.name : '—']];
+    c.fillStyle = '#b9a6e6'; c.font = `800 ${w * 0.034}px ${FONT.sans}`; c.fillText('FROMHEARTBEAT · TOCA PARA CAMBIAR', w * 0.1, h * 0.075);
+    c.setLineDash([10, 10]); c.strokeStyle = 'rgba(198,162,255,.4)'; c.lineWidth = 3; c.beginPath(); c.moveTo(w * 0.08, h * 0.12); c.lineTo(w * 0.92, h * 0.12); c.stroke(); c.setLineDash([]);
+    // Every row is a button: touching it takes you to that step and brings you back here.
+    const rows = TICKET_ROWS.map(([ic, label, key]) => [ic, label, key === 'genre' ? d.genre : key === 'mood' ? d.mood : key === 'voice' ? [d.voice, d.language, d.tempo].filter(Boolean).join(' · ') : key === 'story' ? [d.recipient, d.occasion].filter(Boolean).join(' · ') : p ? p.name : '']);
     rows.forEach(([ic, label, value], i) => {
-      const y = h * (0.19 + i * 0.145);
-      drawIcon(c, ic.slice(5), w * 0.13, y + h * 0.01, w * 0.09, {color: '#c6a2ff', width: 1.9});
-      c.fillStyle = '#a992d9'; c.font = `700 ${w * 0.04}px ${FONT.sans}`; c.textAlign = 'left'; c.fillText(label, w * 0.22, y - h * 0.026);
-      c.fillStyle = '#f6efff'; fit(c, value, w * 0.7, w * 0.076, 700, FONT.sans, 20); c.fillText(value, w * 0.22, y + h * 0.03, w * 0.72);
+      const y = h * (0.185 + i * 0.118), hot = state?.hot === i;
+      roundRect(c, w * 0.07, y - h * 0.047, w * 0.86, h * 0.1, h * 0.03); c.fillStyle = hot ? 'rgba(198,162,255,.2)' : 'rgba(198,162,255,.07)'; c.fill(); c.lineWidth = 2; c.strokeStyle = hot ? 'rgba(198,162,255,.8)' : 'rgba(198,162,255,.22)'; c.stroke();
+      drawIcon(c, ic, w * 0.14, y, w * 0.085, {color: '#c6a2ff', width: 1.9});
+      c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillStyle = '#b9a6e6'; c.font = `800 ${w * 0.034}px ${FONT.sans}`; c.fillText(label, w * 0.22, y - h * 0.02);
+      c.fillStyle = '#ffffff'; fit(c, value || '—', w * 0.58, w * 0.066, 700, FONT.sans, 18); c.fillText(value || '—', w * 0.22, y + h * 0.017, w * 0.6);
+      drawIcon(c, 'pen', w * 0.865, y, w * 0.065, {color: hot ? '#ffffff' : '#c6a2ff', width: 2});
     });
-    c.setLineDash([10, 10]); c.strokeStyle = 'rgba(198,162,255,.4)'; c.beginPath(); c.moveTo(w * 0.08, h * 0.79); c.lineTo(w * 0.92, h * 0.79); c.stroke(); c.setLineDash([]);
+    c.setLineDash([10, 10]); c.strokeStyle = 'rgba(198,162,255,.4)'; c.beginPath(); c.moveTo(w * 0.08, h * 0.8); c.lineTo(w * 0.92, h * 0.8); c.stroke(); c.setLineDash([]);
     c.fillStyle = '#a992d9'; c.font = `700 ${w * 0.036}px ${FONT.sans}`; c.fillText('TOTAL', w * 0.1, h * 0.845);
     neonText(c, p ? p.priceText : '—', w * 0.9, h * 0.905, {size: w * 0.115, color: p ? (PRODUCT_COLOR[p.code] || '#c6a2ff') : '#c6a2ff', align: 'right', blur: 16, maxW: w * 0.8});
   }, {px: 130});
   st.ticket.mesh.position.set(0, 0, 2.2); st.ticket.mesh.position.y = -1.0; st.group.add(st.ticket.mesh); st.ticket.mesh.visible = false;
+  st.ticketRows = TICKET_ROWS.map(([, label, step], i) => {
+    const yc = (0.5 - (0.185 + i * 0.118 + 0.0) ) * 7.4, row = {step, hov: 0, label};
+    const hit = new THREE.Mesh(new THREE.PlaneGeometry(5.0, 0.76), s.m.hit); hit.position.set(0, yc, 0.04);
+    hit.userData = {action: {type: 'edit', step}, id: `ticket:${step}`, target: row}; st.ticket.mesh.add(hit); s.pickables.push(hit); row.hit = hit;
+    return row;
+  });
   const product = () => (s.content?.products || []).find(p => p.code === st.draft?.product);
-  st.redrawTicket = () => st.ticket.surface.redraw({draft: st.draft, product: product()});
+  st.redrawTicket = () => st.ticket.surface.redraw({draft: st.draft, product: product(), hot: st.hot});
 
   st.refreshMarquee = () => {
     const d = st.draft || {};
@@ -106,6 +117,8 @@ export function buildMood(s) {
     st.ticket.mesh.visible = st.ticketAppear > 0.02;
     st.ticket.mesh.scale.setScalar(0.85 + st.ticketAppear * 0.15); st.ticket.mesh.material.opacity = st.ticketAppear;
     st.ticket.mesh.position.y = -1.0 + Math.sin(t * 0.8) * 0.06;
+    const hot = st.ticketRows.findIndex(r => c.hovered === r);
+    if (hot !== (st.hot ?? -1) && st.view === 'checkout') { st.hot = hot; st.redrawTicket(); }
     st.group.position.y = 8.6 + s.stage.lift;
     st.plaque.mesh.visible = st.appear > 0.05; st.plaque.mesh.material.opacity = st.appear; st.plaque.mesh.scale.setScalar(0.9 + st.appear * 0.1);
     const hovered = c.hovered;

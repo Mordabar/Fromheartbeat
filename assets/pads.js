@@ -17,9 +17,10 @@ function drawPad(g, w, h, item) {
   if (item.badge) neonText(g, item.badge, w / 2, y, {size: size * 0.95, color: accent, blur: 12, maxW: w * 0.74});
   else drawIcon(g, item.icon, w / 2, y, size, {color: accent, width: 1.9, glow: 12});
   if (hasLabel) {
-    g.fillStyle = '#f4eeff'; g.textAlign = 'center'; g.textBaseline = 'middle';
-    fit(g, item.label, w - 20, Math.round(w * 0.165), 700, FONT.sans, 12);
-    g.fillText(item.label, w / 2, h * 0.84);
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    fit(g, item.label, w - 18, Math.round(w * 0.18), 800, FONT.sans, 12);
+    g.lineJoin = 'round'; g.lineWidth = Math.max(4, w * 0.026); g.strokeStyle = 'rgba(8,3,20,.92)'; g.strokeText(item.label, w / 2, h * 0.84);   // dark outline keeps it readable from afar
+    g.fillStyle = '#ffffff'; g.fillText(item.label, w / 2, h * 0.84);
   }
 }
 

@@ -15,7 +15,7 @@ body{height:100dvh;overflow:hidden}
 #reset-view .ico svg{width:16px;height:16px}
 
 /* --- caption: the question of the step, over the scene (no box) --- */
-.caption{position:fixed;z-index:9;left:0;right:0;top:calc(var(--header,60px) - 4px);padding:2px 20px 0;pointer-events:none;text-shadow:0 2px 16px #000d,0 0 2px #000a}
+.caption{position:fixed;z-index:9;left:0;right:0;top:calc(var(--header,60px) - 4px);padding:2px 20px 0;pointer-events:none;text-shadow:0 0 24px #07040f,0 0 10px #07040f,0 2px 16px #000d,0 0 2px #000a}
 .caption[hidden]{display:none}
 .cap-kicker{margin:0 0 4px;font-size:10px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:#dcc8f8}
 .cap-title{margin:0;font:500 clamp(24px,6.8vw,30px)/1.08 var(--serif);letter-spacing:-.4px;color:#fff}
@@ -59,7 +59,7 @@ body{height:100dvh;overflow:hidden}
  #options-dialog.expanded .opts.grid{grid-template-columns:repeat(3,minmax(0,1fr))}
  #options-dialog.expanded .products{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
  .caption{left:38px;right:auto;top:calc(var(--header,86px) + 4px);max-width:460px;padding:0}
- .cap-title{font-size:40px}.cap-kicker{font-size:11px}
+ .cap-title{font-size:40px;-webkit-text-stroke:.6px #07040f;paint-order:stroke fill}.cap-kicker{font-size:11px;color:#efe3ff}
  .reset-view{right:30px;bottom:auto;top:calc(var(--header,86px) - 6px)}
  .header nav .hud-link{width:auto;padding:0 16px}.header nav .nav-btn .lbl{display:inline}
  .journey{left:calc(50% - 20px);width:min(620px,calc(100% - 120px))}

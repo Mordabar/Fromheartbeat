@@ -166,3 +166,4 @@ body.editing #options-dialog .panel-head{min-height:0!important;padding:8px 14px
 /* very short screens: hero goes compact so its button is never cut */
 @media(max-height:620px){.s-hero{padding:14px 14px 12px;gap:4px 12px}.s-hero h1{font-size:21px;margin-bottom:4px}.s-badge{width:40px;height:40px}.s-says{font-size:13px}.s-hero-action{margin-top:4px}.s-wrap{gap:12px}.s-hero-action .primary,.s-wrap .primary.big{min-height:48px}}
 @media(max-height:620px){#options-dialog .session .panel-body{padding:8px 14px 16px}.s-hero{padding:12px}.s-hero h1{font-size:20px;line-height:1.1}.s-eyebrow{margin-bottom:2px}.s-meta{margin-top:2px}.s-hero-action{margin-top:2px}}
+.c-hint{display:flex;gap:10px;align-items:flex-start;margin:0 0 14px;padding:12px 14px;border-radius:14px;background:#c6a2ff14;border:1px solid #c6a2ff3d;font-size:13.5px;line-height:1.5;color:#e9defb}.c-hint .ic{flex:none;width:18px;height:18px;margin-top:2px;color:#c6a2ff}.c-hint b{color:#fff}

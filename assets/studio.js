@@ -9,7 +9,7 @@ import {RAD, ROOM_RADIUS} from './layout.js';
 export {MOODS};
 
 // Which station frames each view of the application.
-const STATION_OF = {lobby: 'stage', mood: 'stage', checkout: 'stage', genre: 'genre', voice: 'voice', story: 'story', products: 'products', samples: 'samples', session: 'session', recover: 'session', info: 'about', about: 'about', terms: 'about', privacy: 'about'};
+const STATION_OF = {lobby: 'stage', mood: 'stage', checkout: 'stage', genre: 'genre', voice: 'voice', story: 'story', products: 'products', samples: 'samples', session: 'cockpit', 'session-song': 'cockpit', 'session-talk': 'cockpit', 'session-files': 'cockpit', recover: 'session', info: 'about', about: 'about', terms: 'about', privacy: 'about'};
 
 export class Studio {
   constructor(canvas) {
@@ -70,6 +70,7 @@ export class Studio {
   setDraft(draft) { this.draft = draft; for (const st of Object.values(this.stations)) st.setDraft?.(draft); }
   setTracks(tracks) { this.tracks = tracks; this.stations.samples?.setTracks?.(tracks); }
   setPlaying(index) { this.playingIndex = index; this.stations.samples?.setPlaying?.(index); }
+  setOrderPlaying(on) { this.stations.cockpit?.setPlaying?.(on); }
   tone(mood) { this.accentTarget.set(MOODS[mood] || MOODS.Emotiva); }
   pulse(strength = 1) { this.kick = Math.max(this.kick, strength); }
   // A few sparks where the visitor touched (accent colour unless told otherwise).
@@ -78,7 +79,7 @@ export class Studio {
   celebrate() { this.celebrating = true; this.pulse(1); }
   fireCelebration() {
     // Waits for the camera to arrive, then erupts where the visitor is looking (terminal in a session, the logo elsewhere).
-    const at = this.view === 'session' ? this.stations.session.group.localToWorld(new THREE.Vector3(0, 6.4, 0.5)) : this.stage.group.localToWorld(new THREE.Vector3(0, 8.6, 3));
+    const at = this.view.startsWith('session') ? new THREE.Vector3(0, 10, -8) : this.stage.group.localToWorld(new THREE.Vector3(0, 8.6, 3));
     for (const c of [this.accent, new THREE.Color(0xff4fd8), new THREE.Color(0x22e4ff), new THREE.Color(0xffd23f)]) this.fx.emit(at, c, {count: this.mobile ? 30 : 48, speed: 6.5, ring: true, up: 1.2});
   }
   // The rectangle of the screen that is not covered by HUD or drawer: the subject is centred inside it.

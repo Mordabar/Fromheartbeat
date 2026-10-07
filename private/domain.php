@@ -142,5 +142,6 @@ function checkout(array $o):array {
  $params=['public-key'=>env('WOMPI_PUBLIC_KEY'),'currency'=>'COP','amount-in-cents'=>(int)$o['amount_in_cents'],'reference'=>$a['reference'],'signature:integrity'=>integrity($a['reference'],(int)$o['amount_in_cents'],'COP',env('WOMPI_INTEGRITY_SECRET'))];
  // Wompi's edge rejects checkouts whose return URL is not public HTTPS (e.g. local http://127.0.0.1), so only send it then.
  if(str_starts_with(appUrl(),'https://'))$params['redirect-url']=appUrl('/?session='.$o['reference']);
- return ['url'=>'https://checkout.wompi.co/p/?'.http_build_query($params),'reference'=>$o['reference']];
+ // 'widget' lets the page open Wompi's secure window on top of the studio (no redirect); 'url' is the fallback.
+ return ['url'=>'https://checkout.wompi.co/p/?'.http_build_query($params),'reference'=>$o['reference'],'widget'=>['currency'=>'COP','amountInCents'=>(int)$o['amount_in_cents'],'reference'=>$a['reference'],'publicKey'=>env('WOMPI_PUBLIC_KEY'),'signature'=>['integrity'=>$params['signature:integrity']]]];
 }

@@ -27,8 +27,8 @@ export function buildConsole(s) {
 
   // Bank buttons on an upright strip in front of the desk
   st.strip = new THREE.Group(); g.add(st.strip);
-  box(st.strip, 9.4, 1.9, 0.16, m.dark, 0, 0, -0.06);
-  neonFrame(st.strip, 9.5, 2.0, m.neon, 0.035, 0.04);
+  box(st.strip, 9.6, 2.9, 0.16, m.dark, 0, -0.5, -0.06);       // tall enough to hold the knobs AND their labels
+  neonFrame(st.strip, 9.7, 3.0, m.neon, 0.035, 0.04); st.strip.children.slice(-4).forEach(f => { f.position.y -= 0.5; });
 
   // Pads
   st.board = new PadBoard(s, {kind: 'genre', capacity: 12, padW: 2.0, padH: 2.0, gap: 0.2});
@@ -40,7 +40,7 @@ export function buildConsole(s) {
     const bg = c.createLinearGradient(0, 0, w, h); bg.addColorStop(0, '#1c0f3a'); bg.addColorStop(1, '#0b0620'); c.fillStyle = bg; c.fillRect(0, 0, w, h);
     c.fillStyle = 'rgba(160,110,255,.07)'; for (let y = 0; y < h; y += 6) c.fillRect(0, y, w, 1.5);
     if (!state?.genre) {
-      c.fillStyle = '#a992d9'; c.font = `700 ${h * 0.11}px ${FONT.sans}`; c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillText('CONSOLA · PASO 1 DE 6', w * 0.05, h * 0.24);
+      c.fillStyle = '#cbb8f2'; c.font = `800 ${h * 0.12}px ${FONT.sans}`; c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillText('CONSOLA · PASO 1 DE 6', w * 0.05, h * 0.24);
       neonText(c, '¿Qué género te mueve?', w * 0.05, h * 0.62, {size: h * 0.36, color: '#d5bcff', align: 'left', blur: 18, maxW: w * 0.9});
       return;
     }

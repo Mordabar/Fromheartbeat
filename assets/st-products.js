@@ -98,7 +98,7 @@ export function buildProducts(s) {
   st.relayout = portrait => { st.portrait = portrait; };
   const targets = i => {
     const it = st.items[i], n = st.items.length, f = st.focus;
-    if (!st.portrait) return {x: (i - (n - 1) / 2) * 6.6, z: i === f ? 0.4 : 0, rot: (i - (n - 1) / 2) * -0.06, sc: i === f ? 1.05 : 0.96, specSc: 1, dim: i === f ? 1 : 0.86};
+    if (!st.portrait) return {x: (i - (n - 1) / 2) * 6.6, z: i === f ? 0.4 : 0, rot: (i - (n - 1) / 2) * -0.06, sc: i === f ? 1.12 : 0.93, specSc: 1, dim: i === f ? 1 : 0.8};
     const d = i - f;
     return {x: d * 4.9, z: d === 0 ? 0.4 : -1.4, rot: -d * 0.42, sc: d === 0 ? 1 : 0.8, specSc: d === 0 ? 1 : 0.001, dim: d === 0 ? 1 : 0.5};
   };
@@ -122,7 +122,8 @@ export function buildProducts(s) {
   st.setView = view => { if (view === 'products' && st.items.length) { const c = chosenIndex(); if (c >= 0) st.setFocus(c); } };
   st.handle = a => {
     if (a.type === 'product-step') { st.setFocus(st.focus + a.dir); s.pulse(0.5); return true; }
-    if (a.type === 'product' && !a.choose) { if (st.portrait && a.index !== st.focus) st.setFocus(a.index); else if (!st.portrait) st.setFocus(a.index); s.pulse(0.4); return true; }
+    // The card and its button do the same thing: bring the experience forward AND choose it (the app takes care of the choice).
+    if (a.type === 'product') { st.setFocus(a.index); s.pulse(0.5); return false; }
     return false;
   };
   st.update = (dt, t, c) => {
