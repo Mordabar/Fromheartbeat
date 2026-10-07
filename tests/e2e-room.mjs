@@ -43,7 +43,7 @@ console.log('== sala de sesión (3D)');
   await page.click('[data-focus=session-talk]'); await adv(3.5);
   await page.screenshot({path: `${OUT}/room-${mode}-talk.png`});
   t('abrir los mensajes quita el aviso de nuevo', await F(() => !window.__fhb.studio.stations.cockpit.msgs.surface.state.unread));
-  await tap('session:talk'); await sleep(500);
+  await tap('session:talk'); await sleep(500); await page.screenshot({path: `${OUT}/room-${mode}-talkpanel.png`});
   t('«Escribir al productor» abre SOLO la conversación', await F(() => document.getElementById('options-dialog').open && window.__fhb.panel() === 'talk') && await page.$('#feedback-form') !== null && await page.$('#source-form') === null);
   await page.fill('#s-msg', 'Quedó hermosa, gracias por todo.'); await page.click('#feedback-form button.primary'); await sleep(1500);
   t('el mensaje llega al estudio y aparece en la pared 3D', await F(() => window.__fhb.order().history.some(h => /hermosa/.test(h.note)) && window.__fhb.studio.stations.cockpit.msgs.surface.state.list.some(m => /hermosa/.test(m.text))));
@@ -53,7 +53,7 @@ console.log('== sala de sesión (3D)');
   // material
   await page.click('[data-focus=session-files]'); await adv(3.5);
   await page.screenshot({path: `${OUT}/room-${mode}-files.png`});
-  await tap('session:pad'); await sleep(500);
+  await tap('session:pad'); await sleep(500); await page.screenshot({path: `${OUT}/room-${mode}-filespanel.png`});
   t('tocar el pad abre SOLO el cargador de archivos', await F(() => window.__fhb.panel() === 'files') && await page.$('[data-u-pick]') !== null && await page.$('#feedback-form') === null);
   await page.setInputFiles('[data-u-pick]', [M + 'captura.png']);
   await page.waitForFunction(() => window.__fhb.order().files.filter(f => f.kind === 'source').length >= 3, null, {timeout: 90000}).catch(() => {});

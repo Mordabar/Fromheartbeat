@@ -102,7 +102,7 @@ export function buildCockpit(s) {
   const padHit = new THREE.Mesh(new THREE.PlaneGeometry(4.5, 2.6), m.hit); padHit.rotation.x = -Math.PI / 2; padHit.position.y = 0.04; padHit.userData = {action: {type: 'session-files'}, id: 'session:pad', target: st.pad}; padG.add(padHit); s.pickables.push(padHit);
   st.padGlow = glowSprite(0x22e4ff, 6, 0); st.padGlow.position.set(0, 0.4, 0); padG.add(st.padGlow); st.padHov = 0;
   st.payPill = new Pill(s, {w: 5.4, h: 1.0, label: 'Ir al pago seguro', action: {type: 'session-pay', direct: true}, id: 'session:pay', color: '#ffc857', icon: 'lock', fill: true});
-  st.payPill.group.position.set(-2.4, 2.0, 3.1); st.payPill.group.rotation.x = -0.4; core.add(st.payPill.group); st.payPill.group.visible = false;
+  st.payPill.group.position.set(0, 2.0, 3.1); st.payPill.group.rotation.x = -0.4; core.add(st.payPill.group); st.payPill.group.visible = false;
   st.textPill = new Pill(s, {w: 4.0, h: 0.8, label: 'Ver todo en texto', action: {type: 'session-plain', direct: true}, id: 'session:plain', color: '#c6a2ff', icon: 'lines'});
   st.textPill.group.position.set(-6.2, 1.95, 2.55); st.textPill.group.rotation.x = -0.4; core.add(st.textPill.group);
 

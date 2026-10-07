@@ -4,6 +4,7 @@ import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
 import {OUT, sleep} from './e2e-lib.mjs';
 const BASE = process.env.BASE_URL || 'http://127.0.0.1:8199', sizes = {desk: [1157, 799, false], full: [1440, 900, false], mob: [390, 844, true]};
+if (process.env.SIZE) for (const k of Object.keys(sizes)) if (k !== process.env.SIZE) delete sizes[k];
 const only = process.argv.slice(2), want = n => !only.length || only.includes(n);
 const b = await chromium.launch({headless: true, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox']});
 for (const [name, [width, height, mobile]] of Object.entries(sizes)) {
@@ -18,13 +19,13 @@ for (const [name, [width, height, mobile]] of Object.entries(sizes)) {
   if (want('products')) { await F(() => { const h = window.__fhb; h.draft().genre = 'Salsa'; h.go('products'); }); await settle(3.5); await shot('products'); }
   if (want('checkout')) { await F(() => { const h = window.__fhb, d = h.draft(); Object.assign(d, {genre: 'Pop latino', mood: 'Épica', voice: 'Masculina', language: 'Español', tempo: 'Medio', recipient: 'Luz Marina', occasion: 'Cumpleaños', story: 'x'.repeat(40), product: 'full', name: 'Ervin Grey', email: 'a@b.co', phone: '3001234567'}); h.studio.setDraft(d); h.go('checkout'); }); await settle(3.5); await shot('checkout'); }
   if (want('session')) {
-    const seed = JSON.parse(execFileSync('python3', [new URL('./support/seed.py', import.meta.url).pathname, 'full', process.env.STATE || 'review', 'rich']).toString());
+    const seed = JSON.parse(execFileSync('python3', [new URL('./support/seed.py', import.meta.url).pathname, process.env.PRODUCT || 'full', process.env.STATE || 'review', ...(process.env.PLAIN ? [] : ['rich'])]).toString());
     await page.close(); const page2 = await ctx.newPage(); page2.on('pageerror', e => errs.push(String(e)));
     await page2.goto(BASE + seed.link.replace('?session=', '?e2e&session='), {waitUntil: 'domcontentloaded'});
     await page2.waitForFunction(() => window.__fhb?.view?.() === 'session', null, {timeout: 60000});
     const G = (fn, ...a) => page2.evaluate(fn, ...a), adv = async (x = 3) => { await G(x => window.__fhb.studio.advance(x), x); await sleep(250); };
-    await adv(4); await page2.screenshot({path: `${OUT}/3d-${name}-session-1-overview.png`});
-    for (const v of ['session-song', 'session-talk', 'session-files']) { await G(v => { window.__fhb.studio.moveTo(v); }, v); await adv(3.5); await page2.screenshot({path: `${OUT}/3d-${name}-${v}.png`}); }
+    await adv(4); await page2.screenshot({path: `${OUT}/3d-${name}-session-1-overview${process.env.TAG || ''}.png`});
+    for (const v of (process.env.NOSUB ? [] : ['session-song', 'session-talk', 'session-files'])) { await G(v => { window.__fhb.studio.moveTo(v); }, v); await adv(3.5); await page2.screenshot({path: `${OUT}/3d-${name}-${v}.png`}); }
   }
   if (errs.length) console.log(name, 'errores:', errs.slice(0, 3));
   await ctx.close();
