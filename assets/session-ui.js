@@ -42,6 +42,22 @@ export const QUICK_REPLIES = ['¡Me encanta! No cambiaría nada', 'Quisiera ajus
 const QUICK_FOR = (o) => o.status === 'in_production' ? ['Tengo una duda', 'Quiero añadir un detalle a mi historia'] : o.product_code === 'dedicatoria' ? [QUICK_REPLIES[0], QUICK_REPLIES[3]] : QUICK_REPLIES;
 
 // `part` picks what to show: everything (the plain-text session), only the conversation, or only the material uploader.
+const kb = b => b >= 1048576 ? (b / 1048576 >= 10 ? Math.round(b / 1048576) : (b / 1048576).toFixed(1)) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB';
+// What a file is, in plain words, with its icon and colour: «Canción · MP3», «Portada», «Video»…
+export const fileLook = f => /mpeg|mp3/.test(f.mime) ? ['Canción · MP3', 'Para escuchar y compartir', 'music', 'pink'] : /wav/.test(f.mime) ? ['Master · WAV', 'Calidad de estudio', 'star', 'violet'] : f.mime.startsWith('audio/') ? ['Audio', 'Otra versión de tu canción', 'music', 'pink'] : f.mime.startsWith('image/') ? ['Portada', 'La imagen de tu canción', 'sparkle', 'gold'] : f.mime.startsWith('video/') ? ['Video', 'Listo para redes', 'play', 'cyan'] : ['Archivo', 'Material de tu entrega', 'gift', 'violet'];
+export const downloadCards = (files, {esc, ic}) => `<div class="s-dls">${files.map(f => { const [name, sub, icon, tone] = fileLook(f); return `<a class="s-dl t-${tone}" href="api.php?action=file&id=${f.id}&download=1" aria-label="Descargar ${esc(name)}: ${esc(f.original_name)}, ${kb(Number(f.size_bytes))}"><span class="s-dl-ic" aria-hidden="true">${ic(icon)}</span><span class="s-dl-tx"><b>${esc(name)}</b><small>${esc(f.original_name)} · ${kb(Number(f.size_bytes))}</small></span><span class="s-dl-btn">${ic('arrow', 'down')}Descargar</span></a>`; }).join('')}</div>`;
+// What the person with a gift link sees: the song, who it is for, and the files. Nothing else exists for them.
+export function giftMarkup(o, {esc, ic}) {
+  const delivery = (o.files || []).filter(f => f.kind === 'delivery'), audio = delivery.filter(f => f.mime.startsWith('audio/')).slice().reverse(), cover = delivery.filter(f => f.mime.startsWith('image/')).pop();
+  const to = o.brief?.recipient ? `Para ${esc(o.brief.recipient)}` : 'Una canción para ti', from = o.customer?.name ? `De parte de ${esc(o.customer.name)}` : 'Alguien pensó en ti';
+  const body = audio.length ? audio.map((f, i) => `<article class="s-track${i ? ' old' : ''}">${i === 0 && cover ? `<img src="api.php?action=file&id=${cover.id}" alt="Portada de la canción">` : `<div class="s-cover" aria-hidden="true">${ic('music')}</div>`}
+      <div class="s-track-body"><small>${i === 0 ? 'ÚLTIMA VERSIÓN' : 'VERSIÓN ANTERIOR'}</small><strong>${esc(f.original_name)}</strong><audio controls preload="none" aria-label="${esc(f.original_name)}" src="api.php?action=file&id=${f.id}"></audio></div></article>`).join('')
+    : '<p class="s-says">La canción todavía se está terminando. Vuelve en un rato con este mismo enlace.</p>';
+  return `<div class="s-wrap"><section class="s-hero tone-done"><div class="s-badge" aria-hidden="true">${ic('heart')}</div><div class="s-hero-text"><p class="s-eyebrow">${from}</p><h1 id="panel-title">${to}</h1><p class="s-says">${o.brief?.occasion ? esc(o.brief.occasion) + ' · ' : ''}Una canción hecha a mano en Fromheartbeat.</p></div></section>
+    <section class="s-room"><h2 class="s-h"><span>Escúchala</span><b>Un regalo</b></h2>${body}
+    ${delivery.length ? downloadCards(delivery, {esc, ic}) : ''}</section>
+    <section class="s-card"><p class="s-says">¿Te gustó? Cuenta tu propia historia y la convertimos en canción.</p><button class="primary" data-go="resume">${ic('sparkle')} Crear mi canción</button></section></div>`;
+}
 export function sessionMarkup(o, {esc, money, ic, boot, testCard, now = Date.now(), part = 'all'}) {
   const st = STATE[o.status] || STATE.created, SI = stageInfoFor(o);
   // While the customer reviews or has received the song, the studio is at the last stage whatever the admin left selected.
@@ -63,28 +79,38 @@ export function sessionMarkup(o, {esc, money, ic, boot, testCard, now = Date.now
   else if (needsMaterial) action = `<a class="primary big" href="#s-upload">${ic('gift')} Subir mis fotos y videos</a><p class="s-note">${ic('check')} Tu video las necesita. Lo demás lo hacemos nosotros y te avisamos por correo.</p>`;
   else if (o.status === 'in_production' || o.status === 'paid') action = '<p class="s-note">' + ic('check') + ' No tienes que hacer nada. Te avisamos por correo en cada avance.</p>';
   if (boot.support && (dead || ['created', 'payment_pending', 'paid'].includes(o.status))) action += `<a class="s-help" href="mailto:${esc(boot.support)}?subject=${encodeURIComponent('Sesión ' + o.reference)}">${ic('mail')} ${dead ? 'Escribir al estudio' : '¿Necesitas ayuda? Escríbenos'}</a>`;
+  const coverFile = delivery.filter(f => f.mime.startsWith('image/')).pop(), to = o.brief?.recipient ? `Para ${esc(o.brief.recipient)}` : esc(o.product_name);
   const hero = `<section class="s-hero tone-${st.tone}" aria-labelledby="panel-title">
-    <div class="s-badge" aria-hidden="true">${ic(st.icon, waiting ? 'spin' : '')}</div>
-    <div class="s-hero-text"><p class="s-eyebrow">${esc(st.label)} · ${esc(o.reference)}</p><h1 id="panel-title">${esc(st.title)}</h1><p class="s-says">${esc(says)}</p></div>
+    <div class="s-hero-top">${coverFile ? `<img class="s-cover-lg" src="api.php?action=file&id=${coverFile.id}" alt="Portada de tu canción">` : `<div class="s-badge" aria-hidden="true">${ic(st.icon, waiting ? 'spin' : '')}</div>`}
+    <div class="s-hero-text"><p class="s-eyebrow">${esc(st.label)}</p><h1 id="panel-title">${esc(st.title)}</h1><p class="s-says">${esc(says)}</p></div></div>
     <div class="s-hero-action">${action}</div>
-    <p class="s-meta">${esc(o.product_name)} · ${money(o.amount_in_cents)} COP${last ? ` · Último movimiento ${esc(ago(last, now))}` : ''} <button id="refresh-order" class="s-link">${ic('refresh')} Actualizar</button></p>
+    <p class="s-meta"><span class="s-pill">${ic('music')} ${esc(o.product_name)}</span>${last ? `<span class="s-pill dim">${esc(ago(last, now))}</span>` : ''}<button id="refresh-order" class="s-link" aria-label="Actualizar el estado">${ic('refresh')}</button></p>
     <p class="form-error" id="payment-error" role="alert"></p>
   </section>${pending ? testCard() : ''}`;
+  // Quick actions: the four things this screen is for, one tap each (the same ones the 3D room offers).
+  const needsM = needsMaterial, tile = (href, icon, label, sub, tone, attr = '') => `<${attr ? 'button' : 'a'} class="s-tile t-${tone}" ${attr || `href="${href}"`}><span class="s-tile-ic" aria-hidden="true">${ic(icon)}</span><b>${label}</b><small>${sub}</small></${attr ? 'button' : 'a'}>`;
+  const sharable = ['review', 'completed'].includes(o.status) && audio.length;
+  const tiles = pending ? '' : `<nav class="s-tiles" aria-label="Qué quieres hacer">${[
+    audio.length ? tile('#s-room', 'play', 'Escuchar', 'tu canción', 'pink') : '',
+    canTalk ? tile('#s-chat', 'mail', 'Mensajes', 'con tu productor', 'cyan') : '',
+    ['paid', 'in_production', 'review', 'completed'].includes(o.status) ? tile('#s-upload', 'gift', needsM ? 'Subir fotos' : 'Material', needsM ? 'tu video las necesita' : 'fotos, audios, videos', needsM ? 'gold-hot' : 'gold') : '',
+    sharable ? tile('', 'heart', 'Compartir', 'con un enlace', 'mint', 'data-share') : '',
+  ].join('')}</nav>`;
 
   // 2. The production line: six stages, the current one lit, each in plain words.
   const line = `<section class="s-line" aria-label="Avance de tu canción"><h2 class="s-h"><span>En qué punto estamos</span><b>${dead ? 'Sin avance' : pending ? 'Aún no empieza' : o.status === 'completed' ? 'Completado' : `Etapa ${stage + 1} de 6`}</b></h2>
     <div class="s-meter" role="img" aria-label="${dead ? 'La sesión fue cancelada' : pending ? 'La producción aún no empieza' : `Etapa ${stage + 1} de 6: ${SI[stage][0]}`}">${STAGE_INFO.map((_, i) => `<i class="${o.status === 'completed' || (!pending && i < stage) ? 'on' : !pending && i === stage ? 'now' : ''}"></i>`).join('')}</div>
-    <ol class="s-stages">${SI.map(([name, text], i) => {
+    <details class="s-detail"><summary>Ver el detalle de cada etapa</summary><ol class="s-stages">${SI.map(([name, text], i) => {
       const state = o.status === 'completed' || (!pending && i < stage) ? 'done' : !pending && i === stage ? 'now' : 'next';
       return `<li class="${state}"${state === 'now' ? ' aria-current="step"' : ''}><span class="s-dot" aria-hidden="true">${state === 'done' ? ic('check') : i + 1}</span><div><b>${esc(name)}</b><small>${state === 'now' ? esc(o.status === 'review' && i === 5 ? 'Escucha tu canción y dinos si cambiarías algo.' : text) : state === 'done' ? 'Listo' : 'Pronto'}</small></div></li>`;
-    }).join('')}</ol></section>`;
+    }).join('')}</ol></details></section>`;
 
   // 3. Listening room: the song first, the versions and files after.
   const sourceFiles = o.files.filter(f => f.kind === 'source');
-  const room = delivery.length ? `<section id="s-room" class="s-room"><h2 class="s-h"><span>${o.product.listening ? 'Sala de escucha' : 'Tu entrega'}</span><b>Solo tú puedes escuchar esto</b></h2>
+  const room = delivery.length ? `<section id="s-room" class="s-room"><h2 class="s-h"><span>${o.product.listening ? 'Sala de escucha' : 'Tu entrega'}</span><b>${['review', 'completed'].includes(o.status) && audio.length ? `<button class="s-link" data-share>${ic('heart')} Compartir esta canción</button>` : 'Solo tú puedes escuchar esto'}</b></h2>
     ${audio.map((f, i) => `<article class="s-track${i ? ' old' : ''}">${i === 0 && cover ? `<img src="api.php?action=file&id=${cover.id}" alt="Portada de tu canción">` : `<div class="s-cover" aria-hidden="true">${ic('music')}</div>`}
       <div class="s-track-body"><small>${i === 0 ? 'ÚLTIMA VERSIÓN' : 'VERSIÓN ANTERIOR'}</small><strong>${esc(f.original_name)}</strong><audio controls preload="none" aria-label="${i === 0 ? 'Última versión' : 'Versión anterior'}: ${esc(f.original_name)}" src="api.php?action=file&id=${f.id}"></audio></div></article>`).join('')}
-    <div class="s-files">${delivery.map(f => `<a href="api.php?action=file&id=${f.id}&download=1" aria-label="Descargar ${esc(f.original_name)}">${ic('arrow', 'down')}<span>${esc(f.original_name)}</span></a>`).join('')}</div></section>`
+    ${downloadCards(delivery, {esc, ic})}</section>`
     : pending ? '' : `<section class="s-room empty"><h2 class="s-h"><span>Tu canción</span><b>Aparecerá aquí</b></h2><p class="s-says">Cuando esté lista, la escucharás en este mismo lugar, sin salir de la sesión.</p></section>`;
 
   // 4. The producer's messages as a conversation. Newest first; the system's own events stay small.
@@ -99,7 +125,7 @@ export function sessionMarkup(o, {esc, money, ic, boot, testCard, now = Date.now
     <div class="s-chips" role="group" aria-label="Respuestas rápidas">${QUICK_FOR(o).map(q => `<button type="button" class="s-chip" data-quick="${esc(q)}">${esc(q)}</button>`).join('')}</div>
     <textarea id="s-msg" name="message" required minlength="3" maxlength="2000" rows="3" placeholder="Cuéntanos qué sentiste y qué cambiarías."></textarea>
     <button class="primary">${ic('mail')} Enviar al productor</button><p class="form-error" role="status"></p></form>` : '';
-  const chat = `<section class="s-chat"><h2 class="s-h"><span>Mensajes del productor</span><b>${items.filter(h => who(h.actor) !== 'system').length || 'Aún sin'} mensajes</b></h2>${talk}
+  const chat = `<section id="s-chat" class="s-chat"><h2 class="s-h"><span>Mensajes del productor</span><b>${items.filter(h => who(h.actor) !== 'system').length || 'Aún sin'} mensajes</b></h2>${talk}
     <ol class="s-feed">${items.slice(0, 4).map(bubble).join('')}</ol>${items.length > 4 ? `<details class="s-more"><summary>Ver ${items.length - 4} anteriores</summary><ol class="s-feed">${items.slice(4).map(bubble).join('')}</ol></details>` : ''}</section>`;
 
   // 5. Materials (Full Experience) and the story, tucked away until needed.
@@ -112,10 +138,10 @@ export function sessionMarkup(o, {esc, money, ic, boot, testCard, now = Date.now
   if (late) UP[2] = o.product_code === 'full' && !sentSources ? 'Si todavía quieres tu video, sube aquí tus fotos y clips. Puedes elegir muchos a la vez.' : 'Aunque la canción ya esté lista, puedes seguir enviándonos archivos. Puedes subir varios a la vez.';
   const canSend = ['paid', 'in_production', 'review', 'completed'].includes(o.status);
   const upload = canSend ? `<section id="s-upload" class="s-card s-up"><h2 class="s-h"><span>${UP[0]}</span><b data-u-count>${UP[1]}</b></h2><p class="s-says">${UP[2]}</p>${uploaderHtml(o.reference, {role: 'customer', kind: 'source'})}</section>` : '';
-  const story = `<details class="s-card s-story"><summary>${ic('heart')} Tu historia, tal como la contaste</summary><p>${esc(o.brief.story)}</p></details>`;
+  const story = `<details class="s-card s-story"><summary>${ic('heart')} Tu historia, tal como la contaste</summary><p>${esc(o.brief.story)}</p></details><p class="s-ref">Sesión ${esc(o.reference)}</p>`;
 
   if (part === 'talk') return `<div class="s-wrap">${chat}</div>`;
   if (part === 'files') return `<div class="s-wrap">${upload || '<p class="s-says">Podrás enviar tus archivos cuando el pago esté confirmado.</p>'}</div>`;
   // Order: what to do now → the song → progress → talk → extras.
-  return `<div class="s-wrap">${hero}${o.status === 'review' || o.status === 'completed' ? room + line : line + room}${needsMaterial ? upload + chat : chat + upload}${story}</div>`;
+  return `<div class="s-wrap">${hero}${tiles}${o.status === 'review' || o.status === 'completed' ? room + line : line + room}${needsMaterial ? upload + chat : chat + upload}${story}</div>`;
 }

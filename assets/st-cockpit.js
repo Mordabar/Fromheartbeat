@@ -105,46 +105,74 @@ export function buildCockpit(s) {
   st.padGlow = glowSprite(0x22e4ff, 6, 0); st.padGlow.position.set(0, 0.4, 0); padG.add(st.padGlow); st.padHov = 0;
   st.payPill = new Pill(s, {w: 5.4, h: 1.0, label: 'Ir al pago seguro', action: {type: 'session-pay', direct: true}, id: 'session:pay', color: '#ffc857', icon: 'lock', fill: true});
   st.payPill.group.position.set(0, 2.0, 3.1); st.payPill.group.rotation.x = -0.4; core.add(st.payPill.group); st.payPill.group.visible = false;
+  // The two things the customer can DO besides listening: write to the producer and send material. Always in sight on the main view.
+  st.coreTalk = new Pill(s, {w: 4.6, h: 1.0, label: 'Mensajes', action: {type: 'session-talk', direct: true}, id: 'session:core-talk', color: '#22e4ff', icon: 'mail', fill: true});
+  st.coreTalk.group.position.set(-2.5, 2.0, 3.1); st.coreTalk.group.rotation.x = -0.4; core.add(st.coreTalk.group);
+  st.coreFiles = new Pill(s, {w: 4.6, h: 1.0, label: 'Subir material', action: {type: 'session-files', direct: true}, id: 'session:core-files', color: '#ffc857', icon: 'confetti', fill: true});
+  st.coreFiles.group.position.set(2.5, 2.0, 3.1); st.coreFiles.group.rotation.x = -0.4; core.add(st.coreFiles.group);
   st.textPill = new Pill(s, {w: 4.0, h: 0.8, label: 'Ver todo en texto', action: {type: 'session-plain', direct: true}, id: 'session:plain', color: '#c6a2ff', icon: 'lines'});
-  st.textPill.group.position.set(-6.2, 1.95, 2.55); st.textPill.group.rotation.x = -0.4; core.add(st.textPill.group);
+  st.textPill.group.position.set(-8.6, 1.95, 2.2); st.textPill.group.rotation.x = -0.4; core.add(st.textPill.group);
 
   // ================================================================= DECK: the song and its files
   back(deck, 10, 12.4);
-  st.board = makeScreen(s, 8.4, 5.4, (c, w, h, state) => {
-    const bg = c.createLinearGradient(0, 0, w, h); bg.addColorStop(0, '#1e1040'); bg.addColorStop(1, '#0a0520'); c.fillStyle = bg; c.fillRect(0, 0, w, h);
-    c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillStyle = '#cbb8f2'; c.font = `800 ${h * 0.065}px ${FONT.sans}`; c.fillText('TU ENTREGA', w * 0.05, h * 0.08);
-    const files = state?.files || [], fits = files.length > 4 ? 3 : files.length;
+  // The delivery: cover art on top, then one download card per file saying what it is, how big it is and that it downloads.
+  const BW = 8.4, BH = 6.3, BY = 9.0, ROWS = 3, rowFrac = i => 0.585 + i * 0.138;
+  const fileLook = f => /mpeg|mp3/.test(f.mime) ? ['Canción · MP3', 'Para escuchar y compartir', 'note', '#ff4fd8'] : /wav/.test(f.mime) ? ['Master · WAV', 'Calidad de estudio', 'vinyl', '#c6a2ff'] : f.mime.startsWith('audio/') ? ['Audio', 'Versión de tu canción', 'note', '#ff4fd8'] : f.mime.startsWith('image/') ? ['Portada', 'La imagen de tu canción', 'sparkle', '#ffc857'] : f.mime.startsWith('video/') ? ['Video', 'Listo para redes', 'clapper', '#22e4ff'] : ['Archivo', 'Material de tu entrega', 'lines', '#c6a2ff'];
+  st.board = makeScreen(s, BW, BH, (c, w, h, state) => {
+    const bg = c.createLinearGradient(0, 0, w, h); bg.addColorStop(0, '#22124a'); bg.addColorStop(1, '#090418'); c.fillStyle = bg; c.fillRect(0, 0, w, h);
+    const files = state?.files || [], px = w * 0.05;
+    c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillStyle = '#cbb8f2'; c.font = `800 ${h * 0.04}px ${FONT.sans}`; c.fillText('TU ENTREGA', px, h * 0.05);
     if (!files.length) {
-      neonText(c, state?.waiting ? 'Aún no hay archivos' : 'Todavía no hay entrega', w * 0.05, h * 0.36, {size: h * 0.115, color: '#d5bcff', align: 'left', blur: 14, maxW: w * 0.9});
-      c.fillStyle = '#efe6ff'; c.font = `600 ${h * 0.065}px ${FONT.sans}`; wrap(c, state?.hint || 'Cuando el estudio suba tu canción, la escuchas desde este disco y descargas cada archivo aquí.', w * 0.9).slice(0, 4).forEach((l, k) => c.fillText(l, w * 0.05, h * 0.52 + k * h * 0.085));
-      return;
+      neonText(c, state?.waiting ? 'Aún no hay archivos' : 'Todavía no hay entrega', px, h * 0.36, {size: h * 0.085, color: '#d5bcff', align: 'left', blur: 14, maxW: w * 0.9});
+      c.fillStyle = '#efe6ff'; c.font = `600 ${h * 0.05}px ${FONT.sans}`; wrap(c, state?.hint || 'Cuando el estudio suba tu canción, la escuchas desde el disco y descargas cada archivo aquí.', w * 0.9).slice(0, 4).forEach((l, i) => c.fillText(l, px, h * 0.5 + i * h * 0.075)); return;
     }
-    const row = (i, f, extra) => {
-      const y = h * (0.255 + i * 0.17), hot = state?.hot === i;
-      roundRect(c, w * 0.04, y - h * 0.072, w * 0.92, h * 0.144, h * 0.03); c.fillStyle = hot ? 'rgba(198,162,255,.24)' : 'rgba(198,162,255,.09)'; c.fill(); c.lineWidth = 2; c.strokeStyle = hot ? 'rgba(198,162,255,.9)' : 'rgba(198,162,255,.25)'; c.stroke();
-      c.textAlign = 'left'; c.textBaseline = 'middle';
-      if (extra) { c.fillStyle = '#fff'; c.font = `800 ${h * 0.065}px ${FONT.sans}`; c.fillText(extra, w * 0.08, y + 1); return; }
-      const tag = kindTag(f); roundRect(c, w * 0.07, y - h * 0.036, w * 0.13, h * 0.072, h * 0.036); c.fillStyle = '#c6a2ff33'; c.fill(); c.fillStyle = '#e9dcff'; c.font = `800 ${h * 0.04}px ${FONT.sans}`; c.textAlign = 'center'; c.fillText(tag, w * 0.135, y + 1);
-      c.textAlign = 'left'; c.fillStyle = '#fff'; fit(c, f.original_name, w * 0.5, h * 0.062, 700); c.fillText(f.original_name, w * 0.23, y + 1);
-      c.textAlign = 'right'; c.fillStyle = '#cbb8f2'; c.font = `700 ${h * 0.048}px ${FONT.sans}`; c.fillText(kb(Number(f.size_bytes)), w * 0.86, y + 1);
-      drawIcon(c, 'arrow', w * 0.915, y + 1, h * 0.06, {color: hot ? '#fff' : '#c6a2ff', width: 2.2});
+    // status chip: how many files, and that they are ready
+    const chipText = `${files.length} ${files.length === 1 ? 'archivo' : 'archivos'} para descargar`; c.font = `800 ${h * 0.034}px ${FONT.sans}`; const cw = c.measureText(chipText).width + h * 0.1;
+    roundRect(c, w - px - cw, h * 0.028, cw, h * 0.046, h * 0.023); c.fillStyle = '#3dffc524'; c.fill(); c.strokeStyle = '#3dffc5aa'; c.lineWidth = 2; c.stroke(); c.fillStyle = '#3dffc5'; c.textAlign = 'center'; c.fillText(chipText, w - px - cw / 2, h * 0.052);
+    // cover art
+    const cs = h * 0.34, cx = px, cy = h * 0.11;
+    c.save(); c.shadowColor = '#b57cff'; c.shadowBlur = 26; roundRect(c, cx, cy, cs, cs, cs * 0.09); c.fillStyle = '#1b0f3a'; c.fill(); c.restore();
+    c.save(); roundRect(c, cx, cy, cs, cs, cs * 0.09); c.clip();
+    if (state?.cover) { const im = state.cover, k = Math.max(cs / im.naturalWidth, cs / im.naturalHeight); c.drawImage(im, cx + (cs - im.naturalWidth * k) / 2, cy + (cs - im.naturalHeight * k) / 2, im.naturalWidth * k, im.naturalHeight * k); }
+    else { const g = c.createLinearGradient(cx, cy, cx + cs, cy + cs); g.addColorStop(0, '#6a3df0'); g.addColorStop(1, '#ff4fd8'); c.fillStyle = g; c.fillRect(cx, cy, cs, cs); drawIcon(c, 'note', cx + cs / 2, cy + cs / 2, cs * 0.5, {color: '#ffffff', width: 2.2, glow: 14}); }
+    c.restore(); c.lineWidth = 3; c.strokeStyle = '#ffffff55'; roundRect(c, cx, cy, cs, cs, cs * 0.09); c.stroke();
+    // title block
+    const tx = cx + cs + w * 0.045, tw = w - tx - px; c.textAlign = 'left';
+    c.fillStyle = '#ffb3ec'; c.font = `800 ${h * 0.036}px ${FONT.sans}`; c.fillText(state?.cover ? 'PORTADA' : 'TU CANCIÓN', tx, cy + cs * 0.14);
+    neonText(c, state?.title || 'Tu canción', tx, cy + cs * 0.42, {size: h * 0.07, color: '#ffffff', align: 'left', blur: 12, maxW: tw});
+    c.fillStyle = '#d9ccef'; c.font = `600 ${h * 0.04}px ${FONT.sans}`; fit(c, state?.sub || '', tw, h * 0.04, 600); c.fillText(state?.sub || '', tx, cy + cs * 0.68);
+    c.fillStyle = '#9d8bc4'; c.font = `700 ${h * 0.034}px ${FONT.sans}`; c.fillText('Toca un archivo para descargarlo', tx, cy + cs * 0.9);
+    // download cards
+    const more = files.length > ROWS, shown = more ? files.slice(0, ROWS - 1) : files;
+    const card = (i, f, extra) => {
+      const y = h * rowFrac(i), rh = h * 0.118, hot = state?.hot === i, look = f ? fileLook(f) : null, col = look ? look[3] : '#c6a2ff';
+      roundRect(c, w * 0.04, y - rh / 2, w * 0.92, rh, rh * 0.28); c.fillStyle = hot ? 'rgba(198,162,255,.28)' : 'rgba(198,162,255,.1)'; c.fill(); c.lineWidth = 2.5; c.strokeStyle = hot ? '#ffffff' : 'rgba(198,162,255,.32)'; c.stroke();
+      if (extra) { c.fillStyle = '#fff'; c.textAlign = 'left'; c.font = `800 ${h * 0.046}px ${FONT.sans}`; c.fillText(extra, w * 0.08, y + 1); c.fillStyle = '#c6a2ff'; c.font = `700 ${h * 0.036}px ${FONT.sans}`; c.textAlign = 'right'; c.fillText('Ver todos ›', w * 0.93, y + 1); return; }
+      const ix = w * 0.105, ir = rh * 0.34; c.beginPath(); c.arc(ix, y, ir, 0, Math.PI * 2); c.fillStyle = col + '33'; c.fill(); c.lineWidth = 2; c.strokeStyle = col; c.stroke(); drawIcon(c, look[2], ix, y, ir * 1.2, {color: col, width: 2, glow: 8});
+      c.textAlign = 'left'; c.fillStyle = '#fff'; c.font = `800 ${h * 0.044}px ${FONT.sans}`; c.fillText(look[0], w * 0.175, y - rh * 0.17);
+      c.fillStyle = '#cbb8f2'; c.font = `600 ${h * 0.03}px ${FONT.sans}`; const meta = `${f.original_name} · ${kb(Number(f.size_bytes))}`; fit(c, meta, w * 0.36, h * 0.03, 600); c.fillText(meta, w * 0.175, y + rh * 0.2);
+      // the button that says it: "Descargar" with a down arrow
+      const bw = w * 0.235, bh = rh * 0.62, bx = w * 0.93 - bw, by = y - bh / 2; roundRect(c, bx, by, bw, bh, bh / 2);
+      const g = c.createLinearGradient(bx, by, bx + bw, by); g.addColorStop(0, hot ? '#ff7fe6' : '#c26bff'); g.addColorStop(1, hot ? '#ff4fd8' : '#ff4fd8'); c.fillStyle = g; c.fill();
+      c.fillStyle = '#12081f'; c.font = `800 ${h * 0.035}px ${FONT.sans}`; c.textAlign = 'center'; c.fillText('Descargar', bx + bw * 0.58, y + 1);
+      const ax = bx + bw * 0.17, as = bh * 0.2; c.strokeStyle = '#12081f'; c.lineWidth = bh * 0.1; c.lineCap = 'round'; c.lineJoin = 'round'; c.beginPath(); c.moveTo(ax, y - as); c.lineTo(ax, y + as); c.moveTo(ax - as * 0.8, y + as * 0.2); c.lineTo(ax, y + as); c.lineTo(ax + as * 0.8, y + as * 0.2); c.stroke();
     };
-    files.slice(0, fits).forEach((f, i) => row(i, f)); if (files.length > 4) row(3, null, `+ ${files.length - 3} archivos más: ver todos en texto`);
+    shown.forEach((f, i) => card(i, f)); if (more) card(ROWS - 1, null, `+ ${files.length - (ROWS - 1)} archivos más`);
   }, {px: 120});
-  st.board.group.position.set(0, 9.3, -1.5); deck.add(st.board.group);
-  st.fileHits = Array.from({length: 4}, (_, i) => {
-    const hit = new THREE.Mesh(new THREE.PlaneGeometry(7.9, 0.9), m.hit); hit.position.set(0, 9.3 + (0.5 - (0.255 + i * 0.17)) * 5.4, -1.36); hit.visible = false;
+  st.board.group.position.set(0, BY, -1.5); deck.add(st.board.group);
+  st.fileHits = Array.from({length: ROWS}, (_, i) => {
+    const hit = new THREE.Mesh(new THREE.PlaneGeometry(BW * 0.94, BH * 0.125), m.hit); hit.position.set(0, BY + (0.5 - rowFrac(i)) * BH, -1.36); hit.visible = false;
     hit.userData = {action: null, id: `session:file:${i}`, target: {i}}; deck.add(hit); s.pickables.push(hit); return hit;
   });
   st.now = makeScreen(s, 6.8, 1.9, (c, w, h, state) => {
     const bg = c.createLinearGradient(0, 0, w, h); bg.addColorStop(0, '#2a1250'); bg.addColorStop(1, '#0d0622'); c.fillStyle = bg; c.fillRect(0, 0, w, h);
     const f = state?.file, on = state?.on; c.textAlign = 'left'; c.textBaseline = 'middle';
-    c.fillStyle = on ? '#ff9be8' : '#cbb8f2'; c.font = `800 ${h * 0.115}px ${FONT.sans}`; c.fillText(on ? '▶ SONANDO AHORA' : f ? 'TU CANCIÓN' : 'TU CANCIÓN · AÚN NO', w * 0.05, h * 0.2);
+    c.fillStyle = on ? '#ff9be8' : '#cbb8f2'; c.font = `800 ${h * 0.115}px ${FONT.sans}`; c.fillText(on ? '▶ SONANDO AHORA' : f ? (state?.gift ? 'UNA CANCIÓN PARA TI' : 'TU CANCIÓN') : 'TU CANCIÓN · AÚN NO', w * 0.05, h * 0.2);
     if (!f) { c.fillStyle = '#fff'; c.font = `600 ${h * 0.15}px ${FONT.sans}`; wrap(c, 'Cuando esté lista, aquí la escuchas.', w * 0.9).slice(0, 2).forEach((l, k) => c.fillText(l, w * 0.05, h * 0.55 + k * h * 0.2)); return; }
     neonText(c, state?.title || f.original_name.replace(/\.[^.]+$/, ''), w * 0.05, h * 0.52, {size: h * 0.28, color: on ? '#ff8de6' : '#ffffff', align: 'left', blur: 14, maxW: w * 0.9});
     c.fillStyle = '#e9dcff'; c.font = `700 ${h * 0.13}px ${FONT.sans}`; c.fillText(on ? 'Toca el disco para pausar' : 'Toca el disco para escucharla', w * 0.05, h * 0.84);
   }, {px: 120});
-  st.now.group.position.set(0, 5.4, -1.5); deck.add(st.now.group);
+  st.now.group.position.set(0, 4.55, -1.5); deck.add(st.now.group);
   const vinyl = new THREE.MeshStandardMaterial({color: 0x08060c, roughness: 0.3, metalness: 0.6});
   box(deck, 8.2, 1.1, 4.8, m.panel, 0, 0.55, 1.2); box(deck, 8.3, 0.06, 0.06, m.accent, 0, 1.12, 3.6);
   st.platter = new THREE.Group(); st.platter.position.set(-0.7, 1.2, 1.0); deck.add(st.platter);
@@ -157,6 +185,9 @@ export function buildCockpit(s) {
   const platterHit = new THREE.Mesh(new THREE.CylinderGeometry(2.7, 2.7, 0.8, 24), m.hit); platterHit.position.set(-0.7, 1.4, 1.0); platterHit.userData = {action: {type: 'session-play'}, id: 'session:vinyl', target: st.platter}; deck.add(platterHit); s.pickables.push(platterHit);
   st.playPill = new Pill(s, {w: 5.8, h: 1.0, label: 'Escuchar mi canción', action: {type: 'session-play', direct: true}, id: 'session:play', color: '#ff4fd8', icon: 'play', fill: true});
   st.playPill.group.position.set(0, 0.62, 3.75); st.playPill.group.rotation.x = -0.45; deck.add(st.playPill.group);
+  // Gifting: a read-only link for one song. The pill only exists for the buyer, and only once there is a song to give.
+  st.sharePill = new Pill(s, {w: 3.6, h: 0.8, label: 'Compartir', action: {type: 'session-share', direct: true}, id: 'session:share', color: '#3dffc5', icon: 'heart'});
+  st.sharePill.group.position.set(3.15, 0.5, 3.75); st.sharePill.group.rotation.x = -0.45; deck.add(st.sharePill.group);
 
   // ================================================================= WALL: messages
   back(wall, 10, 12.4);
@@ -184,7 +215,7 @@ export function buildCockpit(s) {
   st.talkPill.group.position.set(0, 0.62, 2.8); st.talkPill.group.rotation.x = -0.45; st.wallFront.add(st.talkPill.group);
 
   // ================================================================= Data
-  const sigOf = o => o ? [o.reference, o.status, o.production_stage, o.product_code, o.files?.map(f => f.id + f.kind).join(','), o.history?.length, o.history?.[o.history.length - 1]?.note].join('|') : '';
+  const sigOf = o => o ? [o.shared ? 'gift' : '', o.reference, o.status, o.production_stage, o.product_code, o.files?.map(f => f.id + f.kind).join(','), o.history?.length, o.history?.[o.history.length - 1]?.note].join('|') : '';
   let sig = '', coverId = null;
   const loader = new THREE.TextureLoader();
   const pending = o => !o || ['created', 'payment_pending', 'cancelled'].includes(o.status);
@@ -196,51 +227,67 @@ export function buildCockpit(s) {
   const talkList = o => talkAll(o).slice(-3).map(h => ({who: who(h.actor), text: (who(h.actor) === 'me' ? h.note.replace(/^Comentario del cliente:\s*/, '') : h.note).slice(0, 500), when: ago(parseDate(h.created_at))}));
   const studioCount = o => (o?.history || []).filter(h => who(h.actor) === 'studio' && !UPLOAD_NOTE.test(h.note)).length;
   const seenKey = o => 'fhb-seen-' + o.reference;
+  // Little badges for the labelled tab bar: unread producer messages and the material the video still needs.
+  st.badges = () => { const o = st.order; if (!o || o.shared) return {}; let seen = 0; try { seen = Number(sessionStorage.getItem('fhb-seen-' + o.reference) || 0); } catch { /* ok */ } return {talk: st.view === 'session-talk' ? 0 : Math.max(0, studioCount(o) - seen), files: st.padNeed ? 1 : 0}; };
   st.markSeen = () => { if (!st.order) return; try { sessionStorage.setItem(seenKey(st.order), String(studioCount(st.order))); } catch { /* ok */ } st.redrawMsgs(); };
   const unread = o => { if (!o) return false; let seen = 0; try { seen = Number(sessionStorage.getItem(seenKey(o)) || 0); } catch { /* ok */ } return studioCount(o) > seen && !(st.view === 'session-talk'); };
   st.redrawMsgs = () => st.msgs.surface.redraw({list: talkList(st.order), total: talkAll(st.order).length, unread: unread(st.order), can: ['in_production', 'review', 'completed'].includes(st.order?.status)});
   st.redrawPad = () => {
     const o = st.order, can = !!o && ['paid', 'in_production', 'review', 'completed'].includes(o.status), need = can && o.product_code === 'full' && !sources(o).length && ['paid', 'in_production'].includes(o.status);
-    st.padNeed = need; st.padCan = can;
+    st.padNeed = need; st.padCan = can; padG.visible = !st.gift; padHit.visible = !st.gift;
     st.pad.surface.redraw({can, need, count: sources(o).length, upload: st.upload, full: o?.product_code === 'full', hot: st.padHot});
   };
   st.redrawBoard = () => {
-    const o = st.order, files = delivery(o);
-    st.board.surface.redraw({files, hot: st.fileHot, waiting: !pending(o), hint: pending(o) ? 'Tu entrega aparecerá aquí cuando el estudio termine tu canción.' : null});
+    const o = st.order, files = delivery(o), br = o?.brief || {};
+    st.board.surface.redraw({files, hot: st.fileHot, cover: st.coverImg?.complete && st.coverImg.naturalWidth ? st.coverImg : null, title: br.recipient ? `Para ${br.recipient}` : o?.product_name, sub: [br.occasion, o?.product_name].filter(Boolean).join(' · '), waiting: !pending(o), hint: pending(o) ? 'Tu entrega aparecerá aquí cuando el estudio termine tu canción.' : null});
     st.fileHits.forEach((hit, i) => {
-      const f = files[i], extra = files.length > 4 && i === 3;
-      hit.visible = (!!f && files.length <= 4) || (files.length > 4 && i <= 3);
+      const f = files[i], extra = files.length > ROWS && i === ROWS - 1;
+      hit.visible = extra || !!f;
       hit.userData.action = extra ? {type: 'session-plain'} : f ? {type: 'session-file', id: f.id} : null;
     });
   };
   st.redrawMonitor = () => st.monitor.surface.redraw({order: st.order && {reference: st.order.reference, status: st.order.status, productName: st.order.product_name, production_stage: st.order.production_stage, product_code: st.order.product_code}, hint: st.hint});
   st.setOrder = o => {
-    st.order = o || null; if ((o?.reference || '') !== (st.refKey || '')) { st.refKey = o?.reference || ''; st.upload = {active: 0, progress: 0}; }
+    st.order = o || null; st.gift = !!o?.shared; if ((o?.reference || '') !== (st.refKey || '')) { st.refKey = o?.reference || ''; st.upload = {active: 0, progress: 0}; }
     const next = sigOf(o); if (next === sig) return; sig = next;
     const states = channelStates(o), names = shortFor(o); st.channels.forEach((ch, i) => { if (ch.state !== states[i] || ch.name !== names[i]) { ch.state = states[i]; ch.name = names[i]; ch.plate.surface.redraw({state: states[i], label: names[i]}); } });
     st.redrawMonitor(); st.redrawBoard(); st.redrawMsgs(); st.redrawPad();
     const audio = audioOf(o)[0], cover = delivery(o).filter(f => f.mime.startsWith('image/')).pop();
     st.hasSong = !!audio; st.refreshPlay(); st.redrawNow();
-    if ((cover?.id ?? null) !== coverId) { coverId = cover?.id ?? null; if (cover) loader.load(siteUrl(`api.php?action=file&id=${cover.id}`), t => { t.colorSpace = THREE.SRGBColorSpace; st.label.material.map = t; st.label.material.color.set(0xffffff); st.label.material.needsUpdate = true; }); else { st.label.material.map = null; st.label.material.color.set(0x3a2370); st.label.material.needsUpdate = true; } }
-    const payNow = !!o && ['created', 'payment_pending'].includes(o.status) && !!st.commerceReady; st.payPill.group.visible = payNow; st.payPill.hit.visible = payNow;
+    if ((cover?.id ?? null) !== coverId) { coverId = cover?.id ?? null; st.coverImg = null; if (cover) { const im = new Image(); im.onload = () => { st.coverImg = im; st.redrawBoard(); }; im.src = siteUrl(`api.php?action=file&id=${cover.id}`); } if (cover) loader.load(siteUrl(`api.php?action=file&id=${cover.id}`), t => { t.colorSpace = THREE.SRGBColorSpace; st.label.material.map = t; st.label.material.color.set(0xffffff); st.label.material.needsUpdate = true; }); else { st.label.material.map = null; st.label.material.color.set(0x3a2370); st.label.material.needsUpdate = true; } }
+    const payNow = !!o && !o.shared && ['created', 'payment_pending'].includes(o.status) && !!st.commerceReady; st.payPill.group.visible = payNow; st.payPill.hit.visible = payNow;
     st.payPill.set({text: o?.status === 'payment_pending' ? 'Abrir el pago otra vez' : 'Ir al pago seguro'});
-    const canTalk = !!o && ['in_production', 'review', 'completed'].includes(o.status);   // a button that cannot do anything is not shown
-    st.talkPill.group.visible = canTalk; st.talkPill.hit.visible = canTalk; st.playPill.group.visible = !!audio; st.playPill.hit.visible = !!audio;
+    const canTalk = !!o && !o.shared && ['in_production', 'review', 'completed'].includes(o.status);   // a button that cannot do anything is not shown
+    st.talkPill.group.visible = canTalk; st.talkPill.hit.visible = canTalk;
+    const nUnread = st.badges().talk || 0, canFiles = !!st.padCan && !o.shared;
+    st.coreTalk.group.visible = st.coreTalk.hit.visible = canTalk; st.coreTalk.set({text: nUnread ? `Mensajes · ${nUnread} ${nUnread === 1 ? 'nuevo' : 'nuevos'}` : 'Mensajes'});
+    st.coreFiles.group.visible = st.coreFiles.hit.visible = canFiles; st.coreFiles.set({text: st.padNeed ? 'Subir fotos y videos' : 'Subir material'}); st.playPill.group.visible = !!audio; st.playPill.hit.visible = !!audio;
+    const canShare = !!audio && !o.shared && ['review', 'completed'].includes(o.status); st.sharePill.group.visible = canShare; st.sharePill.hit.visible = canShare;
+    st.layoutDeck?.();
     msgHit.visible = canTalk; platterHit.visible = !!audio;   // nothing to touch where nothing can happen
   };
   st.setCommerce = ready => { st.commerceReady = ready; if (st.order) { sig = ''; st.setOrder(st.order); } };
   st.setPlaying = on => { st.playing = on; st.refreshPlay(); };
   st.songTitle = () => { const b = st.order?.brief; return b?.recipient ? `Para ${b.recipient}${b.occasion ? ' · ' + b.occasion : ''}` : null; };
-  st.redrawNow = () => st.now.surface.redraw({file: audioOf(st.order)[0] || null, on: st.playing, title: st.songTitle()});
-  st.refreshPlay = () => { st.redrawNow?.(); st.playPill.set({on: st.playing, text: !st.hasSong ? 'Aún sin canción' : st.playing ? 'Pausar' : 'Escuchar mi canción'}); };
+  st.redrawNow = () => st.now.surface.redraw({file: audioOf(st.order)[0] || null, on: st.playing, title: st.songTitle(), gift: st.gift});
+  st.refreshPlay = () => { st.redrawNow?.(); st.playPill.set({on: st.playing, text: !st.hasSong ? 'Aún sin canción' : st.playing ? 'Pausar' : st.gift ? 'Escuchar la canción' : 'Escuchar mi canción'}); };
   st.setUpload = u => { st.upload = u; st.redrawPad(); };
   st.handle = a => {
     if (a.type === 'session-stage') { st.hint = a.index; st.hintTimer = 6; st.redrawMonitor(); s.pulse(0.5); return true; }
     return false;
   };
+  // Phones: the two deck buttons shrink so both fit inside the narrow frame.
+  st.relayout = portrait => { st.portrait = portrait; st.layoutDeck?.(); };
+  st.layoutDeck = () => {
+    // Phones: the frame is narrow, so «Compartir» takes the centre and the HUD button (and the disc itself) play the song.
+    const share = st.sharePill.group.visible, hidePlay = st.portrait && share, showPlay = !!st.hasSong && !hidePlay;
+    st.playPill.group.visible = st.playPill.hit.visible = showPlay;
+    st.playPill.group.position.x = share && !st.portrait ? -1.65 : 0;
+    st.sharePill.group.position.x = st.portrait ? 0 : 3.15; st.sharePill.group.scale.setScalar(st.portrait ? 1.1 : 1);
+  };
   st.setView = view => {
     st.view = view;
-    if (view === 'session-talk') st.markSeen();
+    if (view === 'session-talk') st.markSeen(); else if (st.order) { sig = ''; st.setOrder(st.order); }
     if (!SESSION_VIEWS.includes(view)) { st.hint = -1; }
   };
 
@@ -289,7 +336,7 @@ export function buildCockpit(s) {
     st.arm.rotation.y = damp(st.arm.rotation.y, spinning ? -0.55 : 0.1, 3, dt);
     st.platterRing.material.opacity = 0.35 + (spinning ? 0.45 + energy * 0.2 : 0) + (hov === st.platter ? 0.2 : 0);
     st.deckGlow.material.opacity = 0.08 + (spinning ? 0.25 + energy * 0.2 : 0);
-    st.playPill.update(dt, hov); st.talkPill.update(dt, hov); st.payPill.update(dt, hov); st.textPill.update(dt, hov);
+    st.playPill.update(dt, hov); st.coreTalk.update(dt, hov); st.coreFiles.update(dt, hov); st.sharePill.update(dt, hov); st.talkPill.update(dt, hov); st.payPill.update(dt, hov); st.textPill.update(dt, hov);
   };
   s.stations.cockpit = st; s.updaters.push(st.update);
   return st;

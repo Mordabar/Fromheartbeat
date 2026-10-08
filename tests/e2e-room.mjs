@@ -25,19 +25,22 @@ async function open(path) {
 console.log('== sala de sesión (3D)');
 {
   const s = seed('full', 'review'), {ctx, page, F, adv, tap} = await open(s.link.replace('?session=', '?e2e&session='));
-  await page.waitForFunction(() => window.__fhb.view() === 'session', null, {timeout: 60000}); await adv(4);
+  await page.waitForFunction(() => ['library', 'session'].includes(window.__fhb.view()), null, {timeout: 60000}); if (await F(() => window.__fhb.view()) === 'library') await F(ref => window.__fhb.onAction({type: 'order', ref}), s.ref); await page.waitForFunction(() => window.__fhb.view() === 'session', null, {timeout: 60000}); await adv(4);
   t('entra en la sala 3D, sin panel de texto abierto', await F(() => !document.getElementById('options-dialog').open && window.__fhb.studio.stations.cockpit.group.visible));
-  t('el recorrido tiene 4 rincones y una acción principal', await page.$$eval('.j-step', e => e.length) === 4 && /Escuchar/.test(await page.$eval('.j-next', e => e.textContent)));
+  t('el recorrido tiene 4 rincones y una acción principal', await page.$$eval('.j-tab', e => e.length) === 4 && (await page.$$eval('.j-tab span', e => e.map(x => x.textContent).join(','))) === 'Estado,Canción,Mensajes,Material' && /Escuchar/.test(await page.$eval('.j-next', e => e.textContent)));
+  t('Mensajes y Material tienen botones propios a la vista en la sala', await F(() => ['session:core-talk', 'session:core-files'].every(id => { const r = window.__fhb.studio.screenOf(id); return r && r.visible && r.front && r.x > 0 && r.x < innerWidth && r.y > 0 && r.y < innerHeight; })));
+  t('la barra de pestañas avisa de los mensajes sin leer', await page.$('.j-tab[data-focus=session-talk] .j-badge') !== null);
   await tap('stage:2'); await adv(0.3);
   t('tocar una etapa en la consola la explica en el monitor', await F(() => window.__fhb.studio.stations.cockpit.hint === 2));
   // canción
   await page.click('[data-focus=session-song]'); await adv(3.5);
   t('el botón del recorrido lleva la cámara al disco', await F(() => window.__fhb.focus() === 'session-song'));
   await page.screenshot({path: `${OUT}/room-${mode}-song.png`});
-  await tap('session:play'); await sleep(900);
+  await tap('session:vinyl'); await sleep(900);
   const aud = await F(() => ({src: document.getElementById('sample-audio').src, dock: !document.getElementById('audio-dock').hidden, name: document.getElementById('track-name').textContent}));
   t('tocar el disco prepara la canción de ESTA sesión (MP3) en el reproductor', /action=file&id=\d+$/.test(aud.src) && aud.dock && /^Para /.test(aud.name), JSON.stringify(aud));
-  await tap('session:file:2').catch(() => {}); // descargar portada: navegación de descarga, no debe sacar de la sala
+  t('la entrega muestra la portada y una tarjeta «Descargar» por archivo', await F(() => { const st = window.__fhb.studio.stations.cockpit; const state = st.board.surface.state; return !!state.cover && state.files.length >= 3 && st.fileHits.filter(h => h.visible).length === 3; }));
+  await tap('session:file:0').catch(() => {}); // descargar: navegación de descarga, no debe sacar de la sala
   t('seguimos en la sala tras tocar un archivo', await F(() => window.__fhb.view() === 'session'));
   // mensajes
   await page.click('[data-focus=session-talk]'); await adv(3.5);
@@ -71,7 +74,7 @@ console.log('== pago sobre la misma página');
 {
   const s = seed('personalizada', 'created', false), {ctx, page, F, adv, tap} = await open(s.link.replace('?session=', '?e2e&session='));
   await page.route('https://checkout.wompi.co/widget.js', r => r.fulfill({contentType: 'text/javascript', body: `window.WidgetCheckout=function(cfg){window.__wompiCfg=cfg;this.open=function(cb){window.__wompiOpen=(window.__wompiOpen||0)+1;setTimeout(function(){cb({transaction:{id:'tx-test-1',status:'APPROVED'}})},400)}}`}));
-  await page.waitForFunction(() => window.__fhb.view() === 'session', null, {timeout: 60000}); await adv(4);
+  await page.waitForFunction(() => ['library', 'session'].includes(window.__fhb.view()), null, {timeout: 60000}); if (await F(() => window.__fhb.view()) === 'library') await F(ref => window.__fhb.onAction({type: 'order', ref}), s.ref); await page.waitForFunction(() => window.__fhb.view() === 'session', null, {timeout: 60000}); await adv(4);
   t('antes de pagar, la sala muestra «Ir al pago seguro» en 3D', await F(() => window.__fhb.studio.stations.cockpit.payPill.group.visible));
   const before = page.url();
   await tap('session:pay'); await sleep(1500);
@@ -85,7 +88,7 @@ console.log('== pago sobre la misma página');
 { // sin el script de Wompi (bloqueado): cae al pago a pantalla completa
   const s = seed('personalizada', 'created', false), {ctx, page, F, adv, tap} = await open(s.link.replace('?session=', '?e2e&session='));
   await page.route('https://checkout.wompi.co/**', r => r.abort());
-  await page.waitForFunction(() => window.__fhb.view() === 'session', null, {timeout: 60000}); await adv(3);
+  await page.waitForFunction(() => ['library', 'session'].includes(window.__fhb.view()), null, {timeout: 60000}); if (await F(() => window.__fhb.view()) === 'library') await F(ref => window.__fhb.onAction({type: 'order', ref}), s.ref); await page.waitForFunction(() => window.__fhb.view() === 'session', null, {timeout: 60000}); await adv(3);
   const nav = page.waitForRequest(r => r.url().startsWith('https://checkout.wompi.co/p/'), {timeout: 15000}).then(r => r.url()).catch(() => '');
   await tap('session:pay'); const u = await nav;
   t('si Wompi no carga, usa el pago a pantalla completa (respaldo)', /public-key=pub_test_abc123/.test(u) && /signature%3Aintegrity=/.test(u), u);

@@ -32,6 +32,11 @@ body{height:100dvh;overflow:hidden}
 .j-step svg{width:19px;height:19px}.j-step:active{transform:scale(.94)}
 .j-step.done{color:#3dffc5;border-color:#3dffc58c}
 .j-step.current{background:var(--grad);color:#fff;border-color:transparent;box-shadow:0 0 22px -3px #b05cff}
+.j-tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;list-style:none;margin:0;padding:5px;border-radius:22px;background:#0f0919e6;border:1px solid #cdb2f433;backdrop-filter:blur(14px);box-shadow:0 14px 34px -16px #000}
+.j-tab{position:relative;width:100%;min-height:50px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border-radius:17px;color:#bfa9de;font:700 11px/1 var(--sans,inherit);letter-spacing:.02em;transition:transform .15s,background .2s,color .2s}
+.j-tab svg{width:20px;height:20px}.j-tab:active{transform:scale(.95)}
+.j-tab.current{background:var(--grad);color:#fff;box-shadow:0 0 22px -4px #b05cff}
+.j-badge{position:absolute;top:3px;right:calc(50% - 25px);min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:#ff4fd8;color:#fff;font:800 10px/17px var(--sans,inherit);font-style:normal;text-align:center;box-shadow:0 0 0 2px #0f0919,0 0 12px #ff4fd8;animation:nudge 2.2s ease-in-out infinite}
 .j-row{display:flex;gap:9px;align-items:stretch}
 .j-btn{flex:0 0 56px;height:56px;border-radius:50%;display:grid;place-items:center;background:#130d20e8;border:1px solid #d0b5f642;backdrop-filter:blur(14px);color:#eadcff}
 .j-btn svg{width:22px;height:22px}.j-btn:active{transform:scale(.94)}
@@ -168,7 +173,7 @@ body .audio-dock{position:fixed;z-index:25;left:10px;right:10px;top:auto;bottom:
 
 /* --- phones held sideways: the HUD shrinks so the studio keeps the screen --- */
 @media(max-height:520px){
- .j-steps,.caption{display:none}
+ .j-steps,.j-tabs,.caption{display:none}
  .j-btn{flex-basis:46px;height:46px}.j-next{height:46px;min-height:46px;font-size:14px}
  .journey{bottom:max(6px,env(safe-area-inset-bottom));width:min(520px,calc(100% - 20px))}
  .lobby-hint{bottom:max(60px,calc(env(safe-area-inset-bottom) + 54px));font-size:11px}

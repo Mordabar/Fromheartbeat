@@ -1,4 +1,4 @@
-import {sessionMarkup,STATE,STAGE_INFO,stageInfoFor} from './session-ui.js';
+import {sessionMarkup,giftMarkup,STATE,STAGE_INFO,stageInfoFor} from './session-ui.js';
 import {configure as configureUploads,mount as mountUploader,busy as uploadsBusy,subscribe as onUploadStats} from './uploader.js';
 import {SESSION_VIEWS} from './st-cockpit.js';
 import {Studio, MOODS} from './studio.js';
@@ -121,7 +121,7 @@ function sessionView(){const o=currentOrder;if(!o)return shell({head:simpleHead(
  if(!sessionPanel)return '';
  const part=sessionPanel==='talk'?'talk':sessionPanel==='files'?'files':'all',title={talk:'Tu productor',files:'Tu material',all:''}[sessionPanel];
  const back=part==='all'?`<button class="icon-btn" data-go="lobby" aria-label="Volver al inicio">${ic('back')}</button>`:`<button class="icon-btn" data-session-back aria-label="Volver a la sala">${ic('back')}</button>`;
- return shell({cls:'tall session',head:`<div class="head-row">${back}<span class="step-count">Tu sesión</span><span class="icon-spacer"></span></div>${title?`<h1 id="panel-title">${title}</h1>`:''}`,body:sessionMarkup(o,{esc,money,ic,boot,testCard,part})});}
+ return shell({cls:'tall session',head:`<div class="head-row">${back}<span class="step-count">Tu sesión</span><span class="icon-spacer"></span></div>${title?`<h1 id="panel-title">${title}</h1>`:''}`,body:o.shared?giftMarkup(o,{esc,ic}):sessionMarkup(o,{esc,money,ic,boot,testCard,part})});}
 
 function legalView(privacy){return shell({cls:'tall',head:simpleHead(privacy?'Tu historia es <em>privada.</em>':'Antes de crear <em>tu canción.</em>','Versión 11 de septiembre de 2026.',lastView),body:`<article class="legal">${privacy?`<h2>Datos que tratamos y finalidad</h2><p>Recibimos tu nombre, correo, teléfono, brief musical y archivos que decidas compartir. Los utilizamos para gestionar tu pedido, crear la canción, atender solicitudes y entregar el resultado. Los datos de pago se procesan en Wompi; Fromheartbeat no recibe el número completo de tu tarjeta ni su código de seguridad.</p><h2>Tu historia y tus archivos</h2><p>Comparte sólo información que tengas derecho a usar. Evita datos sensibles innecesarios o información de menores sin autorización de su representante. El acceso al brief y los entregables se limita al equipo que produce la sesión y a los proveedores necesarios para prestarte el servicio.</p><h2>Acceso, conservación y derechos</h2><p>Puedes solicitar conocer, actualizar, rectificar o suprimir tus datos y revocar la autorización cuando corresponda, sin afectar obligaciones de conservación aplicables. Las solicitudes se reciben en el canal de contacto indicado al final. Los datos se conservan mientras sea necesario para el servicio y las obligaciones contables y contractuales; las copias de respaldo siguen su ciclo de eliminación.</p><h2>Cookies y enlaces privados</h2><p>Usamos una cookie de sesión para proteger tu acceso y almacenamiento del navegador para conservar el borrador mientras trabajas. No incorporamos publicidad ni seguimiento publicitario. El enlace enviado por correo permite acceder a tu pedido: no lo publiques ni lo compartas.</p>`:`<h2>Lo que compras</h2><p>Creamos una canción a partir de tu brief. Dedicatoria Musical entrega MP3 y portada digital. Canción Personalizada añade edición vocal, mezcla y master, MP3 y WAV, portada personalizada, Listening Room y una ronda de ajustes. Full Experience incluye además video vertical, edición y una ronda de ajustes de video. La duración y los contenidos incluidos se detallan en cada producto.</p><h2>Pedido, pago y tiempos</h2><p>Tu pedido se guarda antes del pago. La producción se inicia cuando Wompi confirma el cobro y contamos con el brief y los materiales necesarios. El plazo se acuerda con el equipo según el alcance y la agenda; no se garantiza una fecha urgente sin acuerdo previo. Los precios personales se presentan en COP y el total se muestra antes del checkout.</p><h2>Revisión y entrega</h2><p>Los ajustes incluidos corresponden al brief acordado. Una nueva historia, una dirección musical distinta o trabajos audiovisuales de mayor complejidad requieren un nuevo acuerdo de alcance y precio. Los archivos se entregan por acceso privado y se notifica al correo del pedido.</p><h2>Derechos y uso</h2><p>Debes contar con autorización para proporcionar textos, nombres, fotografías y clips. Las experiencias personales se destinan al uso personal y al regalo; cualquier explotación comercial requiere acuerdo expreso. No se promete exclusividad sobre recursos que por su naturaleza o licencia no la permitan.</p><h2>Cancelaciones y reclamaciones</h2><p>Contacta al equipo con tu referencia para solicitar cambios, cancelación, corrección de un cobro o una reclamación. La respuesta considera el estado real de producción, el carácter personalizado del servicio y los derechos del consumidor aplicables. Estas condiciones no limitan los derechos legales que te correspondan.</p>`}<h2>Contacto y responsable</h2><p>${boot.legal.name?esc(boot.legal.name):'Fromheartbeat'}${boot.legal.taxId?' · NIT '+esc(boot.legal.taxId):''}${boot.legal.address?'<br>'+esc(boot.legal.address):''}${boot.support?`<br><a href="mailto:${esc(boot.support)}">${esc(boot.support)}</a>`:''}</p></article>`});}
 
@@ -147,7 +147,7 @@ const KEY_LABEL=a=>{
   case'product':return a.choose?`Elegir la experiencia ${a.index+1}`:`Ver y elegir la experiencia ${a.index+1}`;
   case'product-step':return a.dir<0?'Experiencia anterior':'Experiencia siguiente';
   case'track':return`Escuchar la canción ${a.index+1}`;
-  case'session-play':return'Escuchar mi canción';case'session-file':return`Descargar ${currentOrder?.files?.find(f=>f.id===a.id)?.original_name||'un archivo de la entrega'}`;case'session-pay':return'Ir al pago seguro';case'session-plain':return'Ver la sesión en texto';case'session-talk':return'Escribir al productor';case'session-files':return'Subir material';case'session-stage':return`Ver la etapa ${a.index+1}`;
+  case'session-play':return'Escuchar mi canción';case'session-file':return`Descargar ${currentOrder?.files?.find(f=>f.id===a.id)?.original_name||'un archivo de la entrega'}`;case'session-pay':return'Ir al pago seguro';case'session-plain':return'Ver la sesión en texto';case'session-share':return'Compartir esta canción con un enlace de solo escucha';case'session-talk':return'Escribir al productor';case'session-files':return'Subir material';case'session-stage':return`Ver la etapa ${a.index+1}`;
   case'edit':return`Cambiar ${{genre:'el género',mood:'la emoción',voice:'la voz',story:'para quién es',products:'la experiencia'}[a.step]||a.step}`;
   case'order':{const o=myOrders.find(x=>x.reference===a.ref);return o?`Abrir ${o.recipient?'la canción para '+o.recipient:o.product_name} (${o.reference})`:'Abrir una canción';}case'lib-page':return a.dir<0?'Ver canciones anteriores':'Ver más canciones';case'mail':return'Recibir mi enlace por correo';
   case'rec':return'Crear mi canción';case'listen':return'Escuchar canciones';case'library':return'Ver toda la colección';
@@ -170,15 +170,25 @@ function syncKeys(){
 const scheduleKeys=()=>{clearTimeout(keysTimer);keysTimer=setTimeout(()=>{syncKeys();keysTimer=setTimeout(syncKeys,1800);},350);};
 
 // The session room: four corners the camera can stand in, and the one thing worth doing right now.
-const SESSION_NAV=[['session','sliders','Estado de tu canción'],['session-song','headphones','Tu canción y tus archivos'],['session-talk','mail','Mensajes del productor'],['session-files','confetti','Tu material']];
+const SESSION_NAV=[['session','sliders','Estado de tu canción','Estado'],['session-song','headphones','Tu canción y tus archivos','Canción'],['session-talk','mail','Mensajes del productor','Mensajes'],['session-files','confetti','Tu material','Material']];
 function sessionNeeds(o){return o.product_code==='full'&&!(o.files||[]).some(f=>f.kind==='source')&&['paid','in_production'].includes(o.status);}
 let heardSong=false;
 function sessionPrimary(){const o=currentOrder,st=studio?.stations.cockpit,audio=!!st?.audioFile();
+ if(o.shared)return audio?{act:'play',icon:'play',label:'Escuchar la canción'}:{act:'status',icon:'clock',label:'Aún se está terminando'};
  if(['created','payment_pending'].includes(o.status)&&boot.commerceReady)return{act:'pay',icon:'lock',label:o.status==='payment_pending'?'Abrir el pago otra vez':'Ir al pago seguro'};
  if(['review','completed'].includes(o.status)&&audio&&!heardSong)return{act:'play',icon:'play',label:o.status==='completed'?'Escuchar mi canción':'Escuchar y opinar'};
  if(sessionNeeds(o))return{act:'files',icon:'confetti',label:'Subir mis fotos y videos'};
  if(['in_production','review','completed'].includes(o.status))return{act:'talk',icon:'mail',label:'Escribir al productor'};
  return{act:'status',icon:'sliders',label:'Ver qué está pasando'};}
+// Gifting: a link that only plays and downloads this one song, whoever opens it. The buyer's other songs stay private.
+async function shareSong(){
+ const o=currentOrder;if(!o||o.shared)return;
+ try{
+  const {url}=await api('share',{reference:o.reference}),title=o.brief?.recipient?`Una canción para ${o.brief.recipient}`:'Una canción de Fromheartbeat';
+  if(navigator.share&&isMobile()){try{await navigator.share({title,text:`${title}. Hecha a mano en Fromheartbeat.`,url});return;}catch(e){if(e.name==='AbortError')return;}}
+  try{await navigator.clipboard.writeText(url);toast('Enlace copiado. Quien lo abra podrá escuchar esta canción, nada más.');}catch{prompt('Copia este enlace de regalo:',url);}
+ }catch(e){toast(e.message);}
+}
 function focusSession(v){if(!SESSION_VIEWS.includes(v))return;sessionFocus=v;studio?.moveTo(v);renderHud();frameStudio();announce(SESSION_NAV.find(x=>x[0]===v)?.[2]||'');}
 function openSessionPanel(kind){if(view!=='session')return;sessionPanel=kind;if(kind==='full')plainMode=true;render(false);openOptions();}
 function doSession(act){
@@ -213,7 +223,7 @@ function renderHud(){
  else if(view==='samples')primary=`<button class="j-next primary" data-go="resume"><span>Crear mi canción</span>${iconSvg('arrow')}</button>`;
  else if(view==='session'&&currentOrder){const p=sessionPrimary();primary=`<button class="j-next primary" data-session="${p.act}">${iconSvg(p.icon)}<span>${esc(p.label)}</span></button>`;}
  else primary=`<button class="j-next primary" data-plain><span>Abrir información</span>${iconSvg('lines')}</button>`;
- const steps=view==='session'&&currentOrder?`<ol class="j-steps">${SESSION_NAV.map(([v,icon,label])=>`<li><button class="j-step ${v===sessionFocus?'current':''}" data-focus="${v}" aria-label="${label}" ${v===sessionFocus?'aria-current="step"':''}>${iconSvg(icon)}</button></li>`).join('')}</ol>`:flow?`<ol class="j-steps">${FLOW.map((s,j)=>`<li><button class="j-step ${j===i?'current':valid(s)?'done':''}" data-go="${s}" aria-label="Paso ${j+1}: ${STEPS[s].zone}" ${j===i?'aria-current="step"':''}>${iconSvg(STEP_ICON[s])}</button></li>`).join('')}</ol>`:'';
+ const bd=studio?.stations.cockpit?.badges?.()||{},steps=view==='session'&&currentOrder?.shared?'':view==='session'&&currentOrder?`<ol class="j-tabs">${SESSION_NAV.map(([v,icon,label,short])=>{const n=v==='session-talk'?bd.talk:v==='session-files'?bd.files:0;return `<li><button class="j-tab ${v===sessionFocus?'current':''}" data-focus="${v}" aria-label="${label}${n?(v==='session-talk'?`: ${n} sin leer`:': falta tu material'):''}" ${v===sessionFocus?'aria-current="step"':''}>${iconSvg(icon)}<span>${short}</span>${n?`<i class="j-badge" aria-hidden="true">${v==='session-talk'?n:'!'}</i>`:''}</button></li>`;}).join('')}</ol>`:flow?`<ol class="j-steps">${FLOW.map((s,j)=>`<li><button class="j-step ${j===i?'current':valid(s)?'done':''}" data-go="${s}" aria-label="Paso ${j+1}: ${STEPS[s].zone}" ${j===i?'aria-current="step"':''}>${iconSvg(STEP_ICON[s])}</button></li>`).join('')}</ol>`:'';
  jr.innerHTML=`${steps}<div class="j-row"><button class="j-btn j-back" data-go="${back}" aria-label="${flow&&i?'Paso anterior':back==='library'?'Volver a mis canciones':'Volver al estudio'}">${iconSvg('back')}</button>${primary}<button class="j-btn j-plain" data-plain aria-label="Ver en texto plano" title="Ver en texto plano">${iconSvg('lines')}</button></div>`;
 }
 
@@ -238,13 +248,15 @@ function mountUploads(){const el=root.querySelector('[data-uploader]');if(el&&cu
 async function refreshAfterUpload(ref){if(view!=='session'||currentOrder?.reference!==ref)return;const inUp=!!document.activeElement?.closest?.('#s-upload');try{currentOrder=(await api('order',null,'&reference='+encodeURIComponent(ref))).order;render(false);if(inUp)root.querySelector('[data-u-pick]')?.focus({preventScroll:true});}catch{}}
 // The library of songs: everything the browser may open as owner. Refreshed whenever the visitor walks up to it.
 async function refreshLibrary(){try{const r=await api('my-orders');myOrders=r.orders;}catch{return;}
- if(view==='recover'&&!mailDoor&&myOrders.length&&studio?.renderer&&!studio.light)go('library');else if(view==='recover'||view==='library')render(false);}
+ if(view==='recover'&&!mailDoor&&myOrders.length&&studio?.renderer&&!studio.light)go(myOrders.length===1?'recover':'library');else if(view==='recover'||view==='library')render(false);}
 function go(next){
  if(!boot)return;
  const has3D=!!studio?.renderer&&!studio.light;
  mailDoor=next==='mail';if(next==='mail')next='recover';
  if(next==='library'&&!has3D)next='recover';
- if(next==='recover'&&!mailDoor&&has3D&&myOrders.length)next='library';
+ if(next==='library'&&myOrders.length===1&&!mailDoor){loadOrder(myOrders[0].reference).catch(e=>toast(e.message));return;}
+ if(next==='recover'&&!mailDoor&&has3D&&myOrders.length===1){loadOrder(myOrders[0].reference).catch(e=>toast(e.message));return;}   // one song: straight into it
+ if(next==='recover'&&!mailDoor&&has3D&&myOrders.length>1)next='library';
  const wasLegal=['terms','privacy'].includes(view),drawerWasOpen=optionsDialog.open;
  if(next==='lobby')plainMode=false;
  const keepPlain=plainMode&&FLOW.includes(next);
@@ -254,7 +266,7 @@ function go(next){
  if(next==='resume')next=resumeStep();
  if(next==='console')next='genre';
  if(next==='review')next='checkout';
- if(next==='session'&&view!=='session'){sessionFocus='session';sessionPanel=null;heardSong=false;}
+ if(next==='session'&&view!=='session'){sessionFocus=currentOrder?.shared?'session-song':'session';sessionPanel=null;heardSong=false;}
  if(next!=='session')sessionPanel=null;
  if(FLOW.includes(next)&&currentOrder&&view==='session'){draft.key=crypto.randomUUID();save();currentOrder=null;flowView=null;}
  if(next==='checkout'){const missing=firstMissingBrief(draft);if(missing){toast(STEPS[missing].need);next=missing;}else if(boot.commerceReady)loadWompi().catch(()=>{});}
@@ -305,14 +317,16 @@ function onAction(a){
  else if(a.type==='session-play')playOrderAudio();
  else if(a.type==='session-file')location.assign(`api.php?action=file&id=${a.id}&download=1`);
  else if(a.type==='session-pay')resumePayment();
+ else if(a.type==='session-share')shareSong();
  else if(a.type==='session-plain')openSessionPanel('full');
  else if(a.type==='session-talk'){if(a.direct||sessionFocus==='session-talk'){focusSession('session-talk');openSessionPanel('talk');}else focusSession('session-talk');}
- else if(a.type==='session-files'){if(sessionFocus==='session-files'){openSessionPanel('files');}else focusSession('session-files');}
+ else if(a.type==='session-files'){if(a.direct||sessionFocus==='session-files'){focusSession('session-files');openSessionPanel('files');}else focusSession('session-files');}
 }
 
 document.addEventListener('click',async e=>{const el=e.target.closest('button');if(!el)return;
  if(el.dataset.focus){focusSession(el.dataset.focus);return;}
  if(el.dataset.session){doSession(el.dataset.session);return;}
+ if(el.hasAttribute('data-share')){shareSong();return;}
  if(el.hasAttribute('data-session-back')){closeOptions();return;}
  if(el.hasAttribute('data-plain')){if(view==='session'){openSessionPanel('full');return;}if(FLOW.includes(view))plainMode=true;openOptions();return;}
  if(el.id==='reset-view'){studio?.resetView();return;}

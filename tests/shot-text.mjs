@@ -1,0 +1,15 @@
+import fs from 'node:fs';
+import {launch, open, sleep} from './e2e-lib.mjs';
+const mode = process.argv[2] || 'mobile', tag = process.argv[3] || 'x', seed = JSON.parse(fs.readFileSync(process.argv[4] || '/tmp/s4.json', 'utf8'));
+const b = await launch(), t = await open(b, mode, 'e2e' + seed.link.replace('/?', '&'));
+await t.page.waitForFunction(() => ['library', 'session'].includes(window.__fhb.view()), null, {timeout: 30000});
+if ((await t.F(() => window.__fhb.view())) === 'library') await t.F(ref => window.__fhb.onAction({type: 'order', ref}), seed.ref);
+await t.page.waitForFunction(() => window.__fhb.view() === 'session', null, {timeout: 30000}); await t.settle(4);
+await t.page.click('.j-plain'); await sleep(900);
+const h = await t.F(() => document.querySelector('#options-dialog .panel-body, #options-dialog')?.scrollHeight);
+await t.page.screenshot({path: `${process.env.OUT || '/tmp/ds'}/${mode}-${tag}-text-1.png`});
+await t.F(() => { const sc = [...document.querySelectorAll('#options-dialog *')].filter(e => e.scrollHeight > e.clientHeight + 20 && /auto|scroll/.test(getComputedStyle(e).overflowY)); window.__sc = sc[sc.length - 1] || null; if (window.__sc) window.__sc.scrollTop = 560; }); await sleep(300);
+await t.page.screenshot({path: `${process.env.OUT || '/tmp/ds'}/${mode}-${tag}-text-2.png`});
+await t.F(() => { if (window.__sc) window.__sc.scrollTop = 1300; }); await sleep(300);
+await t.page.screenshot({path: `${process.env.OUT || '/tmp/ds'}/${mode}-${tag}-text-3.png`});
+await b.close();
