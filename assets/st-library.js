@@ -30,6 +30,11 @@ function labelArt(o) {
   }, {px: 160, transparent: false});
 }
 
+// Fit a line in a width: shrink down to a floor, then cut with an ellipsis (never overflow, never clip silently).
+function fitLine(c, text, maxW, start, weight, floor) {
+  let size = start; for (; size > floor; size -= 2) { c.font = `${weight} ${size}px ${FONT.sans}`; if (c.measureText(text).width <= maxW) return text; }
+  c.font = `${weight} ${floor}px ${FONT.sans}`; let t = text; while (t.length > 1 && c.measureText(t + '…').width > maxW) t = t.slice(0, -1); return t === text ? text : t.trimEnd() + '…';
+}
 export function buildLibrary(s) {
   const g = stationGroup(AZIMUTH.session); s.scene.add(g);
   const m = s.m, st = {group: g, orders: [], page: 0, focus: null, records: [], order: null};
@@ -49,8 +54,8 @@ export function buildLibrary(s) {
     const glow = glowSprite(0xc9a0ff, 5, 0); glow.position.z = -0.3; holder.add(glow);
     const tag = textPlane(4.1, 1.3, (c, w, h, t) => {
       roundRect(c, 4, 4, w - 8, h - 8, h * 0.3); c.fillStyle = 'rgba(12,6,28,.9)'; c.fill(); c.lineWidth = 3; c.strokeStyle = t?.tone || 'rgba(198,162,255,.55)'; c.stroke();
-      c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#fff'; const a = t?.a || ''; fit(c, a, w * 0.92, h * 0.36, 800, undefined, h * 0.26); c.fillText(a, w / 2, h * 0.33);
-      c.fillStyle = t?.tone || '#b9a6e6'; const b = t?.b || ''; fit(c, b, w * 0.92, h * 0.27, 700, undefined, h * 0.2); c.fillText(b, w / 2, h * 0.71);
+      c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#fff'; const a = fitLine(c, t?.a || '', w * 0.9, h * 0.36, 800, h * 0.27); c.fillText(a, w / 2, h * 0.33);
+      c.fillStyle = t?.tone || '#b9a6e6'; const b = fitLine(c, t?.b || '', w * 0.9, h * 0.27, 700, h * 0.21); c.fillText(b, w / 2, h * 0.71);
     }, {px: 120});
     tag.mesh.position.set(0, -2.2, 0.06); holder.add(tag.mesh);
     const hit = new THREE.Mesh(new THREE.BoxGeometry(3.5, 4.3, 0.5), m.hit); hit.position.y = -0.6;
@@ -127,7 +132,7 @@ export function buildLibrary(s) {
     const B = st.bars, cy = (wallTop + wallBottom) / 2;
     B.top.position.y = wallTop; B.bottom.position.y = wallBottom; B.left.scale.y = B.right.scale.y = wallH; B.left.position.set(-6.7, cy, -1.2); B.right.position.set(6.7, cy, -1.2);
     st.screen.group.position.set(0, top + 1.55 - (empty ? 1.6 : 0), 0.05);
-    st.bar.position.set(0, wallBottom - 1.15, 0.5);
+    st.bar.scale.setScalar(portrait ? 1.2 : 1); st.bar.position.set(0, wallBottom - 1.15, 0.5);
     st.layout = {portrait, top: wallTop, bottom: wallBottom - 2.1, empty};
   };
   st.update = (dt, t, c) => {

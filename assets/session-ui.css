@@ -228,3 +228,4 @@ body[data-view=session] .j-steps{display:flex!important}
 .s-h{letter-spacing:.04em;word-spacing:.12em}
 .s-last{margin-bottom:12px}
 .s-last .s-bub{box-shadow:0 0 0 2px #b57cff66,0 12px 28px -16px #b57cff}
+@media(max-width:400px){.s-dl{flex-wrap:wrap}.s-dl-tx{flex:1 1 55%}.s-dl-btn{flex:1 1 100%;justify-content:center}.s-dl-tx b{white-space:nowrap}}

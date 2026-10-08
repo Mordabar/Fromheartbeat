@@ -5,8 +5,6 @@ import {Studio, MOODS} from './studio.js';
 import {StudioGesture, firstMissingBrief} from './spatial-controls.js';
 import {iconFor, iconSvg, LANGUAGE_BADGE} from './icons.js';
 import {GENRE_INFO, MOOD_INFO, OCCASIONS, buildContent} from './content.js';
-// A link from the email: say so while the studio loads, instead of the lobby's «Toca CREAR».
-{const q=new URLSearchParams(location.search);if(q.has('session')){const h=document.getElementById('lobby-hint');if(h)h.innerHTML=`<b>${q.get('share')==='1'?'Abriendo tu regalo…':'Abriendo tus canciones…'}</b>`;}}
 const $=(s)=>document.querySelector(s), esc=(s)=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money=n=>new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',maximumFractionDigits:0}).format(n/100);
 const root=$('#content'), audio=$('#sample-audio');
@@ -179,12 +177,12 @@ function sessionNeeds(o){return o.product_code==='full'&&!(o.files||[]).some(f=>
 let heardSong=false;
 function sessionPrimary(){const o=currentOrder,st=studio?.stations.cockpit,audio=!!st?.audioFile();
  if(o.shared)return audio?{act:'play',icon:'play',label:'Escuchar la canción'}:{act:'status',icon:'clock',label:'Aún se está terminando'};
- if(['created','payment_pending'].includes(o.status)&&boot.commerceReady)return{act:'pay',icon:'lock',label:o.status==='payment_pending'?'Abrir el pago otra vez':'Ir al pago seguro'};
- if(['review','completed'].includes(o.status)&&audio&&!heardSong)return{act:'play',icon:'play',label:o.status==='completed'?'Escuchar mi canción':'Escuchar y opinar'};
- if(sessionNeeds(o))return{act:'files',icon:'confetti',label:'Subir mis fotos y videos'};
- if(o.status==='completed'&&(o.files||[]).some(f=>f.kind==='delivery'))return{act:'download',icon:'arrow',label:'Descargar mis archivos'};
- if(['in_production','review','completed'].includes(o.status))return{act:'talk',icon:'mail',label:'Escribir al productor'};
- return{act:'status',icon:'sliders',label:'Ver qué está pasando'};}
+ if(['created','payment_pending'].includes(o.status)&&boot.commerceReady)return{act:'pay',icon:'lock',label:o.status==='payment_pending'?'Reintentar pago':'Ir al pago seguro'};
+ if(['review','completed'].includes(o.status)&&audio&&!heardSong)return{act:'play',icon:'play',label:o.status==='completed'?'Escuchar':'Escuchar y opinar'};
+ if(sessionNeeds(o))return{act:'files',icon:'confetti',label:'Subir mis fotos'};
+ if(o.status==='completed'&&(o.files||[]).some(f=>f.kind==='delivery'))return{act:'download',icon:'arrow',label:'Descargar todo'};
+ if(['in_production','review','completed'].includes(o.status))return{act:'talk',icon:'mail',label:'Escribir'};
+ return{act:'status',icon:'sliders',label:'Ver estado'};}
 // Gifting: a link that only plays and downloads this one song, whoever opens it. The buyer's other songs stay private.
 async function shareSong(){
  const o=currentOrder;if(!o||o.shared)return;
@@ -463,7 +461,8 @@ async function start(){try{boot=await api('bootstrap');configureUploads({getCsrf
  const params=new URLSearchParams(location.search);const ref=params.get('session');if(ref){const hash=new URLSearchParams(location.hash.slice(1));const token=hash.get('token');const gift=params.get('share')==='1';
   if(token){await api('exchange',gift?{reference:ref,token,kind:'share'}:{reference:ref,token});history.replaceState({},'',`?session=${encodeURIComponent(ref)}${gift?'&share=1':''}`);}if(params.get('id')){try{await api('reconcile',{reference:ref,transaction:params.get('id')});}catch(e){toast(e.message);}}if(!gift){try{myOrders=(await api('my-orders')).orders;}catch{}}
   // Several songs under the same email: the link opens the whole crate, with the one from this link ready to open.
-  if(!gift&&token&&!params.get('id')&&myOrders.length>1&&studio?.renderer&&!studio.light){libraryFocus=ref;history.replaceState({},'',location.pathname);go('library');}else await loadOrder(ref);}else{const map={terminos:'terms',privacidad:'privacy',info:'about'},k=params.get('ver'),v=Object.prototype.hasOwnProperty.call(map,k)?map[k]:null;if(v){history.replaceState({},'',location.pathname);go(v);}}}catch(e){if(boot){go('recover');toast(new URLSearchParams(location.search).get('share')==='1'?'Este regalo ya no está disponible. Pídele a quien te lo envió que lo comparta otra vez.':e.message);}else{root.innerHTML=shell({head:`<h1 id="panel-title">El estudio está <em>tomando aire.</em></h1>`,body:`<p class="lede">${esc(e.message)}</p>`,foot:`<button class="primary" id="retry-start">Volver a intentar ↻</button>`});mountOptions();openOptions();$('#retry-start').onclick=start;}}}
+  if(!gift&&token&&!params.get('id')&&myOrders.length>1&&studio?.renderer&&!studio.light){libraryFocus=ref;history.replaceState({},'',location.pathname);go('library');}else await loadOrder(ref);}else{const map={terminos:'terms',privacidad:'privacy',info:'about'},k=params.get('ver'),v=Object.prototype.hasOwnProperty.call(map,k)?map[k]:null;if(v){history.replaceState({},'',location.pathname);go(v);}}}catch(e){if(boot&&new URLSearchParams(location.search).get('share')==='1'){history.replaceState({},'',location.pathname);go('lobby');root.innerHTML=shell({head:simpleHead('Este regalo ya <em>no está disponible.</em>'),body:`<p class="lede">El enlace venció o ya no es válido. Pídele a quien te lo envió que te lo comparta otra vez, o crea tu propia canción.</p>`,foot:`<button class="primary" data-go="resume">Crear mi canción</button>`});mountOptions();openOptions();}
+ else if(boot){go('recover');toast(e.message);}else{root.innerHTML=shell({head:`<h1 id="panel-title">El estudio está <em>tomando aire.</em></h1>`,body:`<p class="lede">${esc(e.message)}</p>`,foot:`<button class="primary" id="retry-start">Volver a intentar ↻</button>`});mountOptions();openOptions();$('#retry-start').onclick=start;}}}
 start();
 // While a payment is open, check its result often (the server asks Wompi) and celebrate when it is approved.
 let lastOrderPoll=0;

@@ -45,7 +45,8 @@ const QUICK_FOR = (o) => o.status === 'in_production' ? ['Tengo una duda', 'Quie
 const kb = b => b >= 1048576 ? (b / 1048576 >= 10 ? Math.round(b / 1048576) : (b / 1048576).toFixed(1)) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB';
 // What a file is, in plain words, with its icon and colour: «Canción · MP3», «Portada», «Video»…
 export const fileLook = f => /mpeg|mp3/.test(f.mime) ? ['Canción · MP3', 'Para escuchar y compartir', 'music', 'pink'] : /wav/.test(f.mime) ? ['Master · WAV', 'Calidad de estudio', 'star', 'violet'] : f.mime.startsWith('audio/') ? ['Audio', 'Otra versión de tu canción', 'music', 'pink'] : f.mime.startsWith('image/') ? ['Portada', 'La imagen de tu canción', 'sparkle', 'gold'] : f.mime.startsWith('video/') ? ['Video', 'Listo para redes', 'play', 'cyan'] : ['Archivo', 'Material de tu entrega', 'gift', 'violet'];
-export const downloadCards = (files, {esc, ic}) => `<div class="s-dls">${files.map(f => { const [name, sub, icon, tone] = fileLook(f); return `<a class="s-dl t-${tone}" href="api.php?action=file&id=${f.id}&download=1" aria-label="Descargar ${esc(name)}: ${esc(f.original_name)}, ${kb(Number(f.size_bytes))}"><span class="s-dl-ic" aria-hidden="true">${ic(icon)}</span><span class="s-dl-tx"><b>${esc(name)}</b><small>${esc(f.original_name)} · ${kb(Number(f.size_bytes))}</small></span><span class="s-dl-btn">${ic('arrow', 'down')}Descargar</span></a>`; }).join('')}</div>`;
+const FILE_RANK = f => /mpeg|mp3/.test(f.mime) ? 0 : f.mime.startsWith('audio/') ? 1 : f.mime.startsWith('video/') ? 2 : f.mime.startsWith('image/') ? 3 : 4;
+export const downloadCards = (files, {esc, ic}) => `<div class="s-dls">${files.slice().sort((a, b) => FILE_RANK(a) - FILE_RANK(b)).map(f => { const [name, sub, icon, tone] = fileLook(f); return `<a class="s-dl t-${tone}" href="api.php?action=file&id=${f.id}&download=1" aria-label="Descargar ${esc(name)}: ${esc(f.original_name)}, ${kb(Number(f.size_bytes))}"><span class="s-dl-ic" aria-hidden="true">${ic(icon)}</span><span class="s-dl-tx"><b>${esc(name)}</b><small>${esc(f.original_name)} · ${kb(Number(f.size_bytes))}</small></span><span class="s-dl-btn">${ic('arrow', 'down')}Descargar</span></a>`; }).join('')}</div>`;
 // What the person with a gift link sees: the song, who it is for, and the files. Nothing else exists for them.
 export function giftMarkup(o, {esc, ic}) {
   const delivery = (o.files || []).filter(f => f.kind === 'delivery'), audio = delivery.filter(f => f.mime.startsWith('audio/')).slice().reverse().sort((a, b) => (b.mime === 'audio/mpeg') - (a.mime === 'audio/mpeg')), cover = delivery.filter(f => f.mime.startsWith('image/')).pop();
@@ -93,7 +94,7 @@ export function sessionMarkup(o, {esc, money, ic, boot, testCard, now = Date.now
   const tiles = pending ? '' : `<nav class="s-tiles" aria-label="Qué quieres hacer">${[
     audio.length ? tile('#s-room', 'play', 'Escuchar', 'tu canción', 'pink') : '',
     canTalk ? tile('#s-chat', 'mail', 'Mensajes', 'con tu productor', 'cyan') : '',
-    ['paid', 'in_production', 'review', 'completed'].includes(o.status) ? tile('#s-upload', 'gift', needsM ? 'Subir fotos' : 'Material', needsM ? 'tu video las necesita' : 'fotos, audios, videos', needsM ? 'gold-hot' : 'gold') : '',
+    ['paid', 'in_production', 'review', 'completed'].includes(o.status) ? tile('#s-upload', 'gift', needsM ? 'Subir fotos' : 'Material', needsM ? 'tu video las necesita' : 'fotos, audios, videos, PDF', needsM ? 'gold-hot' : 'gold') : '',
     sharable ? tile('', 'heart', 'Compartir', 'con un enlace', 'mint', 'data-share') : '',
   ].join('')}</nav>`;
 
@@ -142,7 +143,7 @@ export function sessionMarkup(o, {esc, money, ic, boot, testCard, now = Date.now
   const upload = canSend ? `<section id="s-upload" class="s-card s-up"><h2 class="s-h"><span>${UP[0]}</span><b data-u-count>${UP[1]}</b></h2><p class="s-says">${UP[2]}</p>${uploaderHtml(o.reference, {role: 'customer', kind: 'source'})}</section>` : '';
   const story = `<details class="s-card s-story"><summary>${ic('heart')} Tu historia, tal como la contaste</summary><p>${esc(o.brief.story)}</p></details><p class="s-ref">Sesión ${esc(o.reference)}</p>`;
 
-  if (part === 'downloads') return `<div class="s-wrap">${delivery.length ? room : '<p class="s-says">Todavía no hay archivos de entrega.</p>'}</div>`;
+  if (part === 'downloads') return `<div class="s-wrap">${delivery.length ? `<section class="s-room"><h2 class="s-h"><span>Toca para descargar</span><b>${delivery.length} ${delivery.length === 1 ? 'archivo' : 'archivos'}</b></h2>${downloadCards(delivery, {esc, ic})}</section>` : '<p class="s-says">Todavía no hay archivos de entrega.</p>'}</div>`;
   if (part === 'talk') return `<div class="s-wrap">${chat}</div>`;
   if (part === 'files') return `<div class="s-wrap">${upload || '<p class="s-says">Podrás enviar tus archivos cuando el pago esté confirmado.</p>'}</div>`;
   // Order: what to do now → the song → progress → talk → extras.

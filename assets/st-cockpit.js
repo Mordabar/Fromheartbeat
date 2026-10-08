@@ -200,15 +200,21 @@ export function buildCockpit(s) {
     if (state?.unread) { const t = 'NUEVO'; c.font = `800 ${h * 0.034}px ${FONT.sans}`; const tw = c.measureText(t).width + h * 0.05; roundRect(c, w * 0.95 - tw, h * 0.028, tw, h * 0.046, h * 0.023); c.fillStyle = '#ff4fd8'; c.fill(); c.fillStyle = '#fff'; c.textAlign = 'center'; c.fillText(t, w * 0.95 - tw / 2, h * 0.052); c.textAlign = 'left'; }
     const list = state?.list || [];
     if (!list.length) { neonText(c, 'Aún sin mensajes', w * 0.05, h * 0.28, {size: h * 0.075, color: '#d5bcff', align: 'left', blur: 14, maxW: w * 0.9}); c.fillStyle = '#efe6ff'; c.font = `600 ${h * 0.045}px ${FONT.sans}`; wrap(c, state?.can ? 'Cuando tu productor te escriba, lo lees aquí. También puedes escribirle tú.' : 'Cuando empiece la producción, aquí hablas con tu productor.', w * 0.9).slice(0, 4).forEach((l, k) => c.fillText(l, w * 0.05, h * 0.4 + k * h * 0.06)); return; }
-    let y = h * 0.1; const slot = (h * 0.86) / 3;
-    list.forEach(msg => {
-      const mine = msg.who === 'me', bx = mine ? w * 0.12 : w * 0.04, bw = w * 0.84, body = (() => { const all = wrap(c, msg.text, bw - h * 0.05); if (all.length <= 3) return all; const cut = all.slice(0, 3); cut[2] = cut[2].replace(/\s*\S*$/, '') + '…'; return cut; })(), bh = h * 0.068 + body.length * h * 0.052 + h * 0.02;
+    // Newest messages that fit: every bubble is measured with the font it is drawn in, older ones step aside.
+    const bw = w * 0.84, pad = h * 0.025, lineH = h * 0.052, top = h * 0.085, room = h * 0.84;
+    c.font = `600 ${h * 0.048}px ${FONT.sans}`;
+    const bubbles = list.map(msg => { const all = wrap(c, msg.text, bw - pad * 2); const body = all.length <= 3 ? all : (() => { const cut = all.slice(0, 3); cut[2] = cut[2].replace(/\s*\S*$/, '') + '…'; return cut; })(); return {msg, body, bh: h * 0.068 + body.length * lineH + pad}; });
+    let used = 0, from = bubbles.length; for (let i = bubbles.length - 1; i >= 0; i--) { if (used + bubbles[i].bh > room && from < bubbles.length) break; used += bubbles[i].bh + h * 0.015; from = i; }
+    let y = top; const shown = bubbles.slice(from);
+    shown.forEach(({msg, body, bh}) => {
+      const mine = msg.who === 'me', bx = mine ? w * 0.12 : w * 0.04;
       roundRect(c, bx, y, bw, bh, h * 0.03); c.fillStyle = mine ? 'rgba(34,228,255,.16)' : 'rgba(155,92,255,.24)'; c.fill(); c.lineWidth = 2; c.strokeStyle = mine ? '#22e4ff' : '#b57cff'; c.stroke();
-      c.fillStyle = mine ? '#8cf0ff' : '#e0ccff'; c.font = `800 ${h * 0.04}px ${FONT.sans}`; c.textAlign = 'left'; c.fillText(`${mine ? 'Tú' : 'Tu productor'} · ${msg.when}`, bx + h * 0.025, y + h * 0.03);
-      c.fillStyle = '#ffffff'; c.font = `600 ${h * 0.048}px ${FONT.sans}`; body.forEach((l, k) => c.fillText(l, bx + h * 0.025, y + h * 0.075 + k * h * 0.052));
+      c.fillStyle = mine ? '#8cf0ff' : '#e0ccff'; c.font = `800 ${h * 0.04}px ${FONT.sans}`; c.textAlign = 'left'; c.fillText(`${mine ? 'Tú' : 'Tu productor'} · ${msg.when}`, bx + pad, y + h * 0.03);
+      c.fillStyle = '#ffffff'; c.font = `600 ${h * 0.048}px ${FONT.sans}`; body.forEach((l, k) => c.fillText(l, bx + pad, y + h * 0.075 + k * lineH));
       y += bh + h * 0.015;
     });
-    if ((state?.total || 0) > list.length) { c.fillStyle = '#cbb8f2'; c.font = `700 ${h * 0.042}px ${FONT.sans}`; c.textAlign = 'center'; c.fillText(`+ ${state.total - list.length} ${state.total - list.length === 1 ? 'mensaje anterior' : 'mensajes anteriores'} · toca para verlos`, w / 2, h * 0.965); }
+    const hidden = (state?.total || 0) - shown.length;
+    if (hidden > 0) { c.fillStyle = '#cbb8f2'; c.font = `700 ${h * 0.042}px ${FONT.sans}`; c.textAlign = 'center'; c.fillText(`+ ${hidden} ${hidden === 1 ? 'mensaje anterior' : 'mensajes anteriores'} · toca para verlos`, w / 2, h * 0.955); }
   }, {px: 105});
   st.msgs.group.position.set(0, 7.5, -1.5); wall.add(st.msgs.group);
   const msgHit = new THREE.Mesh(new THREE.PlaneGeometry(8.2, 7.8), m.hit); msgHit.position.set(0, 7.5, -1.3); msgHit.userData = {action: {type: 'session-talk'}, id: 'session:messages', target: st.msgs}; wall.add(msgHit); s.pickables.push(msgHit);
@@ -237,7 +243,7 @@ export function buildCockpit(s) {
   st.redrawMsgs = () => st.msgs.surface.redraw({list: talkList(st.order), total: talkAll(st.order).length, unread: unread(st.order), can: ['in_production', 'review', 'completed'].includes(st.order?.status)});
   st.redrawPad = () => {
     const o = st.order, can = !!o && ['paid', 'in_production', 'review', 'completed'].includes(o.status), need = can && o.product_code === 'full' && !sources(o).length && ['paid', 'in_production'].includes(o.status);
-    st.padNeed = need; st.padCan = can; padG.visible = !st.gift; padHit.visible = !st.gift;
+    st.padNeed = need; st.padCan = can; padG.visible = !st.gift; padHit.visible = !st.gift && can;
     st.pad.surface.redraw({can, need, count: sources(o).length, upload: st.upload, full: o?.product_code === 'full', hot: st.padHot});
   };
   st.redrawBoard = () => {
@@ -283,11 +289,11 @@ export function buildCockpit(s) {
   st.relayout = portrait => { st.portrait = portrait; st.layoutDeck?.(); };
   st.layoutDeck = () => {
     // Phones: the frame is narrow, so one button takes the centre (Compartir for the buyer, Crear mi canción for a guest) and the HUD button (and the disc itself) play the song.
-    const share = st.sharePill.group.visible, hidePlay = st.portrait && (share || st.gift), showPlay = !!st.hasSong && !hidePlay;
+    const share = st.sharePill.group.visible, hidePlay = st.gift || (st.portrait && share), showPlay = !!st.hasSong && !hidePlay;
     st.playPill.group.visible = st.playPill.hit.visible = showPlay;
     st.playPill.group.position.x = (share || st.gift) && !st.portrait ? -1.8 : 0;
     st.sharePill.group.position.x = st.portrait ? 0 : 3.15; st.sharePill.group.scale.setScalar(st.portrait ? 1.1 : 1);
-    st.giftCta.group.position.x = st.portrait ? 0 : 2.9; st.giftCta.group.scale.setScalar(st.portrait ? 1.1 : 0.9);
+    st.giftCta.group.position.x = 0; st.giftCta.group.scale.setScalar(st.portrait ? 1.1 : 1);
   };
   st.setView = view => {
     st.view = view;
