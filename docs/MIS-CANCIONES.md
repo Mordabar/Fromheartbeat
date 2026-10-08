@@ -30,7 +30,16 @@ Como el enlace privado ahora abre *todas* las canciones del correo, reenviarlo a
 - **Mensajes y Subir material** tienen botón propio a la vista en la sala principal.
 - **Versión de texto** rediseñada como app: una tarjeta con la acción principal, cuatro accesos grandes (Escuchar, Mensajes, Material, Compartir), descargas en tarjetas y avance compacto. Botones con color y brillo, opciones táctiles más claras.
 
+## Importante al subir
+- `.htaccess`: solo se añade compresión (mod_deflate) para html/css/js/json/svg/ttf. Nada más cambia.
+- Nuevos en `assets/`: `boot.js` (script clásico: dice «Abriendo tus canciones…» mientras carga el enlace; `index.html` lo llama antes del módulo) y `fonts/*.woff2` (las dos tipografías en woff2, ~110 KB en vez de 1,3 MB; el TTF queda de respaldo).
+- Sin cambios de base de datos.
+
+## Seguridad y UX: rondas de auditoría
+Dos árbitros adversariales revisaron el trabajo (seguridad y UX/3D mobile-first). Lo corregido: un invitado de regalo con un correo propio concedido podía leer el pedido del comprador (ahora la propiedad se comprueba por pedido); pedidos sin pagar de un tercero con tu correo ya no ensucian tu colección ni el correo de recuperación; «Salir de este dispositivo»; chip y filas de descarga del 3D; panel «Tu entrega» con tarjetas grandes; «Mi sesión» consulta al servidor antes de decidir; teclado/lector limitado a la sala activa; tap fantasma que subía el teclado; mensajes del 3D medidos para no desbordar; etiquetas de la biblioteca con elipsis; botón del HUD sin recortes.
+Pendiente / decisión de negocio: el enlace de regalo no se puede revocar y permite descargar también el WAV y el video de la entrega; aviso de tiempos en `recover` (límite 3/h por IP); rótulos truncados del asistente y orientación horizontal en teléfonos.
+
 ## Archivos
 Nuevos: `assets/st-library.js`, `docs/MIS-CANCIONES.md`, `tests/sessions-email.py`, `tests/e2e-library.mjs`, `tests/e2e-share.mjs`, `tests/support/seed-library.sh`, `tests/shot-*.mjs`.
-Cambiados: `api.php`, `private/domain.php`, `private/mail.php`, `assets/app.js`, `assets/session-ui.js`, `assets/session-ui.css`, `assets/studio.css`, `assets/studio.js`, `assets/stations.js`, `assets/st-cockpit.js`, `assets/st-rooms.js`, `tests/e2e-room.mjs`, `tests/e2e-secondary.mjs`.
+Cambiados: `.htaccess`, `index.html`, `assets/style.css`, `assets/uploader.js`, `api.php`, `private/domain.php`, `private/mail.php`, `assets/app.js`, `assets/session-ui.js`, `assets/session-ui.css`, `assets/studio.css`, `assets/studio.js`, `assets/stations.js`, `assets/st-cockpit.js`, `assets/st-rooms.js`, `tests/e2e-room.mjs`, `tests/e2e-secondary.mjs`.
 No hay cambios de base de datos ni de `.htaccess`.
