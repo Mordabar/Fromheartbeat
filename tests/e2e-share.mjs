@@ -31,7 +31,7 @@ await r.step('no talk, files, pay or share for the guest', async () => {
   if (await g.page.locator('.j-steps').count()) throw new Error('journey steps shown');
 });
 await r.step('the guest can play the song', async () => {
-  await g.tap('session:play'); await sleep(1500); const playing = await g.F(() => [...document.querySelectorAll('audio')].some(a => !a.paused || a.currentTime > 0)); if (!playing) throw new Error('not playing');
+  await g.tap('session:vinyl'); await sleep(1500); const playing = await g.F(() => [...document.querySelectorAll('audio')].some(a => !a.paused || a.currentTime > 0)); if (!playing) throw new Error('not playing');
 });
 await g.shot('share-guest');
 await r.step('the guest has no other songs: «Mi sesión» is the mail door', async () => { await g.F(() => window.__fhb.go('recover')); await g.settle(2); const n = await g.F(() => window.__fhb.studio.stations.session.orders.length); if (n) throw new Error('orders ' + n); });

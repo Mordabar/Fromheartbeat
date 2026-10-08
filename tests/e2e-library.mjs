@@ -7,12 +7,13 @@ const seeds = ['/tmp/s1.json', '/tmp/s2.json', '/tmp/s3.json', '/tmp/s4.json'].m
 const browser = await launch(), r = runner(`library ${mode}`);
 const t = await open(browser, mode, 'e2e' + seeds[1].link.replace('/?', '&'));
 await t.F(() => window.__fhb.studio.advance(4)); await sleep(500);
-const st = () => t.F(() => { const s = window.__fhb.studio.stations.session; return {view: window.__fhb.view(), shown: s.records.filter(x => x.order).length, orders: s.orders.length, page: s.page, focus: s.focus}; });
-await r.step('the link opens the crate with every song of the email', async () => { const s = await st(); if (s.view !== 'library' || s.orders < 4 || s.shown < 4) throw new Error(JSON.stringify(s)); });
+const st = () => t.F(() => { const s = window.__fhb.studio.stations.session; return {view: window.__fhb.view(), focusShown: s.records.some(x => x.order && x.order.reference === s.focus), shown: s.records.filter(x => x.order).length, orders: s.orders.length, page: s.page, focus: s.focus}; });
+await r.step('the link opens the crate with every song of the email', async () => { const s = await st(); if (s.view !== 'library' || s.orders < 4 || s.shown < 1 || !s.focusShown) throw new Error(JSON.stringify(s)); });
 await r.step('the URL does not keep the token', async () => { if (/token=/.test(t.page.url())) throw new Error(t.page.url()); });
 await t.settle(3); await t.shot('library');
 await r.step('more than six songs page: the crate shows six, «Siguientes» shows the rest', async () => {
   let s = await st(); if (s.orders < 7) throw new Error('seed has ' + s.orders);
+  if (s.page) { await t.tap('lib-prev'); await t.settle(2); s = await st(); }
   if (s.shown !== 6) throw new Error('page 1 shows ' + s.shown);
   await t.tap('lib-next'); await t.settle(2); s = await st(); if (s.page !== 1 || s.shown !== s.orders - 6) throw new Error(JSON.stringify(s));
   await t.shot('library-page2'); await t.tap('lib-prev'); await t.settle(2); s = await st(); if (s.page !== 0) throw new Error(JSON.stringify(s));

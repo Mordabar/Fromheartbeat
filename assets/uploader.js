@@ -232,7 +232,7 @@ export function uploaderHtml(ref, opts = {}) {
   if (opts.listOnly) return `<div class="u ${admin ? 'u-admin' : ''}" data-uploader data-u-ref="${esc(ref)}" data-u-role="${role}" data-u-kind="${esc(kind)}"><ul class="u-list u-sentlist" data-u-sent></ul></div>`;
   return `<div class="u ${admin ? 'u-admin' : ''}" data-uploader data-u-ref="${esc(ref)}" data-u-role="${role}" data-u-kind="${esc(kind)}">
    <div class="u-drop" data-u-drop><input class="u-input" type="file" multiple accept="${accept}" data-u-pick aria-label="${esc(opts.pickLabel || 'Elegir archivos')}">
-    <span class="u-drop-ic">${ic('up')}</span><span class="u-drop-t"><b>${esc(opts.pickLabel || 'Elegir fotos, videos o audios')}</b><small>${opts.dropHint ? esc(opts.dropHint) : '<span class="u-or">o arrástralos aquí · </span>puedes elegir varios a la vez'}</small></span></div>
+    <span class="u-drop-ic">${ic('up')}</span><span class="u-drop-t"><b>${esc(opts.pickLabel || 'Elegir fotos, videos, audios o PDF')}</b><small>${opts.dropHint ? esc(opts.dropHint) : '<span class="u-or">o arrástralos aquí · </span>puedes elegir varios a la vez'}</small></span></div>
    ${presets}<p class="u-live" role="status" aria-live="polite" data-u-live></p><p class="u-err" role="alert" data-u-err></p>
    <ul class="u-list" data-u-queue></ul><ul class="u-list u-sentlist" data-u-sent></ul></div>`;
 }

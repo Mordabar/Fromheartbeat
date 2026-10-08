@@ -7,7 +7,7 @@ const BASE = process.env.BASE_URL || 'http://127.0.0.1:8199', M = (process.env.F
 const seed = JSON.parse(execFileSync('python3', [new URL('./support/seed.py', import.meta.url).pathname, 'full', 'in_production']).toString());
 const b = await chromium.launch({headless: true, args: ['--no-sandbox']}), ctx = await b.newContext({viewport: {width: 360, height: 640}, hasTouch: true, isMobile: true}), page = await ctx.newPage();
 let ok = 0, bad = 0; const t = (n, c, x = '') => { if (c) { ok++; console.log('  ok  ', n); } else { bad++; console.log('  FAIL', n, x); } };
-await page.goto(BASE + seed.link.replace('?session=', '?e2e&session=')); await page.waitForFunction(() => window.__fhb?.view?.() === 'session', null, {timeout: 60000});
+await page.goto(BASE + seed.link.replace('?session=', '?e2e&session=')); await page.waitForFunction(() => ['library', 'session'].includes(window.__fhb?.view?.()), null, {timeout: 60000}); if (await page.evaluate(() => window.__fhb.view()) === 'library') await page.evaluate(ref => window.__fhb.onAction({type: 'order', ref}), seed.ref); await page.waitForFunction(() => window.__fhb?.view?.() === 'session', null, {timeout: 60000});
 await page.evaluate(() => { window.__fhb.onAction({type: 'session-files'}); window.__fhb.onAction({type: 'session-files'}); });   // the material pad of the 3D room: first touch brings the camera, second opens the uploader
 await page.waitForSelector('[data-u-pick]', {state: 'attached', timeout: 30000});
 await page.setInputFiles('[data-u-pick]', [M + 'falso-nombre-muy-largo-de-prueba.jpg']);

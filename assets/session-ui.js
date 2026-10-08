@@ -48,10 +48,10 @@ export const fileLook = f => /mpeg|mp3/.test(f.mime) ? ['Canción · MP3', 'Para
 export const downloadCards = (files, {esc, ic}) => `<div class="s-dls">${files.map(f => { const [name, sub, icon, tone] = fileLook(f); return `<a class="s-dl t-${tone}" href="api.php?action=file&id=${f.id}&download=1" aria-label="Descargar ${esc(name)}: ${esc(f.original_name)}, ${kb(Number(f.size_bytes))}"><span class="s-dl-ic" aria-hidden="true">${ic(icon)}</span><span class="s-dl-tx"><b>${esc(name)}</b><small>${esc(f.original_name)} · ${kb(Number(f.size_bytes))}</small></span><span class="s-dl-btn">${ic('arrow', 'down')}Descargar</span></a>`; }).join('')}</div>`;
 // What the person with a gift link sees: the song, who it is for, and the files. Nothing else exists for them.
 export function giftMarkup(o, {esc, ic}) {
-  const delivery = (o.files || []).filter(f => f.kind === 'delivery'), audio = delivery.filter(f => f.mime.startsWith('audio/')).slice().reverse(), cover = delivery.filter(f => f.mime.startsWith('image/')).pop();
+  const delivery = (o.files || []).filter(f => f.kind === 'delivery'), audio = delivery.filter(f => f.mime.startsWith('audio/')).slice().reverse().sort((a, b) => (b.mime === 'audio/mpeg') - (a.mime === 'audio/mpeg')), cover = delivery.filter(f => f.mime.startsWith('image/')).pop();
   const to = o.brief?.recipient ? `Para ${esc(o.brief.recipient)}` : 'Una canción para ti', from = o.customer?.name ? `De parte de ${esc(o.customer.name)}` : 'Alguien pensó en ti';
   const body = audio.length ? audio.map((f, i) => `<article class="s-track${i ? ' old' : ''}">${i === 0 && cover ? `<img src="api.php?action=file&id=${cover.id}" alt="Portada de la canción">` : `<div class="s-cover" aria-hidden="true">${ic('music')}</div>`}
-      <div class="s-track-body"><small>${i === 0 ? 'ÚLTIMA VERSIÓN' : 'VERSIÓN ANTERIOR'}</small><strong>${esc(f.original_name)}</strong><audio controls preload="none" aria-label="${esc(f.original_name)}" src="api.php?action=file&id=${f.id}"></audio></div></article>`).join('')
+      <div class="s-track-body"><small>${i === 0 ? 'CANCIÓN' : 'OTRA VERSIÓN'}</small><strong>${esc(f.original_name)}</strong><audio controls preload="none" aria-label="${esc(f.original_name)}" src="api.php?action=file&id=${f.id}"></audio></div></article>`).join('')
     : '<p class="s-says">La canción todavía se está terminando. Vuelve en un rato con este mismo enlace.</p>';
   return `<div class="s-wrap"><section class="s-hero tone-done"><div class="s-badge" aria-hidden="true">${ic('heart')}</div><div class="s-hero-text"><p class="s-eyebrow">${from}</p><h1 id="panel-title">${to}</h1><p class="s-says">${o.brief?.occasion ? esc(o.brief.occasion) + ' · ' : ''}Una canción hecha a mano en Fromheartbeat.</p></div></section>
     <section class="s-room"><h2 class="s-h"><span>Escúchala</span><b>Un regalo</b></h2>${body}
@@ -63,7 +63,7 @@ export function sessionMarkup(o, {esc, money, ic, boot, testCard, now = Date.now
   // While the customer reviews or has received the song, the studio is at the last stage whatever the admin left selected.
   const stage = ['review', 'completed'].includes(o.status) ? 5 : Number(o.production_stage) || 0, dead = o.status === 'cancelled';
   const pending = ['created', 'payment_pending', 'cancelled'].includes(o.status), waiting = o.status === 'payment_pending' && boot.commerceReady;
-  const delivery = o.files.filter(f => f.kind === 'delivery'), audio = delivery.filter(f => f.mime.startsWith('audio/')).slice().reverse();
+  const delivery = o.files.filter(f => f.kind === 'delivery'), audio = delivery.filter(f => f.mime.startsWith('audio/')).slice().reverse().sort((a, b) => (b.mime === 'audio/mpeg') - (a.mime === 'audio/mpeg'));
   const cover = delivery.find(f => f.mime.startsWith('image/')), others = delivery.filter(f => !f.mime.startsWith('audio/'));
   const says = o.status === 'in_production' ? (stage === 5 ? 'Estamos en el último paso: preparamos la entrega de tu canción.' : SI[stage][1]) : st.says;
   const last = o.history.length ? parseDate(o.history[o.history.length - 1].created_at) : null;
@@ -109,12 +109,14 @@ export function sessionMarkup(o, {esc, money, ic, boot, testCard, now = Date.now
   const sourceFiles = o.files.filter(f => f.kind === 'source');
   const room = delivery.length ? `<section id="s-room" class="s-room"><h2 class="s-h"><span>${o.product.listening ? 'Sala de escucha' : 'Tu entrega'}</span><b>${['review', 'completed'].includes(o.status) && audio.length ? `<button class="s-link" data-share>${ic('heart')} Compartir esta canción</button>` : 'Solo tú puedes escuchar esto'}</b></h2>
     ${audio.map((f, i) => `<article class="s-track${i ? ' old' : ''}">${i === 0 && cover ? `<img src="api.php?action=file&id=${cover.id}" alt="Portada de tu canción">` : `<div class="s-cover" aria-hidden="true">${ic('music')}</div>`}
-      <div class="s-track-body"><small>${i === 0 ? 'ÚLTIMA VERSIÓN' : 'VERSIÓN ANTERIOR'}</small><strong>${esc(f.original_name)}</strong><audio controls preload="none" aria-label="${i === 0 ? 'Última versión' : 'Versión anterior'}: ${esc(f.original_name)}" src="api.php?action=file&id=${f.id}"></audio></div></article>`).join('')}
+      <div class="s-track-body"><small>${i === 0 ? 'CANCIÓN' : 'OTRA VERSIÓN'}</small><strong>${esc(f.original_name)}</strong><audio controls preload="none" aria-label="${i === 0 ? 'Canción' : 'Otra versión'}: ${esc(f.original_name)}" src="api.php?action=file&id=${f.id}"></audio></div></article>`).join('')}
     ${downloadCards(delivery, {esc, ic})}</section>`
     : pending ? '' : `<section class="s-room empty"><h2 class="s-h"><span>Tu canción</span><b>Aparecerá aquí</b></h2><p class="s-says">Cuando esté lista, la escucharás en este mismo lugar, sin salir de la sesión.</p></section>`;
 
   // 4. The producer's messages as a conversation. Newest first; the system's own events stay small.
-  const items = o.history.filter(h => !/^(Versión disponible|Archivo añadido|Archivo retirado):/.test(h.note)).reverse();
+  const all = o.history.filter(h => !/^(Versión disponible|Archivo añadido|Archivo retirado):/.test(h.note)).reverse();
+  // The producer's newest message goes first (above the box to answer it): it is usually the question waiting for a reply.
+  const lastStudio = canTalk ? all.find(h => who(h.actor) === 'studio') : null, items = lastStudio ? all.filter(h => h !== lastStudio) : all;
   const bubble = h => {
     const w = who(h.actor), when = parseDate(h.created_at), stg = SI[Number(h.stage)]?.[0] || '';
     const text = w === 'me' ? h.note.replace(/^Comentario del cliente:\s*/, '') : h.note;
@@ -125,7 +127,7 @@ export function sessionMarkup(o, {esc, money, ic, boot, testCard, now = Date.now
     <div class="s-chips" role="group" aria-label="Respuestas rápidas">${QUICK_FOR(o).map(q => `<button type="button" class="s-chip" data-quick="${esc(q)}">${esc(q)}</button>`).join('')}</div>
     <textarea id="s-msg" name="message" required minlength="3" maxlength="2000" rows="3" placeholder="Cuéntanos qué sentiste y qué cambiarías."></textarea>
     <button class="primary">${ic('mail')} Enviar al productor</button><p class="form-error" role="status"></p></form>` : '';
-  const chat = `<section id="s-chat" class="s-chat"><h2 class="s-h"><span>Mensajes del productor</span><b>${items.filter(h => who(h.actor) !== 'system').length || 'Aún sin'} mensajes</b></h2>${talk}
+  const chat = `<section id="s-chat" class="s-chat"><h2 class="s-h"><span>Mensajes del productor</span><b>${all.filter(h => who(h.actor) !== 'system').length || 'Aún sin'} mensajes</b></h2>${lastStudio ? `<ol class="s-feed s-last">${bubble(lastStudio)}</ol>` : ''}${talk}
     <ol class="s-feed">${items.slice(0, 4).map(bubble).join('')}</ol>${items.length > 4 ? `<details class="s-more"><summary>Ver ${items.length - 4} anteriores</summary><ol class="s-feed">${items.slice(4).map(bubble).join('')}</ol></details>` : ''}</section>`;
 
   // 5. Materials (Full Experience) and the story, tucked away until needed.
@@ -140,6 +142,7 @@ export function sessionMarkup(o, {esc, money, ic, boot, testCard, now = Date.now
   const upload = canSend ? `<section id="s-upload" class="s-card s-up"><h2 class="s-h"><span>${UP[0]}</span><b data-u-count>${UP[1]}</b></h2><p class="s-says">${UP[2]}</p>${uploaderHtml(o.reference, {role: 'customer', kind: 'source'})}</section>` : '';
   const story = `<details class="s-card s-story"><summary>${ic('heart')} Tu historia, tal como la contaste</summary><p>${esc(o.brief.story)}</p></details><p class="s-ref">Sesión ${esc(o.reference)}</p>`;
 
+  if (part === 'downloads') return `<div class="s-wrap">${delivery.length ? room : '<p class="s-says">Todavía no hay archivos de entrega.</p>'}</div>`;
   if (part === 'talk') return `<div class="s-wrap">${chat}</div>`;
   if (part === 'files') return `<div class="s-wrap">${upload || '<p class="s-says">Podrás enviar tus archivos cuando el pago esté confirmado.</p>'}</div>`;
   // Order: what to do now → the song → progress → talk → extras.

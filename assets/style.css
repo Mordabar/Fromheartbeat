@@ -1,5 +1,5 @@
-@font-face{font-family:Manrope;src:url('fonts/Manrope.ttf') format('truetype');font-weight:200 800;font-display:swap}
-@font-face{font-family:Editorial;src:url('fonts/CormorantGaramond.ttf') format('truetype');font-weight:300 700;font-display:swap}
+@font-face{font-family:Manrope;src:url('fonts/Manrope.woff2') format('woff2'),url('fonts/Manrope.ttf') format('truetype');font-weight:200 800;font-display:swap}
+@font-face{font-family:Editorial;src:url('fonts/CormorantGaramond.woff2') format('woff2'),url('fonts/CormorantGaramond.ttf') format('truetype');font-weight:300 700;font-display:swap}
 
 /* Neon studio — mobile-first app shell: 3D stage always visible, UI in a fixed panel */
 :root{

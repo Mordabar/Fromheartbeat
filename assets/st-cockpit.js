@@ -110,27 +110,28 @@ export function buildCockpit(s) {
   st.coreTalk.group.position.set(-2.5, 2.0, 3.1); st.coreTalk.group.rotation.x = -0.4; core.add(st.coreTalk.group);
   st.coreFiles = new Pill(s, {w: 4.6, h: 1.0, label: 'Subir material', action: {type: 'session-files', direct: true}, id: 'session:core-files', color: '#ffc857', icon: 'confetti', fill: true});
   st.coreFiles.group.position.set(2.5, 2.0, 3.1); st.coreFiles.group.rotation.x = -0.4; core.add(st.coreFiles.group);
+  st.padPill = new Pill(s, {w: 4.6, h: 1.0, label: 'Añadir material', action: {type: 'session-files', direct: true}, id: 'session:pad-pill', color: '#ffc857', icon: 'confetti', fill: true});
+  st.padPill.group.position.set(7.7, 1.15, 3.7); st.padPill.group.rotation.x = -0.4; core.add(st.padPill.group);
+  st.giftCta = new Pill(s, {w: 5.4, h: 1.0, label: 'Crear mi canción', action: {type: 'go', view: 'resume'}, id: 'session:gift-cta', color: '#ff4fd8', icon: 'sparkle', fill: true});
+  st.giftCta.group.position.set(0, 0.9, 4.0); st.giftCta.group.rotation.x = -0.45; deck.add(st.giftCta.group); st.giftCta.group.visible = false; st.giftCta.hit.visible = false;
   st.textPill = new Pill(s, {w: 4.0, h: 0.8, label: 'Ver todo en texto', action: {type: 'session-plain', direct: true}, id: 'session:plain', color: '#c6a2ff', icon: 'lines'});
   st.textPill.group.position.set(-8.6, 1.95, 2.2); st.textPill.group.rotation.x = -0.4; core.add(st.textPill.group);
 
   // ================================================================= DECK: the song and its files
-  back(deck, 10, 12.4);
+  back(deck, 10, 13.4);
   // The delivery: cover art on top, then one download card per file saying what it is, how big it is and that it downloads.
-  const BW = 8.4, BH = 6.3, BY = 9.0, ROWS = 3, rowFrac = i => 0.585 + i * 0.138;
+  const BW = 8.4, BH = 7.2, BY = 9.3, ROWS = 3, rowFrac = i => 0.57 + i * 0.152;
   const fileLook = f => /mpeg|mp3/.test(f.mime) ? ['Canción · MP3', 'Para escuchar y compartir', 'note', '#ff4fd8'] : /wav/.test(f.mime) ? ['Master · WAV', 'Calidad de estudio', 'vinyl', '#c6a2ff'] : f.mime.startsWith('audio/') ? ['Audio', 'Versión de tu canción', 'note', '#ff4fd8'] : f.mime.startsWith('image/') ? ['Portada', 'La imagen de tu canción', 'sparkle', '#ffc857'] : f.mime.startsWith('video/') ? ['Video', 'Listo para redes', 'clapper', '#22e4ff'] : ['Archivo', 'Material de tu entrega', 'lines', '#c6a2ff'];
   st.board = makeScreen(s, BW, BH, (c, w, h, state) => {
     const bg = c.createLinearGradient(0, 0, w, h); bg.addColorStop(0, '#22124a'); bg.addColorStop(1, '#090418'); c.fillStyle = bg; c.fillRect(0, 0, w, h);
     const files = state?.files || [], px = w * 0.05;
-    c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillStyle = '#cbb8f2'; c.font = `800 ${h * 0.04}px ${FONT.sans}`; c.fillText('TU ENTREGA', px, h * 0.05);
+    c.textAlign = 'left'; c.textBaseline = 'middle';
     if (!files.length) {
       neonText(c, state?.waiting ? 'Aún no hay archivos' : 'Todavía no hay entrega', px, h * 0.36, {size: h * 0.085, color: '#d5bcff', align: 'left', blur: 14, maxW: w * 0.9});
       c.fillStyle = '#efe6ff'; c.font = `600 ${h * 0.05}px ${FONT.sans}`; wrap(c, state?.hint || 'Cuando el estudio suba tu canción, la escuchas desde el disco y descargas cada archivo aquí.', w * 0.9).slice(0, 4).forEach((l, i) => c.fillText(l, px, h * 0.5 + i * h * 0.075)); return;
     }
-    // status chip: how many files, and that they are ready
-    const chipText = `${files.length} ${files.length === 1 ? 'archivo' : 'archivos'} para descargar`; c.font = `800 ${h * 0.034}px ${FONT.sans}`; const cw = c.measureText(chipText).width + h * 0.1;
-    roundRect(c, w - px - cw, h * 0.028, cw, h * 0.046, h * 0.023); c.fillStyle = '#3dffc524'; c.fill(); c.strokeStyle = '#3dffc5aa'; c.lineWidth = 2; c.stroke(); c.fillStyle = '#3dffc5'; c.textAlign = 'center'; c.fillText(chipText, w - px - cw / 2, h * 0.052);
     // cover art
-    const cs = h * 0.34, cx = px, cy = h * 0.11;
+    const cs = h * 0.31, cx = px, cy = h * 0.075;
     c.save(); c.shadowColor = '#b57cff'; c.shadowBlur = 26; roundRect(c, cx, cy, cs, cs, cs * 0.09); c.fillStyle = '#1b0f3a'; c.fill(); c.restore();
     c.save(); roundRect(c, cx, cy, cs, cs, cs * 0.09); c.clip();
     if (state?.cover) { const im = state.cover, k = Math.max(cs / im.naturalWidth, cs / im.naturalHeight); c.drawImage(im, cx + (cs - im.naturalWidth * k) / 2, cy + (cs - im.naturalHeight * k) / 2, im.naturalWidth * k, im.naturalHeight * k); }
@@ -138,14 +139,16 @@ export function buildCockpit(s) {
     c.restore(); c.lineWidth = 3; c.strokeStyle = '#ffffff55'; roundRect(c, cx, cy, cs, cs, cs * 0.09); c.stroke();
     // title block
     const tx = cx + cs + w * 0.045, tw = w - tx - px; c.textAlign = 'left';
-    c.fillStyle = '#ffb3ec'; c.font = `800 ${h * 0.036}px ${FONT.sans}`; c.fillText(state?.cover ? 'PORTADA' : 'TU CANCIÓN', tx, cy + cs * 0.14);
-    neonText(c, state?.title || 'Tu canción', tx, cy + cs * 0.42, {size: h * 0.07, color: '#ffffff', align: 'left', blur: 12, maxW: tw});
-    c.fillStyle = '#d9ccef'; c.font = `600 ${h * 0.04}px ${FONT.sans}`; fit(c, state?.sub || '', tw, h * 0.04, 600); c.fillText(state?.sub || '', tx, cy + cs * 0.68);
-    c.fillStyle = '#9d8bc4'; c.font = `700 ${h * 0.034}px ${FONT.sans}`; c.fillText('Toca un archivo para descargarlo', tx, cy + cs * 0.9);
+    c.fillStyle = '#ffb3ec'; c.font = `800 ${h * 0.034}px ${FONT.sans}`; c.fillText('TU ENTREGA', tx, cy + cs * 0.1);
+    neonText(c, state?.title || 'Tu canción', tx, cy + cs * 0.33, {size: h * 0.066, color: '#ffffff', align: 'left', blur: 12, maxW: tw});
+    c.fillStyle = '#d9ccef'; c.font = `600 ${h * 0.038}px ${FONT.sans}`; fit(c, state?.sub || '', tw, h * 0.038, 600); c.fillText(state?.sub || '', tx, cy + cs * 0.56);
+    // how many files, and that they download: a solid chip inside the title block (never up in the corner under the header)
+    const chipText = `${files.length} ${files.length === 1 ? 'archivo' : 'archivos'} para descargar`; c.font = `800 ${h * 0.036}px ${FONT.sans}`; const cw = Math.min(tw, c.measureText(chipText).width + h * 0.08), chh = h * 0.058, cyy = cy + cs * 0.8;
+    roundRect(c, tx, cyy - chh / 2, cw, chh, chh / 2); c.fillStyle = '#12382f'; c.fill(); c.lineWidth = 2.5; c.strokeStyle = '#3dffc5'; c.stroke(); c.fillStyle = '#7dffdc'; c.textAlign = 'center'; c.fillText(chipText, tx + cw / 2, cyy + 1); c.textAlign = 'left';
     // download cards
     const more = files.length > ROWS, shown = more ? files.slice(0, ROWS - 1) : files;
     const card = (i, f, extra) => {
-      const y = h * rowFrac(i), rh = h * 0.118, hot = state?.hot === i, look = f ? fileLook(f) : null, col = look ? look[3] : '#c6a2ff';
+      const y = h * rowFrac(i), rh = h * 0.135, hot = state?.hot === i, look = f ? fileLook(f) : null, col = look ? look[3] : '#c6a2ff';
       roundRect(c, w * 0.04, y - rh / 2, w * 0.92, rh, rh * 0.28); c.fillStyle = hot ? 'rgba(198,162,255,.28)' : 'rgba(198,162,255,.1)'; c.fill(); c.lineWidth = 2.5; c.strokeStyle = hot ? '#ffffff' : 'rgba(198,162,255,.32)'; c.stroke();
       if (extra) { c.fillStyle = '#fff'; c.textAlign = 'left'; c.font = `800 ${h * 0.046}px ${FONT.sans}`; c.fillText(extra, w * 0.08, y + 1); c.fillStyle = '#c6a2ff'; c.font = `700 ${h * 0.036}px ${FONT.sans}`; c.textAlign = 'right'; c.fillText('Ver todos ›', w * 0.93, y + 1); return; }
       const ix = w * 0.105, ir = rh * 0.34; c.beginPath(); c.arc(ix, y, ir, 0, Math.PI * 2); c.fillStyle = col + '33'; c.fill(); c.lineWidth = 2; c.strokeStyle = col; c.stroke(); drawIcon(c, look[2], ix, y, ir * 1.2, {color: col, width: 2, glow: 8});
@@ -161,7 +164,7 @@ export function buildCockpit(s) {
   }, {px: 120});
   st.board.group.position.set(0, BY, -1.5); deck.add(st.board.group);
   st.fileHits = Array.from({length: ROWS}, (_, i) => {
-    const hit = new THREE.Mesh(new THREE.PlaneGeometry(BW * 0.94, BH * 0.125), m.hit); hit.position.set(0, BY + (0.5 - rowFrac(i)) * BH, -1.36); hit.visible = false;
+    const hit = new THREE.Mesh(new THREE.PlaneGeometry(BW * 0.94, BH * 0.15), m.hit); hit.position.set(0, BY + (0.5 - rowFrac(i)) * BH, -1.36); hit.visible = false;
     hit.userData = {action: null, id: `session:file:${i}`, target: {i}}; deck.add(hit); s.pickables.push(hit); return hit;
   });
   st.now = makeScreen(s, 6.8, 1.9, (c, w, h, state) => {
@@ -172,7 +175,7 @@ export function buildCockpit(s) {
     neonText(c, state?.title || f.original_name.replace(/\.[^.]+$/, ''), w * 0.05, h * 0.52, {size: h * 0.28, color: on ? '#ff8de6' : '#ffffff', align: 'left', blur: 14, maxW: w * 0.9});
     c.fillStyle = '#e9dcff'; c.font = `700 ${h * 0.13}px ${FONT.sans}`; c.fillText(on ? 'Toca el disco para pausar' : 'Toca el disco para escucharla', w * 0.05, h * 0.84);
   }, {px: 120});
-  st.now.group.position.set(0, 4.55, -1.5); deck.add(st.now.group);
+  st.now.group.position.set(0, 4.35, -1.5); deck.add(st.now.group);
   const vinyl = new THREE.MeshStandardMaterial({color: 0x08060c, roughness: 0.3, metalness: 0.6});
   box(deck, 8.2, 1.1, 4.8, m.panel, 0, 0.55, 1.2); box(deck, 8.3, 0.06, 0.06, m.accent, 0, 1.12, 3.6);
   st.platter = new THREE.Group(); st.platter.position.set(-0.7, 1.2, 1.0); deck.add(st.platter);
@@ -184,10 +187,10 @@ export function buildCockpit(s) {
   st.deckGlow = glowSprite(0xff4fd8, 8, 0.1); st.deckGlow.position.set(-0.7, 2.0, 1.0); deck.add(st.deckGlow);
   const platterHit = new THREE.Mesh(new THREE.CylinderGeometry(2.7, 2.7, 0.8, 24), m.hit); platterHit.position.set(-0.7, 1.4, 1.0); platterHit.userData = {action: {type: 'session-play'}, id: 'session:vinyl', target: st.platter}; deck.add(platterHit); s.pickables.push(platterHit);
   st.playPill = new Pill(s, {w: 5.8, h: 1.0, label: 'Escuchar mi canción', action: {type: 'session-play', direct: true}, id: 'session:play', color: '#ff4fd8', icon: 'play', fill: true});
-  st.playPill.group.position.set(0, 0.62, 3.75); st.playPill.group.rotation.x = -0.45; deck.add(st.playPill.group);
+  st.playPill.group.position.set(0, 0.9, 4.0); st.playPill.group.rotation.x = -0.45; deck.add(st.playPill.group);
   // Gifting: a read-only link for one song. The pill only exists for the buyer, and only once there is a song to give.
   st.sharePill = new Pill(s, {w: 3.6, h: 0.8, label: 'Compartir', action: {type: 'session-share', direct: true}, id: 'session:share', color: '#3dffc5', icon: 'heart'});
-  st.sharePill.group.position.set(3.15, 0.5, 3.75); st.sharePill.group.rotation.x = -0.45; deck.add(st.sharePill.group);
+  st.sharePill.group.position.set(3.15, 0.85, 4.0); st.sharePill.group.rotation.x = -0.45; deck.add(st.sharePill.group);
 
   // ================================================================= WALL: messages
   back(wall, 10, 12.4);
@@ -199,13 +202,13 @@ export function buildCockpit(s) {
     if (!list.length) { neonText(c, 'Aún sin mensajes', w * 0.05, h * 0.28, {size: h * 0.075, color: '#d5bcff', align: 'left', blur: 14, maxW: w * 0.9}); c.fillStyle = '#efe6ff'; c.font = `600 ${h * 0.045}px ${FONT.sans}`; wrap(c, state?.can ? 'Cuando tu productor te escriba, lo lees aquí. También puedes escribirle tú.' : 'Cuando empiece la producción, aquí hablas con tu productor.', w * 0.9).slice(0, 4).forEach((l, k) => c.fillText(l, w * 0.05, h * 0.4 + k * h * 0.06)); return; }
     let y = h * 0.1; const slot = (h * 0.86) / 3;
     list.forEach(msg => {
-      const mine = msg.who === 'me', bx = mine ? w * 0.12 : w * 0.04, bw = w * 0.84, body = wrap(c, msg.text, bw - h * 0.05).slice(0, 4), bh = h * 0.062 + body.length * h * 0.046 + h * 0.02;
+      const mine = msg.who === 'me', bx = mine ? w * 0.12 : w * 0.04, bw = w * 0.84, body = (() => { const all = wrap(c, msg.text, bw - h * 0.05); if (all.length <= 3) return all; const cut = all.slice(0, 3); cut[2] = cut[2].replace(/\s*\S*$/, '') + '…'; return cut; })(), bh = h * 0.068 + body.length * h * 0.052 + h * 0.02;
       roundRect(c, bx, y, bw, bh, h * 0.03); c.fillStyle = mine ? 'rgba(34,228,255,.16)' : 'rgba(155,92,255,.24)'; c.fill(); c.lineWidth = 2; c.strokeStyle = mine ? '#22e4ff' : '#b57cff'; c.stroke();
-      c.fillStyle = mine ? '#8cf0ff' : '#e0ccff'; c.font = `800 ${h * 0.036}px ${FONT.sans}`; c.textAlign = 'left'; c.fillText(`${mine ? 'Tú' : 'Tu productor'} · ${msg.when}`, bx + h * 0.025, y + h * 0.03);
-      c.fillStyle = '#ffffff'; c.font = `600 ${h * 0.042}px ${FONT.sans}`; body.forEach((l, k) => c.fillText(l, bx + h * 0.025, y + h * 0.07 + k * h * 0.046));
-      y += Math.max(bh, slot * 0.6) + h * 0.015;
+      c.fillStyle = mine ? '#8cf0ff' : '#e0ccff'; c.font = `800 ${h * 0.04}px ${FONT.sans}`; c.textAlign = 'left'; c.fillText(`${mine ? 'Tú' : 'Tu productor'} · ${msg.when}`, bx + h * 0.025, y + h * 0.03);
+      c.fillStyle = '#ffffff'; c.font = `600 ${h * 0.048}px ${FONT.sans}`; body.forEach((l, k) => c.fillText(l, bx + h * 0.025, y + h * 0.075 + k * h * 0.052));
+      y += bh + h * 0.015;
     });
-    if ((state?.total || 0) > list.length) { c.fillStyle = '#cbb8f2'; c.font = `700 ${h * 0.036}px ${FONT.sans}`; c.textAlign = 'center'; c.fillText(`+ ${state.total - list.length} ${state.total - list.length === 1 ? 'mensaje anterior' : 'mensajes anteriores'} · toca para verlos`, w / 2, h * 0.965); }
+    if ((state?.total || 0) > list.length) { c.fillStyle = '#cbb8f2'; c.font = `700 ${h * 0.042}px ${FONT.sans}`; c.textAlign = 'center'; c.fillText(`+ ${state.total - list.length} ${state.total - list.length === 1 ? 'mensaje anterior' : 'mensajes anteriores'} · toca para verlos`, w / 2, h * 0.965); }
   }, {px: 105});
   st.msgs.group.position.set(0, 7.5, -1.5); wall.add(st.msgs.group);
   const msgHit = new THREE.Mesh(new THREE.PlaneGeometry(8.2, 7.8), m.hit); msgHit.position.set(0, 7.5, -1.3); msgHit.userData = {action: {type: 'session-talk'}, id: 'session:messages', target: st.msgs}; wall.add(msgHit); s.pickables.push(msgHit);
@@ -224,7 +227,7 @@ export function buildCockpit(s) {
   const audioOf = o => { const a = delivery(o).filter(f => f.mime.startsWith('audio/')).slice().reverse(); return a.filter(f => f.mime === 'audio/mpeg').concat(a.filter(f => f.mime !== 'audio/mpeg')); };
   st.audioFile = () => audioOf(st.order)[0] || null;
   const talkAll = o => (o?.history || []).filter(h => who(h.actor) !== 'system' && !UPLOAD_NOTE.test(h.note) && Number(h.visible ?? 1) !== 0);
-  const talkList = o => talkAll(o).slice(-3).map(h => ({who: who(h.actor), text: (who(h.actor) === 'me' ? h.note.replace(/^Comentario del cliente:\s*/, '') : h.note).slice(0, 500), when: ago(parseDate(h.created_at))}));
+  const talkList = o => talkAll(o).slice(-4).map(h => ({who: who(h.actor), text: (who(h.actor) === 'me' ? h.note.replace(/^Comentario del cliente:\s*/, '') : h.note).slice(0, 500), when: ago(parseDate(h.created_at))}));
   const studioCount = o => (o?.history || []).filter(h => who(h.actor) === 'studio' && !UPLOAD_NOTE.test(h.note)).length;
   const seenKey = o => 'fhb-seen-' + o.reference;
   // Little badges for the labelled tab bar: unread producer messages and the material the video still needs.
@@ -243,7 +246,7 @@ export function buildCockpit(s) {
     st.fileHits.forEach((hit, i) => {
       const f = files[i], extra = files.length > ROWS && i === ROWS - 1;
       hit.visible = extra || !!f;
-      hit.userData.action = extra ? {type: 'session-plain'} : f ? {type: 'session-file', id: f.id} : null;
+      hit.userData.action = extra ? {type: 'session-downloads'} : f ? {type: 'session-file', id: f.id} : null;
     });
   };
   st.redrawMonitor = () => st.monitor.surface.redraw({order: st.order && {reference: st.order.reference, status: st.order.status, productName: st.order.product_name, production_stage: st.order.production_stage, product_code: st.order.product_code}, hint: st.hint});
@@ -260,10 +263,10 @@ export function buildCockpit(s) {
     const canTalk = !!o && !o.shared && ['in_production', 'review', 'completed'].includes(o.status);   // a button that cannot do anything is not shown
     st.talkPill.group.visible = canTalk; st.talkPill.hit.visible = canTalk;
     const nUnread = st.badges().talk || 0, canFiles = !!st.padCan && !o.shared;
-    st.coreTalk.group.visible = st.coreTalk.hit.visible = canTalk; st.coreTalk.set({text: nUnread ? `Mensajes · ${nUnread} ${nUnread === 1 ? 'nuevo' : 'nuevos'}` : 'Mensajes'});
-    st.coreFiles.group.visible = st.coreFiles.hit.visible = canFiles; st.coreFiles.set({text: st.padNeed ? 'Subir fotos y videos' : 'Subir material'}); st.playPill.group.visible = !!audio; st.playPill.hit.visible = !!audio;
+    st.coreTalk.set({text: nUnread ? `Mensajes · ${nUnread} ${nUnread === 1 ? 'nuevo' : 'nuevos'}` : 'Mensajes'});
+    st.flags = {canFiles, canTalk}; st.coreFiles.set({text: st.padNeed ? 'Subir fotos y videos' : 'Subir material'}); st.playPill.group.visible = !!audio; st.playPill.hit.visible = !!audio;
     const canShare = !!audio && !o.shared && ['review', 'completed'].includes(o.status); st.sharePill.group.visible = canShare; st.sharePill.hit.visible = canShare;
-    st.layoutDeck?.();
+    st.layoutDeck?.(); core.visible = !st.gift; st.giftCta.group.visible = st.giftCta.hit.visible = st.gift && !!audio;
     msgHit.visible = canTalk; platterHit.visible = !!audio;   // nothing to touch where nothing can happen
   };
   st.setCommerce = ready => { st.commerceReady = ready; if (st.order) { sig = ''; st.setOrder(st.order); } };
@@ -279,11 +282,12 @@ export function buildCockpit(s) {
   // Phones: the two deck buttons shrink so both fit inside the narrow frame.
   st.relayout = portrait => { st.portrait = portrait; st.layoutDeck?.(); };
   st.layoutDeck = () => {
-    // Phones: the frame is narrow, so «Compartir» takes the centre and the HUD button (and the disc itself) play the song.
-    const share = st.sharePill.group.visible, hidePlay = st.portrait && share, showPlay = !!st.hasSong && !hidePlay;
+    // Phones: the frame is narrow, so one button takes the centre (Compartir for the buyer, Crear mi canción for a guest) and the HUD button (and the disc itself) play the song.
+    const share = st.sharePill.group.visible, hidePlay = st.portrait && (share || st.gift), showPlay = !!st.hasSong && !hidePlay;
     st.playPill.group.visible = st.playPill.hit.visible = showPlay;
-    st.playPill.group.position.x = share && !st.portrait ? -1.65 : 0;
+    st.playPill.group.position.x = (share || st.gift) && !st.portrait ? -1.8 : 0;
     st.sharePill.group.position.x = st.portrait ? 0 : 3.15; st.sharePill.group.scale.setScalar(st.portrait ? 1.1 : 1);
+    st.giftCta.group.position.x = st.portrait ? 0 : 2.9; st.giftCta.group.scale.setScalar(st.portrait ? 1.1 : 0.9);
   };
   st.setView = view => {
     st.view = view;
@@ -294,7 +298,7 @@ export function buildCockpit(s) {
   // ================================================================= Camera
   st.shot = (portrait, view) => {
     const at = (g, x, y, z) => g.localToWorld(new THREE.Vector3(x, y, z));
-    if (view === 'session-song') return {focus: at(deck, 0, 5.2, 1.0), az: AZ.deck, pitch: -0.22, w: portrait ? 8.4 : 9.6, h: portrait ? 11.6 : 11.8, limits: {yaw: 24, pMin: -6, pMax: 20}};
+    if (view === 'session-song') return {focus: at(deck, 0, 6.4, 1.0), az: AZ.deck, pitch: -0.2, w: portrait ? 8.6 : 9.8, h: portrait ? 13.4 : 13.4, limits: {yaw: 24, pMin: -6, pMax: 20}};
     if (view === 'session-talk') return {focus: at(wall, 0, 4.8, 1.0), az: AZ.wall, pitch: -0.22, w: portrait ? 9.2 : 9.6, h: portrait ? 11.6 : 11.8, limits: {yaw: 24, pMin: -6, pMax: 20}};
     if (view === 'session-files') return {focus: at(core, 7.6, 2.9, 1.4), az: AZ.core, pitch: -0.3, w: portrait ? 6.2 : 7.4, h: portrait ? 6.4 : 5.4, limits: {yaw: 20, pMin: -14, pMax: 12}};
     if (portrait) return {focus: at(core, 0, 6.4, 0.5), az: AZ.core, pitch: 0.04, w: 11.6, h: 12.4, limits: {yaw: 70, pMin: -8, pMax: 16}};
@@ -308,6 +312,9 @@ export function buildCockpit(s) {
     root.scale.setScalar(0.94 + 0.06 * st.appear); st.wallFront.visible = s.view !== 'session-files';
     [core, deck, wall].forEach((g, i) => { const k = Math.max(0, Math.min(1, st.appear * 2.4 - i * 0.55)); g.position.y = (1 - k) * (1 - k) * -5; });   // the three corners rise from the floor one after another
     if (st.hintTimer > 0 && (st.hintTimer -= dt) <= 0 && st.hint >= 0) { st.hint = -1; st.redrawMonitor(); }
+    // The buttons that belong to one corner exist only while the camera is in that corner (no slivers of them in the next view).
+    const fl = st.flags || {}, on = (g, v) => { g.group.visible = g.hit.visible = v; };
+    on(st.coreTalk, !!fl.canTalk && s.view === 'session'); on(st.coreFiles, !!fl.canFiles && s.view === 'session'); on(st.padPill, !!fl.canFiles && s.view === 'session-files');
     const hov = c.hovered, energy = c.playing && st.playing ? c.energy : 0, color = new THREE.Color();
     // meters + faders
     st.channels.forEach((ch, i) => {
@@ -336,7 +343,7 @@ export function buildCockpit(s) {
     st.arm.rotation.y = damp(st.arm.rotation.y, spinning ? -0.55 : 0.1, 3, dt);
     st.platterRing.material.opacity = 0.35 + (spinning ? 0.45 + energy * 0.2 : 0) + (hov === st.platter ? 0.2 : 0);
     st.deckGlow.material.opacity = 0.08 + (spinning ? 0.25 + energy * 0.2 : 0);
-    st.playPill.update(dt, hov); st.coreTalk.update(dt, hov); st.coreFiles.update(dt, hov); st.sharePill.update(dt, hov); st.talkPill.update(dt, hov); st.payPill.update(dt, hov); st.textPill.update(dt, hov);
+    st.playPill.update(dt, hov); st.coreTalk.update(dt, hov); st.coreFiles.update(dt, hov); st.padPill.update(dt, hov); st.giftCta.update(dt, hov); st.sharePill.update(dt, hov); st.talkPill.update(dt, hov); st.payPill.update(dt, hov); st.textPill.update(dt, hov);
   };
   s.stations.cockpit = st; s.updaters.push(st.update);
   return st;

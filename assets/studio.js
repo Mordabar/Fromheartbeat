@@ -195,6 +195,8 @@ export class Studio {
   handle(action) { for (const st of Object.values(this.stations)) if (st.handle?.(action)) return true; return false; }
 
   // Test/e2e helper: where an object sits on screen right now.
+  // The group of the station the current view belongs to (keyboard / screen-reader controls are limited to it in the crate and the session room).
+  activeGroup() { return this.stations[STATION_OF[this.view]]?.group || null; }
   screenOf(id) {
     const o = this.pickables.find(p => p.userData.id === id); if (!o) return null;
     o.updateWorldMatrix(true, false);

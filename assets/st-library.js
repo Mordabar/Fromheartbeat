@@ -9,8 +9,10 @@ import {STATE} from './session-ui.js';
 const TONE = {pay: '#ffc857', make: '#c9a0ff', review: '#38e1ff', done: '#3dffc5', off: '#a79bb8'};
 const PER_PAGE = 6;
 const loader = new THREE.TextureLoader(), cache = new Map();
-const cover = id => { let t = cache.get(id); if (!t) { t = loader.load(siteUrl(`api.php?action=file&id=${id}`)); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; cache.set(id, t); } return t; };
+const cover = (id, onFail) => { let t = cache.get(id); if (!t) { t = loader.load(siteUrl(`api.php?action=file&id=${id}`), undefined, undefined, () => { cache.set(id, 'bad'); onFail?.(); }); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; cache.set(id, t); } return t; };
 const cut = (s, n) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
+// Ready songs first, then the ones in the making, then the rest; newest first inside each group.
+const rank = o => ['completed', 'review'].includes(o.status) ? 0 : ['in_production', 'paid'].includes(o.status) ? 1 : 2;
 const lineOf = o => {
   const look = STATE[o.status] || STATE.created;
   if (o.status === 'completed') return o.songs > 1 ? `${o.songs} versiones listas` : 'Lista para escuchar';
@@ -45,12 +47,12 @@ export function buildLibrary(s) {
     put(holder, new THREE.RingGeometry(1.2, 1.5, 56), new THREE.MeshBasicMaterial({color: 0x2c2145, transparent: true, opacity: 0.6, toneMapped: false}), 0, 0, 0.035);
     const ring = put(holder, new THREE.TorusGeometry(1.72, 0.07, 8, 64), new THREE.MeshBasicMaterial({color: 0xc9a0ff, transparent: true, opacity: 0, toneMapped: false, blending: THREE.AdditiveBlending}), 0, 0, -0.02);
     const glow = glowSprite(0xc9a0ff, 5, 0); glow.position.z = -0.3; holder.add(glow);
-    const tag = textPlane(3.9, 1.1, (c, w, h, t) => {
+    const tag = textPlane(4.1, 1.3, (c, w, h, t) => {
       roundRect(c, 4, 4, w - 8, h - 8, h * 0.3); c.fillStyle = 'rgba(12,6,28,.9)'; c.fill(); c.lineWidth = 3; c.strokeStyle = t?.tone || 'rgba(198,162,255,.55)'; c.stroke();
-      c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#fff'; const a = t?.a || ''; fit(c, a, w * 0.9, h * 0.38, 800); c.fillText(a, w / 2, h * 0.34);
-      c.fillStyle = t?.tone || '#b9a6e6'; const b = t?.b || ''; fit(c, b, w * 0.9, h * 0.25, 700); c.fillText(b, w / 2, h * 0.7);
+      c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#fff'; const a = t?.a || ''; fit(c, a, w * 0.92, h * 0.36, 800, undefined, h * 0.26); c.fillText(a, w / 2, h * 0.33);
+      c.fillStyle = t?.tone || '#b9a6e6'; const b = t?.b || ''; fit(c, b, w * 0.92, h * 0.27, 700, undefined, h * 0.2); c.fillText(b, w / 2, h * 0.71);
     }, {px: 120});
-    tag.mesh.position.set(0, -2.15, 0.06); holder.add(tag.mesh);
+    tag.mesh.position.set(0, -2.2, 0.06); holder.add(tag.mesh);
     const hit = new THREE.Mesh(new THREE.BoxGeometry(3.5, 4.3, 0.5), m.hit); hit.position.y = -0.6;
     hit.userData = {action: {type: 'order', index: i}, id: `lib:${i}`, target: holder}; holder.add(hit); s.pickables.push(hit);
     st.records.push({holder, disc, art, ring, glow, tag, hit, hov: 0, sel: 0, spin: 0, home: new THREE.Vector3(), order: null});
@@ -82,19 +84,22 @@ export function buildLibrary(s) {
   g.add(st.screen.group);
 
   st.setOrders = list => {
-    const key = JSON.stringify(list.map(o => [o.reference, o.status, o.production_stage, o.cover_id, o.songs]));
+    const key = JSON.stringify([st.focus, list.map(o => [o.reference, o.status, o.production_stage, o.cover_id, o.songs])]);
+    if (st.focus !== st.lastFocus) { st.pageSet = false; st.lastFocus = st.focus; }
     if (key === st.key) return; st.key = key;
-    st.orders = list; st.page = Math.min(st.page, Math.max(0, Math.ceil(list.length / PER_PAGE) - 1)); st.fill();
+    st.orders = list.map((o, i) => [o, i]).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map(x => x[0]);
+    const at = st.focus ? st.orders.findIndex(o => o.reference === st.focus) : -1;   // the disc of the link that was opened is always on the page that is showing
+    st.page = at >= 0 && !st.pageSet ? Math.floor(at / PER_PAGE) : Math.min(st.page, Math.max(0, Math.ceil(st.orders.length / PER_PAGE) - 1)); if (at >= 0) st.pageSet = true; st.fill();
   };
   st.fill = () => {
     const list = st.orders, pages = Math.max(1, Math.ceil(list.length / PER_PAGE)), from = st.page * PER_PAGE;
     st.records.forEach((r, i) => {
       const o = list[from + i]; r.order = o || null; r.holder.visible = !!o; if (!o) return;
       const mat = r.art.material; mat.color.set(0xffffff);
-      if (o.cover_id) mat.map = cover(o.cover_id); else { if (r.labelArt) r.labelArt.surface.dispose?.(); r.labelArt = labelArt(o); mat.map = r.labelArt.surface.tex; }
+      if (o.cover_id && cache.get(o.cover_id) !== 'bad') mat.map = cover(o.cover_id, () => st.fill()); else { if (r.labelArt) r.labelArt.surface.dispose?.(); r.labelArt = labelArt(o); mat.map = r.labelArt.surface.tex; }
       mat.needsUpdate = true;
       const tone = toneOf(o); r.ring.material.color.set(tone); r.glow.material.color.set(tone); r.tone = tone;
-      r.tag.surface.redraw({a: o.recipient ? `Para ${cut(o.recipient, 22)}` : cut(o.product_name, 26), b: lineOf(o), tone});
+      r.tag.surface.redraw({a: o.recipient ? `Para ${cut(o.recipient, 20)}` : cut(o.product_name, 26), b: lineOf(o), tone});
       r.hit.userData.action = {type: 'order', ref: o.reference};
     });
     st.prevPill.group.visible = st.prevPill.hit.visible = st.page > 0; st.nextPill.group.visible = st.nextPill.hit.visible = st.page < pages - 1;
@@ -102,6 +107,7 @@ export function buildLibrary(s) {
     st.mailPill.group.visible = st.mailPill.hit.visible = none;
     st.screen.surface.redraw({n: list.length, page: st.page, pages, ready: list.filter(o => ['completed', 'review'].includes(o.status)).length});
     st.relayout(s.portrait);
+    if (s.view === 'library' && s.renderer) s.moveTo('library');   // the wall changed height: frame it again so the buttons under it stay on screen
   };
   st.handle = a => {
     if (a.type !== 'lib-page') return false;

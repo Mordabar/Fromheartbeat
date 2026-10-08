@@ -224,3 +224,7 @@ body[data-view=session] .j-steps{display:flex!important}
 .s-ref{margin:0;text-align:center;font-size:12px;color:var(--s-mute);letter-spacing:.04em}
 .s-hero h1{font-size:21px;line-height:1.15}.s-cover-lg+.s-hero-text h1{font-size:20px}
 @media(max-width:899px) and (min-height:521px){body[data-view=session] #options-dialog[open]{height:min(70dvh,620px)}}
+
+.s-h{letter-spacing:.04em;word-spacing:.12em}
+.s-last{margin-bottom:12px}
+.s-last .s-bub{box-shadow:0 0 0 2px #b57cff66,0 12px 28px -16px #b57cff}

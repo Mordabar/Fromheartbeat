@@ -11,7 +11,7 @@ page.on('pageerror', e => errors.push(String(e))); page.on('console', m => { if 
 page.on('request', r => { const m = r.url().match(/action=(upload-[a-z]+|file-delete)/); if (m) reqs.push(m[1]); });
 const t = (name, cond, extra = '') => { if (cond) { ok++; console.log('  ok  ', name); } else { bad++; console.log('  FAIL', name, extra); } };
 await page.goto(BASE + seed.link.replace('?session=', '?e2e&session='), {waitUntil: 'load'});
-await page.waitForFunction(() => window.__fhb?.view?.() === 'session', null, {timeout: 60000});
+await page.waitForFunction(() => ['library', 'session'].includes(window.__fhb?.view?.()), null, {timeout: 60000}); if (await page.evaluate(() => window.__fhb.view()) === 'library') await page.evaluate(ref => window.__fhb.onAction({type: 'order', ref}), seed.ref); await page.waitForFunction(() => window.__fhb?.view?.() === 'session', null, {timeout: 60000});
 await page.evaluate(() => { window.__fhb.onAction({type: 'session-files'}); window.__fhb.onAction({type: 'session-files'}); });   // the material pad of the 3D room: first touch brings the camera, second opens the uploader
 await page.waitForSelector('[data-u-pick]', {state: 'attached', timeout: 30000});
 await page.screenshot({path: `${OUT}/up-${mode}-1-vacio.png`});

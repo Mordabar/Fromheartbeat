@@ -5,6 +5,8 @@ import {Studio, MOODS} from './studio.js';
 import {StudioGesture, firstMissingBrief} from './spatial-controls.js';
 import {iconFor, iconSvg, LANGUAGE_BADGE} from './icons.js';
 import {GENRE_INFO, MOOD_INFO, OCCASIONS, buildContent} from './content.js';
+// A link from the email: say so while the studio loads, instead of the lobby's «Toca CREAR».
+{const q=new URLSearchParams(location.search);if(q.has('session')){const h=document.getElementById('lobby-hint');if(h)h.innerHTML=`<b>${q.get('share')==='1'?'Abriendo tu regalo…':'Abriendo tus canciones…'}</b>`;}}
 const $=(s)=>document.querySelector(s), esc=(s)=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money=n=>new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',maximumFractionDigits:0}).format(n/100);
 const root=$('#content'), audio=$('#sample-audio');
@@ -119,7 +121,7 @@ function recoverView(){
 function sessionView(){const o=currentOrder;if(!o)return shell({head:simpleHead('Abriendo tu sesión…'),body:''});
  // The session lives in the 3D room. This panel only opens for one job at a time (write, send files) or as the plain-text version.
  if(!sessionPanel)return '';
- const part=sessionPanel==='talk'?'talk':sessionPanel==='files'?'files':'all',title={talk:'Tu productor',files:'Tu material',all:''}[sessionPanel];
+ const part=sessionPanel==='talk'?'talk':sessionPanel==='files'?'files':sessionPanel==='downloads'?'downloads':'all',title={talk:'Tu productor',files:'Tu material',downloads:'Tu entrega',all:''}[sessionPanel];
  const back=part==='all'?`<button class="icon-btn" data-go="lobby" aria-label="Volver al inicio">${ic('back')}</button>`:`<button class="icon-btn" data-session-back aria-label="Volver a la sala">${ic('back')}</button>`;
  return shell({cls:'tall session',head:`<div class="head-row">${back}<span class="step-count">Tu sesión</span><span class="icon-spacer"></span></div>${title?`<h1 id="panel-title">${title}</h1>`:''}`,body:o.shared?giftMarkup(o,{esc,ic}):sessionMarkup(o,{esc,money,ic,boot,testCard,part})});}
 
@@ -147,17 +149,19 @@ const KEY_LABEL=a=>{
   case'product':return a.choose?`Elegir la experiencia ${a.index+1}`:`Ver y elegir la experiencia ${a.index+1}`;
   case'product-step':return a.dir<0?'Experiencia anterior':'Experiencia siguiente';
   case'track':return`Escuchar la canción ${a.index+1}`;
-  case'session-play':return'Escuchar mi canción';case'session-file':return`Descargar ${currentOrder?.files?.find(f=>f.id===a.id)?.original_name||'un archivo de la entrega'}`;case'session-pay':return'Ir al pago seguro';case'session-plain':return'Ver la sesión en texto';case'session-share':return'Compartir esta canción con un enlace de solo escucha';case'session-talk':return'Escribir al productor';case'session-files':return'Subir material';case'session-stage':return`Ver la etapa ${a.index+1}`;
+  case'session-play':return'Escuchar mi canción';case'session-file':return`Descargar ${currentOrder?.files?.find(f=>f.id===a.id)?.original_name||'un archivo de la entrega'}`;case'session-pay':return'Ir al pago seguro';case'session-plain':return'Ver la sesión en texto';case'session-downloads':return'Ver y descargar todos los archivos';case'session-share':return'Compartir esta canción con un enlace de solo escucha';case'session-talk':return'Escribir al productor';case'session-files':return'Subir material';case'session-stage':return`Ver la etapa ${a.index+1}`;
   case'edit':return`Cambiar ${{genre:'el género',mood:'la emoción',voice:'la voz',story:'para quién es',products:'la experiencia'}[a.step]||a.step}`;
   case'order':{const o=myOrders.find(x=>x.reference===a.ref);return o?`Abrir ${o.recipient?'la canción para '+o.recipient:o.product_name} (${o.reference})`:'Abrir una canción';}case'lib-page':return a.dir<0?'Ver canciones anteriores':'Ver más canciones';case'mail':return'Recibir mi enlace por correo';
   case'rec':return'Crear mi canción';case'listen':return'Escuchar canciones';case'library':return'Ver toda la colección';
-  case'go':return{recover:'Abrir mi sesión',mood:'Elegir la emoción',terms:'Leer los términos',privacy:'Leer la privacidad'}[a.view]||`Ir a ${a.view}`;
+  case'go':return{about:'Información del estudio',resume:'Pedir otra canción',recover:'Abrir mi sesión',mood:'Elegir la emoción',terms:'Leer los términos',privacy:'Leer la privacidad'}[a.view]||`Ir a ${a.view}`;
   default:return'';
  }};
 let keysTimer=0,keysSig='';
 function syncKeys(){
  const host=$('#stage-keys');if(!studio||!host)return;
- const live=studio.pickables.filter(o=>{for(let p=o;p;p=p.parent)if(!p.visible)return false;return o.userData?.action;});
+ let live=studio.pickables.filter(o=>{for(let p=o;p;p=p.parent)if(!p.visible)return false;return o.userData?.action;});
+ // In the crate and the session room only that room's controls are reachable by keyboard and screen reader (the rest of the studio is out of sight).
+ if(view==='library'||view.startsWith('session')){const here=studio.activeGroup?.();if(here){const mine=live.filter(o=>{for(let p=o;p;p=p.parent)if(p===here)return true;return false;});if(mine.length)live=mine;}}
  const seenLabel=new Set(),items=live.map(o=>({o,label:KEY_LABEL(o.userData.action)})).filter(x=>x.label&&!seenLabel.has(x.label)&&seenLabel.add(x.label));
  const sig=items.map(x=>x.o.userData.id).join('|');
  const pressed=x=>{const a=x.o.userData.action;return a.type==='pick'?draft[a.kind]===a.value:false;};
@@ -178,6 +182,7 @@ function sessionPrimary(){const o=currentOrder,st=studio?.stations.cockpit,audio
  if(['created','payment_pending'].includes(o.status)&&boot.commerceReady)return{act:'pay',icon:'lock',label:o.status==='payment_pending'?'Abrir el pago otra vez':'Ir al pago seguro'};
  if(['review','completed'].includes(o.status)&&audio&&!heardSong)return{act:'play',icon:'play',label:o.status==='completed'?'Escuchar mi canción':'Escuchar y opinar'};
  if(sessionNeeds(o))return{act:'files',icon:'confetti',label:'Subir mis fotos y videos'};
+ if(o.status==='completed'&&(o.files||[]).some(f=>f.kind==='delivery'))return{act:'download',icon:'arrow',label:'Descargar mis archivos'};
  if(['in_production','review','completed'].includes(o.status))return{act:'talk',icon:'mail',label:'Escribir al productor'};
  return{act:'status',icon:'sliders',label:'Ver qué está pasando'};}
 // Gifting: a link that only plays and downloads this one song, whoever opens it. The buyer's other songs stay private.
@@ -197,6 +202,7 @@ function doSession(act){
  else if(act==='talk'){focusSession('session-talk');openSessionPanel('talk');}
  else if(act==='files'){focusSession('session-files');openSessionPanel('files');}
  else if(act==='plain')openSessionPanel('full');
+ else if(act==='download'){focusSession('session-song');openSessionPanel('downloads');}
  else if(act==='status'){focusSession('session');const o=currentOrder;if(o)studio?.stations.cockpit?.handle({type:'session-stage',index:['review','completed'].includes(o.status)?5:Number(o.production_stage)||0});}
 }
 // Caption and journey bar: the only chrome that lives over the 3D. Everything else happens in the scene.
@@ -223,7 +229,7 @@ function renderHud(){
  else if(view==='samples')primary=`<button class="j-next primary" data-go="resume"><span>Crear mi canción</span>${iconSvg('arrow')}</button>`;
  else if(view==='session'&&currentOrder){const p=sessionPrimary();primary=`<button class="j-next primary" data-session="${p.act}">${iconSvg(p.icon)}<span>${esc(p.label)}</span></button>`;}
  else primary=`<button class="j-next primary" data-plain><span>Abrir información</span>${iconSvg('lines')}</button>`;
- const bd=studio?.stations.cockpit?.badges?.()||{},steps=view==='session'&&currentOrder?.shared?'':view==='session'&&currentOrder?`<ol class="j-tabs">${SESSION_NAV.map(([v,icon,label,short])=>{const n=v==='session-talk'?bd.talk:v==='session-files'?bd.files:0;return `<li><button class="j-tab ${v===sessionFocus?'current':''}" data-focus="${v}" aria-label="${label}${n?(v==='session-talk'?`: ${n} sin leer`:': falta tu material'):''}" ${v===sessionFocus?'aria-current="step"':''}>${iconSvg(icon)}<span>${short}</span>${n?`<i class="j-badge" aria-hidden="true">${v==='session-talk'?n:'!'}</i>`:''}</button></li>`;}).join('')}</ol>`:flow?`<ol class="j-steps">${FLOW.map((s,j)=>`<li><button class="j-step ${j===i?'current':valid(s)?'done':''}" data-go="${s}" aria-label="Paso ${j+1}: ${STEPS[s].zone}" ${j===i?'aria-current="step"':''}>${iconSvg(STEP_ICON[s])}</button></li>`).join('')}</ol>`:'';
+ const bd=studio?.stations.cockpit?.badges?.()||{},unpaid=view==='session'&&currentOrder&&['created','payment_pending','cancelled'].includes(currentOrder.status),steps=view==='session'&&(currentOrder?.shared||unpaid)?'':view==='session'&&currentOrder?`<ol class="j-tabs">${SESSION_NAV.map(([v,icon,label,short])=>{const n=v==='session-talk'?bd.talk:v==='session-files'?bd.files:0;return `<li><button class="j-tab ${v===sessionFocus?'current':''}" data-focus="${v}" aria-label="${label}${n?(v==='session-talk'?`: ${n} sin leer`:': falta tu material'):''}" ${v===sessionFocus?'aria-current="step"':''}>${iconSvg(icon)}<span>${short}</span>${n?`<i class="j-badge" aria-hidden="true">${v==='session-talk'?n:'!'}</i>`:''}</button></li>`;}).join('')}</ol>`:flow?`<ol class="j-steps">${FLOW.map((s,j)=>`<li><button class="j-step ${j===i?'current':valid(s)?'done':''}" data-go="${s}" aria-label="Paso ${j+1}: ${STEPS[s].zone}" ${j===i?'aria-current="step"':''}>${iconSvg(STEP_ICON[s])}</button></li>`).join('')}</ol>`:'';
  jr.innerHTML=`${steps}<div class="j-row"><button class="j-btn j-back" data-go="${back}" aria-label="${flow&&i?'Paso anterior':back==='library'?'Volver a mis canciones':'Volver al estudio'}">${iconSvg('back')}</button>${primary}<button class="j-btn j-plain" data-plain aria-label="Ver en texto plano" title="Ver en texto plano">${iconSvg('lines')}</button></div>`;
 }
 
@@ -247,16 +253,18 @@ function render(enter=true){mountOptions();const keepMsg=root.querySelector('#s-
 function mountUploads(){const el=root.querySelector('[data-uploader]');if(el&&currentOrder&&view==='session')mountUploader(el,{ref:currentOrder.reference,role:'customer',kind:'source',files:currentOrder.files,status:currentOrder.status});}
 async function refreshAfterUpload(ref){if(view!=='session'||currentOrder?.reference!==ref)return;const inUp=!!document.activeElement?.closest?.('#s-upload');try{currentOrder=(await api('order',null,'&reference='+encodeURIComponent(ref))).order;render(false);if(inUp)root.querySelector('[data-u-pick]')?.focus({preventScroll:true});}catch{}}
 // The library of songs: everything the browser may open as owner. Refreshed whenever the visitor walks up to it.
+let openingLibrary=false;
+async function openLibrary(){openingLibrary=true;try{try{myOrders=(await api('my-orders')).orders;}catch{}
+ if(myOrders.length===1)await loadOrder(myOrders[0].reference);else go(myOrders.length?'library':'mail');}catch(e){toast(e.message);}finally{openingLibrary=false;}}
 async function refreshLibrary(){try{const r=await api('my-orders');myOrders=r.orders;}catch{return;}
- if(view==='recover'&&!mailDoor&&myOrders.length&&studio?.renderer&&!studio.light)go(myOrders.length===1?'recover':'library');else if(view==='recover'||view==='library')render(false);}
+ if(view==='library'&&myOrders.length===1)loadOrder(myOrders[0].reference).catch(()=>{});else if(view==='recover'||view==='library')render(false);}
 function go(next){
  if(!boot)return;
  const has3D=!!studio?.renderer&&!studio.light;
  mailDoor=next==='mail';if(next==='mail')next='recover';
  if(next==='library'&&!has3D)next='recover';
- if(next==='library'&&myOrders.length===1&&!mailDoor){loadOrder(myOrders[0].reference).catch(e=>toast(e.message));return;}
- if(next==='recover'&&!mailDoor&&has3D&&myOrders.length===1){loadOrder(myOrders[0].reference).catch(e=>toast(e.message));return;}   // one song: straight into it
- if(next==='recover'&&!mailDoor&&has3D&&myOrders.length>1)next='library';
+ // «Mi sesión»: ask the server what this browser owns right now (a second song may have been bought since), then: none → mail door · one → straight in · several → the crate.
+ if(next==='recover'&&!mailDoor&&has3D&&!openingLibrary){openLibrary();return;}
  const wasLegal=['terms','privacy'].includes(view),drawerWasOpen=optionsDialog.open;
  if(next==='lobby')plainMode=false;
  const keepPlain=plainMode&&FLOW.includes(next);
@@ -319,6 +327,7 @@ function onAction(a){
  else if(a.type==='session-pay')resumePayment();
  else if(a.type==='session-share')shareSong();
  else if(a.type==='session-plain')openSessionPanel('full');
+ else if(a.type==='session-downloads')openSessionPanel('downloads');
  else if(a.type==='session-talk'){if(a.direct||sessionFocus==='session-talk'){focusSession('session-talk');openSessionPanel('talk');}else focusSession('session-talk');}
  else if(a.type==='session-files'){if(a.direct||sessionFocus==='session-files'){focusSession('session-files');openSessionPanel('files');}else focusSession('session-files');}
 }
@@ -389,7 +398,9 @@ async function resumePayment(btn){
 // A tap on an object can change the screen under the finger (the journey bar appears, a drawer opens); the browser then
 // delivers the same tap as a click to whatever is there now. That ghost click must not press an unrelated button.
 let stageTap={t:-1e9,x:0,y:0};
-document.addEventListener('click',e=>{if(e.detail>0&&performance.now()-stageTap.t<450&&Math.hypot(e.clientX-stageTap.x,e.clientY-stageTap.y)<14&&e.target.closest?.('#journey,.header,#audio-dock,#options-dialog,#reset-view')){e.preventDefault();e.stopImmediatePropagation();}},true);
+const ghostTap=e=>{if(e.detail>0&&performance.now()-stageTap.t<450&&Math.hypot(e.clientX-stageTap.x,e.clientY-stageTap.y)<14&&e.target.closest?.('#journey,.header,#audio-dock,#options-dialog,#reset-view')){e.preventDefault();e.stopImmediatePropagation();}};
+// The compatibility mousedown after a tap would also focus whatever opened under the finger (a text box: the phone keyboard pops up by itself).
+for(const type of['click','mousedown'])document.addEventListener(type,ghostTap,true);
 const gesture=new StudioGesture({look:(dx,dy)=>{studio?.lookAround(dx,dy);},start:()=>studio?.beginLook(),end:(vx,vy)=>studio?.endLook(vx,vy),zoom:ratio=>studio?.zoomBy(ratio),pick:(x,y)=>{stageTap={t:performance.now(),x,y};onAction(studio?.pick(x,y)?.action);}});
 {const stage=$('#stage');let hoverRaf=0;
  stage.addEventListener('pointerdown',e=>{if(e.button>0)return;gesture.down(e.pointerId,e.clientX,e.clientY,e.pointerType);stage.setPointerCapture(e.pointerId);stage.classList.add('grabbing');});
@@ -427,7 +438,7 @@ $('#player-toggle').onclick=()=>{if(audio.paused){if(customTrack)audio.play().ca
 $('#player-prev').onclick=()=>{if(audio.currentTime>3||customTrack){audio.currentTime=0;return;}playTrack(playing-1);};
 $('#player-next').onclick=()=>{if(!customTrack)playTrack(playing+1);};
 $('#player-close').onclick=()=>{audio.pause();$('#audio-dock').hidden=true;document.body.classList.remove('audio-open');requestAnimationFrame(frameStudio);};
-$('#sound-toggle').onclick=()=>{if(audio.paused){if(customTrack)audio.play().catch(()=>{});else playTrack(playing<0?0:playing);}else audio.pause();};
+$('#sound-toggle').onclick=()=>{if(audio.paused){if(customTrack)audio.play().catch(()=>{});else if(view==='session'&&studio?.stations.cockpit?.audioFile())playOrderAudio();else playTrack(playing<0?0:playing);}else audio.pause();};
 audio.ontimeupdate=()=>{if(!seeking&&audio.duration)paintSeek(audio.currentTime/audio.duration);};
 audio.onloadedmetadata=audio.ondurationchange=()=>{$('#audio-duration').textContent=clock(audio.duration);};
 audio.onprogress=()=>{if(audio.duration&&audio.buffered.length)seekEl.style.setProperty('--b',(audio.buffered.end(audio.buffered.length-1)/audio.duration*100).toFixed(1)+'%');};
@@ -446,13 +457,13 @@ async function playOrderAudio(){
  try{studio?.connectAudio(audio);await audio.play();heardSong=true;renderHud();}catch{toast('No se pudo reproducir la canción. Inténtalo otra vez.');}syncPlayer();
 }
 async function refreshOrder(){if(!currentOrder)return;currentOrder=(await api('order',null,'&reference='+encodeURIComponent(currentOrder.reference))).order;if(sessionPanel)render(false);else sync3D();}
-async function loadOrder(ref){currentOrder=(await api('order',null,'&reference='+encodeURIComponent(ref))).order;go('session');}
+async function loadOrder(ref){currentOrder=(await api('order',null,'&reference='+encodeURIComponent(ref))).order;go('session');if(!currentOrder.shared)api('my-orders').then(r=>{myOrders=r.orders;if(view==='session')renderHud();}).catch(()=>{});}
 async function start(){try{boot=await api('bootstrap');configureUploads({getCsrf:()=>boot.csrf,setCsrf:t=>{boot.csrf=t;},config:boot.uploads,onBatchDone:refreshAfterUpload});if(Array.isArray(boot.tracks))tracks=boot.tracks;if(!catalogPerson().some(p=>p.code===draft.product))draft.product='personalizada';studio=new Studio($('#studio'));if(studio.light)document.body.classList.add('light-mode');studio.setContent(buildContent(boot,tracks,money));studio.stations.cockpit?.setCommerce(boot.commerceReady);if(boot.commerceReady)setTimeout(()=>loadWompi().catch(()=>{}),2500);onUploadStats(u=>{if(currentOrder&&u.ref===currentOrder.reference)studio?.stations.cockpit?.setUpload(u);});studio.setTracks(tracks);studio.setDraft(draft);if(draft.mood)studio.tone(draft.mood);hydrateIcons();render();frameStudio();if(studio.light)openOptions();
  if(new URLSearchParams(location.search).has('e2e'))window.__fhb={studio,go,draft:()=>draft,view:()=>view,onAction,order:()=>currentOrder,focus:()=>sessionFocus,panel:()=>sessionPanel};
  const params=new URLSearchParams(location.search);const ref=params.get('session');if(ref){const hash=new URLSearchParams(location.hash.slice(1));const token=hash.get('token');const gift=params.get('share')==='1';
   if(token){await api('exchange',gift?{reference:ref,token,kind:'share'}:{reference:ref,token});history.replaceState({},'',`?session=${encodeURIComponent(ref)}${gift?'&share=1':''}`);}if(params.get('id')){try{await api('reconcile',{reference:ref,transaction:params.get('id')});}catch(e){toast(e.message);}}if(!gift){try{myOrders=(await api('my-orders')).orders;}catch{}}
   // Several songs under the same email: the link opens the whole crate, with the one from this link ready to open.
-  if(!gift&&token&&!params.get('id')&&myOrders.length>1&&studio?.renderer&&!studio.light){libraryFocus=ref;history.replaceState({},'',location.pathname);go('library');}else await loadOrder(ref);}else{const map={terminos:'terms',privacidad:'privacy',info:'about'},k=params.get('ver'),v=Object.prototype.hasOwnProperty.call(map,k)?map[k]:null;if(v){history.replaceState({},'',location.pathname);go(v);}}}catch(e){if(boot){go('recover');toast(e.message);}else{root.innerHTML=shell({head:`<h1 id="panel-title">El estudio está <em>tomando aire.</em></h1>`,body:`<p class="lede">${esc(e.message)}</p>`,foot:`<button class="primary" id="retry-start">Volver a intentar ↻</button>`});mountOptions();openOptions();$('#retry-start').onclick=start;}}}
+  if(!gift&&token&&!params.get('id')&&myOrders.length>1&&studio?.renderer&&!studio.light){libraryFocus=ref;history.replaceState({},'',location.pathname);go('library');}else await loadOrder(ref);}else{const map={terminos:'terms',privacidad:'privacy',info:'about'},k=params.get('ver'),v=Object.prototype.hasOwnProperty.call(map,k)?map[k]:null;if(v){history.replaceState({},'',location.pathname);go(v);}}}catch(e){if(boot){go('recover');toast(new URLSearchParams(location.search).get('share')==='1'?'Este regalo ya no está disponible. Pídele a quien te lo envió que lo comparta otra vez.':e.message);}else{root.innerHTML=shell({head:`<h1 id="panel-title">El estudio está <em>tomando aire.</em></h1>`,body:`<p class="lede">${esc(e.message)}</p>`,foot:`<button class="primary" id="retry-start">Volver a intentar ↻</button>`});mountOptions();openOptions();$('#retry-start').onclick=start;}}}
 start();
 // While a payment is open, check its result often (the server asks Wompi) and celebrate when it is approved.
 let lastOrderPoll=0;

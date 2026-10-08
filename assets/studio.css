@@ -213,3 +213,7 @@ body .audio-dock{position:fixed;z-index:25;left:10px;right:10px;top:auto;bottom:
 #options-dialog .panel-foot{background:linear-gradient(180deg,#0f091a00,#0f091af2 28%);padding-top:14px}
 @media(min-width:900px){#options-dialog{border-radius:26px}}
 @media(prefers-reduced-motion:reduce){.primary:after,.j-next:after{animation:none!important}}
+
+/* buttons keep their label on one line; the phone's HUD never wraps it */
+.j-next{white-space:nowrap}.j-next span{overflow:hidden;text-overflow:ellipsis}
+@media(max-width:380px){.j-next{font-size:15px}}
