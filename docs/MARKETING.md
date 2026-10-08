@@ -18,16 +18,24 @@ La tienda deja de ser solo un flujo de compra y pasa a tener una base para **atr
 ## Cómo se decide un precio (a prueba de manipulación)
 El navegador **solo envía el código del producto y, si quiere, un cupón**. `priceQuote()` calcula: precio de lista → mejor entre temporada y cupón (o ambos si el cupón es «acumulable») → piso de 1.000 COP. Ese total es el `amount_in_cents` del pedido; Wompi cobra ese importe y lo vuelve a verificar contra el pago. El uso de un cupón se **reserva** al crear el pedido (con el cupón bloqueado en la transacción) y pasa a «aplicado» cuando el pago se aprueba; un pedido cancelado lo libera.
 Los productos para empresas no llevan cupones (su precio se acuerda en la propuesta).
+- **Precio congelado 48 h:** un pedido sin pagar conserva su precio (temporada/cupón) 48 horas. Pasado ese tiempo, al abrir el pago se **recalcula** con las condiciones vigentes (si el cupón ya no alcanza o la temporada terminó, se cobra el precio actual y queda anotado en el historial). Así un cupón o una temporada no se pueden usar meses después ni retener usos para siempre.
+- **Importes en pesos enteros** y piso de pago de 1.500 COP (confirma el mínimo de Wompi en su documentación).
+- **Un correo = una persona:** los alias de Gmail (`a.b@`, `ab+x@`) cuentan como la misma persona para los cupones de «primera compra» y los límites por persona. Los mensajes de reglas por persona son genéricos (no revelan si un correo es cliente).
+- **Clientes de antes:** al activarse, los clientes que ya compraron pasan a ser contactos con su historial (sin permiso de marketing) para poder segmentarlos; para escribirles necesitan confirmar la suscripción.
+- **Enlace desde el correo:** una campaña con cupón lleva `?cupon=CODIGO` y el estudio lo aplica en el pago.
 
 ## Permisos y ley (Colombia: Ley 1581 de 2012 y Decreto 1377 de 2013)
-- Las casillas «ofertas por correo» y «por SMS» van **sin marcar**, son opcionales y separadas de los términos.
-- Cada aceptación o retiro queda registrado (canal, origen, versión del texto, huella de IP sin guardar la IP).
-- Un mensaje promocional **solo** sale a quien aceptó en ese canal y no se dio de baja; lleva identidad del remitente (razón social, NIT, dirección de `.env`) y baja visible.
+- La casilla «ofertas por correo» va **sin marcar**, es opcional y separada de los términos. Es **doble opt-in**: marcarla solo *pide* el permiso y manda un correo de confirmación; se activa cuando la persona dueña del correo pulsa el botón. Así nadie puede suscribir a un tercero tecleando su correo, y quien ya se dio de baja no vuelve a recibir nada por esa vía (solo puede volver a suscribirse él mismo desde la página de baja).
+- **SMS:** no se ofrece en el pago porque no se puede comprobar que el teléfono sea de quien lo escribe. Cuando haya un proveedor, se activa con un código (OTP) enviado al teléfono; el motor de envío ya revalida la baja al enviar.
+- Cada solicitud, confirmación o baja queda registrada (canal, origen, versión del texto, huella de IP sin guardar la IP). Darse de baja sin haber aceptado también queda registrado y detiene hasta los recordatorios.
+- Un mensaje promocional **solo** sale a quien confirmó en ese canal y no se dio de baja, y se **vuelve a comprobar en el momento de enviar** (si alguien se baja mientras su mensaje espera en la cola, no sale). Lleva identidad del remitente (razón social, NIT, dirección de `.env`; sin ellos el panel no deja enviar campañas) y baja visible, también el recordatorio de pedido sin pagar.
+- Quien recibió una promoción hace menos de `MARKETING_CAP_DAYS` días descansa: las campañas lo omiten salvo que marques «incluir a quienes ya recibieron una promoción».
 - Los avisos del pedido (pago, entrega, recordatorio de **su** pedido) son de servicio y no dependen del permiso; pero quien se dio de baja de todo no recibe ni recordatorios promocionales.
 - La analítica es propia, sin cookies de terceros, sin IP, sin datos personales; respeta «No rastrear» y «Global Privacy Control».
-- **Pendiente para quien responda legalmente:** actualizar la política de privacidad (finalidades de marketing y analítica, plazo de conservación, canal para ejercer derechos) y el aviso en el sitio. Este documento no es asesoría legal.
+- **Revisar con el responsable legal:** transferencia internacional si se usa un proveedor de SMS fuera de Colombia, horarios y canales de contacto comercial, registro de números excluidos, y la política de privacidad (finalidades de marketing y analítica, conservación, canal de derechos). **Pendiente:** actualizar la política de privacidad (finalidades de marketing y analítica, plazo de conservación, canal para ejercer derechos) y el aviso en el sitio. Este documento no es asesoría legal.
 
 ## Puesta en marcha
+0. Antes de subir, ejecuta `tests/check-js.sh` (sintaxis de todos los módulos) si cambias archivos de `assets/`.
 1. Sube los archivos. La **primera visita** crea las tablas nuevas sola (hace falta que el usuario de MySQL pueda `CREATE`/`ALTER`; si no puede, el panel → Resumen muestra el error y un botón «Preparar la base de datos»). Nada se borra ni se cambia de lo que ya existe.
 2. Correo: define `MAIL_TRANSPORT=smtp` y tu SMTP (ya lo usan los correos del pedido) y activa `scripts/mail-worker.php` si no tienes otro procesador.
 3. Tarea programada cada 10–15 min: `php scripts/marketing-worker.php` (encola campañas programadas, corre automatizaciones y envía SMS). Si no puedes programar tareas, usa el botón «Ejecutar ahora» en Automatizaciones.
@@ -42,6 +50,9 @@ Los productos para empresas no llevan cupones (su precio se acuerda en la propue
 - **Recompra:** activa «Gracias y segunda canción» y «Recompra» (con su código personal). El resumen muestra la tasa de recompra y el valor por cliente.
 
 ## Decisiones que conviene revisar
+- **Zona horaria de la base de datos:** los cortes de fecha de los recordatorios comparan texto en UTC; verifica con `SELECT @@session.time_zone, NOW(), UTC_TIMESTAMP();` que MySQL esté en UTC.
+- **Volumen de campañas grandes:** cada destinatario guarda su correo en la cola (~11 KB). Para decenas de miles conviene encolar ids y renderizar en el worker (pendiente) y depurar `events`, `mail_queue` y `consent_log` con un plazo de retención.
+- **Aperturas por píxel** tratan datos personales (cada enlace liga a un contacto): inclúyelas en la política de privacidad.
 - **Atribución:** última interacción (el origen de la visita que terminó en compra); el primer origen también se guarda.
 - **Aperturas:** el píxel subestima (bloqueo de imágenes) y Apple Mail Privacy lo infla; los **clics y pedidos** son la cifra confiable.
 - **SMS:** requiere proveedor, remitente aprobado y un texto de consentimiento propio; sin `twilio` solo se registra lo que se enviaría.

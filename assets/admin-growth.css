@@ -43,3 +43,18 @@
 .g-scroll{overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch}.g-scroll .g-table{min-width:420px}
 .admin-shell{overflow-x:hidden}
 .a-card .a-sub{text-transform:none;letter-spacing:normal;font-size:13px;line-height:1.5;color:#cbbbe8}
+
+/* card lists (replace the wide tables on phones and keep one look everywhere) */
+.g-items{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.g-item{display:grid;gap:8px;width:100%;padding:12px 14px;border-radius:16px;background:#ffffff09;border:1px solid var(--s-line);text-align:left;color:inherit;font:inherit}
+button.g-item{cursor:pointer}button.g-item:hover,button.g-item:focus-visible{background:#ffffff14;outline:2px solid #c9a8ff;outline-offset:2px}
+.g-item-main{display:flex;flex-direction:column;gap:2px;min-width:0}.g-item-main b{font-size:15px;overflow-wrap:anywhere}.g-item-main small{color:var(--s-mute);font-size:12.5px;overflow-wrap:anywhere}
+.g-item-meta{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;font-size:13px;color:#d9ccef}
+.g-item-actions{display:flex;gap:6px;flex-wrap:wrap}.g-item-actions .g-link{min-height:44px;padding:0 6px}
+.g-loading{padding:30px 0;text-align:center;color:var(--s-mute)}
+.g-delay{display:flex;gap:8px}.g-delay input{flex:1;min-width:0}.g-delay select{flex:0 0 110px}
+.g-kpi b{font-variant-numeric:lining-nums;font-feature-settings:"lnum"}
+.g-tabs{-webkit-mask-image:linear-gradient(90deg,#000 90%,transparent);mask-image:linear-gradient(90deg,#000 90%,transparent)}
+.g-tabs button,.g-range button{min-height:44px}
+@media(min-width:900px){.g-tabs{-webkit-mask-image:none;mask-image:none}}
+@media(min-width:760px){.g-item{grid-template-columns:minmax(160px,1.2fr) 2fr auto;align-items:center}}

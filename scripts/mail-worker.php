@@ -13,6 +13,9 @@ sql('CREATE TABLE IF NOT EXISTS fhb_mail_dispatch (mail_id BIGINT UNSIGNED PRIMA
 $rows=sql('SELECT m.* FROM mail_queue m LEFT JOIN fhb_mail_dispatch d ON d.mail_id=m.id WHERE m.created_at>=? AND d.sent_at IS NULL AND COALESCE(d.attempts,0)<5 ORDER BY m.id LIMIT 30',[$since])->fetchAll();
 foreach($rows as $row){
  sql('INSERT INTO fhb_mail_dispatch(mail_id,attempts) VALUES(?,1) ON DUPLICATE KEY UPDATE attempts=attempts+1',[$row['id']]);
+ // Promotional mail (it carries the unsubscribe marker) is re-checked at the moment of sending: someone who unsubscribed after it was queued gets nothing.
+ $pu=mailParts($row['body'])['unsub']??null;
+ if($pu!==null&&preg_match('~[?&]c=(\d+)~',$pu,$mm)&&growthSchemaReady()){$cn=sql('SELECT * FROM contacts WHERE id=?',[(int)$mm[1]])->fetch();if($cn&&!canMarket($cn)&&!str_starts_with((string)$row['dedupe_key'],'camptest:')){sql('UPDATE fhb_mail_dispatch SET sent_at=UTC_TIMESTAMP(),last_error=? WHERE mail_id=?',['baja: no enviado',$row['id']]);continue;}}
  try{
   $mail=new PHPMailer\PHPMailer\PHPMailer(true);$mail->isSMTP();$mail->Host=env('SMTP_HOST');$mail->Port=(int)env('SMTP_PORT','587');$mail->SMTPAuth=env('SMTP_USERNAME')!=='';$mail->Username=env('SMTP_USERNAME');$mail->Password=env('SMTP_PASSWORD');$mail->SMTPSecure=env('SMTP_ENCRYPTION','tls');$mail->Timeout=20;$mail->CharSet='UTF-8';$mail->setFrom(env('MAIL_FROM'),'Fromheartbeat');$mail->addAddress($row['recipient']);$mail->Subject=$row['subject'];mailFill($mail,$row['body']);$mail->send();
   sql('UPDATE fhb_mail_dispatch SET sent_at=UTC_TIMESTAMP(),last_error=NULL WHERE mail_id=?',[$row['id']]);

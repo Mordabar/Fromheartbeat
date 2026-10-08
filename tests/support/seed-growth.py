@@ -5,6 +5,7 @@ from drv import *
 A=admin()
 A.post('admin-promo-save',dict(name='Mes de la madre',kind='percent',value=20,badge='-20%',banner='Mes de la madre: 20 % en todas las canciones',active=True))
 A.post('admin-coupon-save',dict(code='GRACIAS30',kind='percent',value=30,label='Prueba de navegador'))
+A.post('admin-coupon-save',dict(code='PEOR5',kind='percent',value=5,label='Peor que la temporada'))
 def buy(email,name,src,camp,optin=True,product='personalizada'):
     cl=Cl();c,r=cl.post('orders',dict(product=product,consent=True,name=name,email=email,phone='3001234567',brief=brief(),idempotency_key=uuid.uuid4().hex+uuid.uuid4().hex,optin_email=optin,attr=dict(v='v_'+uuid.uuid4().hex[:20],ft=dict(s=src,c=camp),lt=dict(s=src,c=camp))))
     assert c==201,r;return r['order']

@@ -19,7 +19,7 @@ function notifyOrder(array $o,string $subject,string $message,string $key):void 
  enqueue($key.':team',env('TEAM_EMAIL'),$subject,"Pedido {$o['reference']}\n$message\nRevisar en ".appUrl('/admin.html'));
 }
 function orderView(array $o,bool $isAdmin=false):array {
- $o['brief']=json_decode($o['brief'],true); unset($o['idempotency_key'],$o['request_hash'],$o['token_hash']); if(!$isAdmin)unset($o['requires_attention']);
+ $o['brief']=json_decode($o['brief'],true); unset($o['idempotency_key'],$o['request_hash'],$o['token_hash']); if(!$isAdmin)unset($o['requires_attention'],$o['send_token'],$o['visitor_id'],$o['contact_id'],$o['promo_id'],$o['first_source'],$o['first_campaign'],$o['last_source'],$o['last_campaign']);
  $o['customer']=customerFor($o); $o['product']=catalog()[$o['product_code']];
  $o['history']=sql('SELECT status,stage,note,actor,created_at'.($isAdmin?',visible':'').' FROM order_history WHERE order_id=?'.($isAdmin?'':' AND visible=1').' ORDER BY id',[$o['id']])->fetchAll();
  $o['files']=sql('SELECT id,original_name,mime,size_bytes,kind,created_at FROM deliverables WHERE order_id=? ORDER BY id',[$o['id']])->fetchAll();
@@ -106,17 +106,16 @@ function createOrder(array $in):array {
   $ref='FHB-'.date('ymd').'-'.strtoupper(bin2hex(random_bytes(5))); $token=privateLink(['reference'=>$ref]);
   sql('INSERT INTO orders(reference,customer_id,product_code,product_name,amount_in_cents,audience,brief,consent_version,idempotency_key,request_hash,token_hash,token_expires_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',[$ref,$cid,$code,$p['name'],$q['total'],$p['audience'],json_encode($brief,JSON_UNESCAPED_UNICODE),'2026-09-11',$key,$requestHash,hash('sha256',$token),gmdate('Y-m-d H:i:s',time()+86400*(int)env('LINK_DAYS','365'))]);
   $o=sql('SELECT * FROM orders WHERE reference=?',[$ref])->fetch();
-  if($g){   // one identity per email, the price breakdown, where the visit came from, and the consent the person gave (or not)
+  if($g){try{   // one identity per email, the price breakdown, where the visit came from, and the consent the person gave (or not)
    $at=attributionFrom($in['attr']??null);$contactId=contactUpsert($c['email'],$c['name'],$c['phone'],$at);
    sql('UPDATE customers SET contact_id=? WHERE id=?',[$contactId,$cid]);
    sql('UPDATE orders SET contact_id=?,list_amount_in_cents=?,discount_in_cents=?,coupon_code=?,promo_id=?,visitor_id=?,first_source=?,first_campaign=?,last_source=?,last_campaign=?,send_token=? WHERE id=?',
     [$contactId,$q['list'],$q['discount'],$q['coupon']['code']??null,$q['promo']['id']??null,$at['visitor'],$at['first_source'],$at['first_campaign'],$at['last_source'],$at['last_campaign'],$at['send_token'],$o['id']]);
    if($q['coupon'])couponReserve($q['coupon'],(int)$o['id'],$contactId,(int)$q['coupon_discount'],$p+['code'=>$code],$q['coupon']['stackable']?$q['list']-$q['promo_discount']:$q['list']);
-   if(($in['optin_email']??false)===true)consentSet($contactId,'email',true,'checkout');
-   if(($in['optin_sms']??false)===true&&phoneE164($c['phone']))consentSet($contactId,'sms',true,'checkout');
+   if(($in['optin_email']??false)===true)consentRequest($contactId);   // double opt-in: this only sends the confirmation; SMS needs a phone check (OTP) and is not offered at checkout
    trackInsert($at['visitor']??str_repeat('0',16),'order_created',['order_id'=>$o['id'],'value'=>(int)$q['total'],'props'=>['product'=>$code,'coupon'=>$q['coupon']['code']??null],'us'=>$at['last_source'],'uc'=>$at['last_campaign']]);
    $o=sql('SELECT * FROM orders WHERE id=?',[$o['id']])->fetch();
-  }
+  }catch(PDOException $e){if($q['coupon'])throw $e;error_log('FHB growth order '.$e->getMessage());$o=sql('SELECT * FROM orders WHERE id=?',[$o['id']])->fetch();}}   // the sale must not depend on analytics; a coupon, which is money, must
   history($o,'Historia recibida. Tu sesión está guardada.');
   notifyJourney($o,$p['audience']==='business'?'received_business':'received',[],'created:'.$ref,'Nuevo pedido',$p['audience']==='business'?'Llegó un brief de marca. Revísalo y envía la propuesta con alcance, licencia y precio.':'Entró una historia nueva. Queda pendiente el pago del cliente.');
   db()->commit(); $_SESSION['orders'][$ref]=true; return $o;
@@ -204,6 +203,7 @@ function checkout(array $o):array {
  need($o['audience']==='person'||$o['quoted_at']!==null,'Primero acordaremos el alcance y la licencia de tu proyecto.',409);
  db()->beginTransaction();try {
   $o=sql('SELECT * FROM orders WHERE id=? FOR UPDATE',[$o['id']])->fetch();need(in_array($o['status'],['created','payment_pending'],true),'Este pedido no admite otro pago.',409);
+  $o=repriceStale($o);
   $a=sql("SELECT * FROM payment_attempts WHERE order_id=? AND status IN ('CREATED','PENDING') ORDER BY id DESC LIMIT 1",[$o['id']])->fetch();
   if(!$a){$ref=$o['reference'].'-'.strtoupper(bin2hex(random_bytes(4)));sql('INSERT INTO payment_attempts(order_id,reference,amount_in_cents,currency) VALUES(?,?,?,?)',[$o['id'],$ref,$o['amount_in_cents'],$o['currency']]);$a=['reference'=>$ref];}
   if($o['status']==='created'){$o['status']='payment_pending';sql('UPDATE orders SET status=? WHERE id=?',['payment_pending',$o['id']]);history($o,'Pago pendiente de confirmación.');}db()->commit();

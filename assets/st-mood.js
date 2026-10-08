@@ -84,12 +84,12 @@ export function buildMood(s) {
       drawIcon(c, 'pen', w * 0.865, y, w * 0.065, {color: hot ? '#ffffff' : '#c6a2ff', width: 2});
     });
     c.setLineDash([10, 10]); c.strokeStyle = 'rgba(198,162,255,.4)'; c.beginPath(); c.moveTo(w * 0.08, h * 0.8); c.lineTo(w * 0.92, h * 0.8); c.stroke(); c.setLineDash([]);
-    c.fillStyle = '#a992d9'; c.font = `700 ${w * 0.036}px ${FONT.sans}`; c.fillText('TOTAL', w * 0.1, h * 0.845);
+    c.fillStyle = '#a992d9'; c.font = `700 ${w * 0.036}px ${FONT.sans}`; c.fillText('TOTAL', w * 0.1, h * (d.quote && d.quote.discount > 0 ? 0.89 : 0.845));
     const qd = d.quote;   // season / coupon: «ANTES $X» crossed out, and what took it down, in green
     if (qd && qd.discount > 0) {
       c.textAlign = 'right'; c.fillStyle = '#9d8bc4'; c.font = `700 ${w * 0.034}px ${FONT.sans}`; const was = 'ANTES ' + new Intl.NumberFormat('es-CO', {style: 'currency', currency: 'COP', maximumFractionDigits: 0}).format(qd.list / 100), tw = c.measureText(was).width;
-      c.fillText(was, w * 0.9, h * 0.832); c.strokeStyle = '#9d8bc4'; c.lineWidth = 3; c.beginPath(); c.moveTo(w * 0.9 - tw, h * 0.832); c.lineTo(w * 0.9, h * 0.832); c.stroke();
-      c.textAlign = 'left'; c.fillStyle = '#3dffc5'; c.font = `800 ${w * 0.032}px ${FONT.sans}`; const tag = qd.coupon ? 'CUPÓN ' + qd.coupon.code : (qd.promo?.badge || 'TEMPORADA'); fit(c, tag + ' · −' + new Intl.NumberFormat('es-CO', {maximumFractionDigits: 0}).format(qd.discount / 100), w * 0.5, w * 0.032, 800, FONT.sans, 12); c.fillText(tag + ' · −' + new Intl.NumberFormat('es-CO', {maximumFractionDigits: 0}).format(qd.discount / 100), w * 0.1, h * 0.885);
+      c.fillText(was, w * 0.9, h * 0.822); c.strokeStyle = '#9d8bc4'; c.lineWidth = 3; c.beginPath(); c.moveTo(w * 0.9 - tw, h * 0.822); c.lineTo(w * 0.9, h * 0.822); c.stroke();
+      c.textAlign = 'left'; c.fillStyle = '#3dffc5'; c.font = `800 ${w * 0.032}px ${FONT.sans}`; const tag = qd.coupon ? 'CUPÓN ' + qd.coupon.code : (qd.promo?.badge || 'TEMPORADA'); fit(c, tag + ' · −' + new Intl.NumberFormat('es-CO', {maximumFractionDigits: 0}).format(qd.discount / 100), w * 0.5, w * 0.032, 800, FONT.sans, 12); c.fillText(tag + ' · −' + new Intl.NumberFormat('es-CO', {maximumFractionDigits: 0}).format(qd.discount / 100), w * 0.1, h * 0.822);
       c.textAlign = 'left';
     }
     neonText(c, qd && qd.total ? new Intl.NumberFormat('es-CO', {style: 'currency', currency: 'COP', maximumFractionDigits: 0}).format(qd.total / 100) + ' COP' : (p ? p.priceText : '—'), w * 0.9, h * 0.905, {size: w * 0.115, color: p ? (PRODUCT_COLOR[p.code] || '#c6a2ff') : '#c6a2ff', align: 'right', blur: 16, maxW: w * 0.8});
@@ -112,7 +112,7 @@ export function buildMood(s) {
     st.draft = d;
     st.orbs.forEach(o => { o.selected = o.value === d.mood; });
     const m = signature(d, ['mood']); if (m !== st.sigMood) { st.sigMood = m; st.refreshMarquee(); }
-    const t = signature(d, ['genre', 'mood', 'voice', 'language', 'tempo', 'recipient', 'occasion', 'product']);
+    const t = signature(d, ['genre', 'mood', 'voice', 'language', 'tempo', 'recipient', 'occasion', 'product']) + '|' + [d.quote?.total, d.quote?.coupon?.code, d.quote?.promo?.badge].join(',');
     if (t !== st.sigTicket) { st.sigTicket = t; if (st.view === 'checkout') st.redrawTicket(); else st.ticketStale = true; }
   };
   st.setView = view => { st.view = view; st.refreshMarquee(); if (view === 'checkout' && st.ticketStale) { st.ticketStale = false; st.redrawTicket(); } };

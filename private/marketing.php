@@ -7,18 +7,20 @@ declare(strict_types=1);
 //   · every send is logged per contact (campaign_sends / automation_runs), so nothing is ever sent twice.
 
 // ------------------------------------------------------------------------------------------------ segments
-const SEGMENT_KEYS=['orders_min','orders_max','last_order_days_min','last_order_days_max','spent_min_cop','never_paid','product','tag','source','joined_days_max'];
+const SEGMENT_KEYS=['orders_min','orders_max','last_order_days_min','last_order_days_max','spent_min_cop','never_paid','product','tag','source','joined_days_max','include_capped'];
 /** Turns the admin's filter object into SQL. Only whitelisted keys, always bound parameters. */
 function segmentWhere(array $seg,string $channel='email'): array {
  $w=$channel==='sms'?["c.sms_optin=1","c.sms_unsub_at IS NULL","c.phone<>''"]:["c.email_optin=1","c.email_unsub_at IS NULL"];$p=[];
- $int=fn($k)=>isset($seg[$k])&&$seg[$k]!==''&&is_numeric($seg[$k])?(int)$seg[$k]:null;
+ $int=fn($k,$max=36500)=>isset($seg[$k])&&$seg[$k]!==''&&is_numeric($seg[$k])?max(0,min($max,(int)$seg[$k])):null;   // bounded: absurd values must not break the worker
  if(($v=$int('orders_min'))!==null){$w[]='c.orders_paid>=?';$p[]=$v;}
  if(($v=$int('orders_max'))!==null){$w[]='c.orders_paid<=?';$p[]=$v;}
  if(($v=$int('last_order_days_min'))!==null){$w[]='c.last_order_at IS NOT NULL AND c.last_order_at<=?';$p[]=gmdate('Y-m-d H:i:s',time()-$v*86400);}
  if(($v=$int('last_order_days_max'))!==null){$w[]='c.last_order_at IS NOT NULL AND c.last_order_at>=?';$p[]=gmdate('Y-m-d H:i:s',time()-$v*86400);}
- if(($v=$int('spent_min_cop'))!==null){$w[]='c.spent_in_cents>=?';$p[]=$v*100;}
+ if(($v=$int('spent_min_cop',1000000000))!==null){$w[]='c.spent_in_cents>=?';$p[]=$v*100;}
  if(($v=$int('joined_days_max'))!==null){$w[]='c.created_at>=?';$p[]=gmdate('Y-m-d H:i:s',time()-$v*86400);}
  if(!empty($seg['never_paid'])){$w[]='c.orders_paid=0';}
+ // contacts who already got a promotion in the last MARKETING_CAP_DAYS days rest, unless the campaign says otherwise
+ if(empty($seg['include_capped'])&&marketingCapDays()>0){$w[]='(c.last_marketing_at IS NULL OR c.last_marketing_at<=?)';$p[]=gmdate('Y-m-d H:i:s',time()-marketingCapDays()*86400);}
  if(isset($seg['product'])&&is_string($seg['product'])&&isset(catalog()[$seg['product']])){$w[]="EXISTS(SELECT 1 FROM orders o WHERE o.contact_id=c.id AND o.product_code=? AND o.status IN (".inList(PAID_STATES)."))";$p[]=$seg['product'];array_push($p,...PAID_STATES);}
  if(isset($seg['tag'])&&is_string($seg['tag'])&&trim($seg['tag'])!==''){$w[]='c.tags LIKE ?';$p[]='%'.str_replace(['%','_'],'',trim($seg['tag'])).'%';}
  if(isset($seg['source'])&&is_string($seg['source'])&&trim($seg['source'])!==''){$w[]='c.first_source=?';$p[]=cleanTag($seg['source'])??'';}
@@ -28,10 +30,8 @@ function segmentClean(mixed $seg): array { $out=[];if(!is_array($seg))return $ou
 function audienceCount(array $seg,string $channel='email'): int { [$w,$p]=segmentWhere($seg,$channel);return (int)sql("SELECT COUNT(*) FROM contacts c WHERE $w",$p)->fetchColumn(); }
 function audienceRows(array $seg,string $channel='email',int $limit=5000,int $after=0): array { [$w,$p]=segmentWhere($seg,$channel);return sql("SELECT c.* FROM contacts c WHERE $w AND c.id>? ORDER BY c.id LIMIT ".(int)$limit,array_merge($p,[$after]))->fetchAll(); }
 function marketingCapDays(): int { return max(0,(int)env('MARKETING_CAP_DAYS','3')); }
-function cappedCount(array $seg,string $channel='email'): int {
- [$w,$p]=segmentWhere($seg,$channel);$cut=gmdate('Y-m-d H:i:s',time()-marketingCapDays()*86400);
- return (int)sql("SELECT COUNT(*) FROM contacts c WHERE $w AND c.last_marketing_at IS NOT NULL AND c.last_marketing_at>?",array_merge($p,[$cut]))->fetchColumn();
-}
+/** People who match the filters but rest because they got a promotion recently (what the campaign would skip). */
+function cappedCount(array $seg,string $channel='email'): int { return audienceCount(array_merge($seg,['include_capped'=>1]),$channel)-audienceCount($seg,$channel); }
 
 // ------------------------------------------------------------------------------------------------ coupons made for one person
 function personalCoupon(array $contact,array $tpl,string $source,string $prefix='GRACIAS'): ?array {
@@ -57,7 +57,7 @@ function couponSentence(array $cp): string {
 // ------------------------------------------------------------------------------------------------ the message
 /** '{nombre}' → first name (or nothing); never raw HTML: the engine escapes everything it prints. */
 function mkFill(string $s,array $contact,?array $coupon=null): string {
- $first=trim(explode(' ',trim((string)$contact['name']))[0]??'');$first=mb_substr(mailClean($first),0,30);
+ $first=mailFirstName(['name'=>(string)($contact['name']??'')]);   // letters only: a name typed by a stranger can never carry a link or a line break into our mail
  $s=str_replace(['{nombre}','{cupon}'],[$first,$coupon?$coupon['code']:''],$s);
  return trim((string)preg_replace('/\s+,/u',',',(string)preg_replace('/[ \t]{2,}/u',' ',$s)));
 }
@@ -66,9 +66,9 @@ function safePath(string $path): string {
  $path=trim($path);if($path===''||$path[0]!=='/'||str_starts_with($path,'//')||preg_match('~[\s\\\\<>"]|^/+[^?#]*:~',$path))return '/';
  return mb_substr($path,0,200);
 }
-function trackedUrl(string $path,string $token,string $campaignName): string {
+function trackedUrl(string $path,string $token,string $campaignName,?string $coupon=null): string {
  $path=safePath($path);$frag='';if(($i=strpos($path,'#'))!==false){$frag=substr($path,$i);$path=substr($path,0,$i);}
- $q='c='.$token.'&utm_source=email&utm_medium=email&utm_campaign='.rawurlencode(cleanTag($campaignName,80)??'campana');
+ $q='c='.$token.'&utm_source=email&utm_medium=email&utm_campaign='.rawurlencode(cleanTag($campaignName,80)??'campana').($coupon?'&cupon='.rawurlencode($coupon):'');
  return appUrl($path.(str_contains($path,'?')?'&':($path==='/'?'?':'?')).$q.$frag);
 }
 function legalFoot(string $why): string {
@@ -81,7 +81,7 @@ function marketingBody(array $contact,array $c,string $token,?array $coupon,bool
  $paras=array_values(array_filter(array_map('trim',preg_split('/\R{2,}/u',mkFill((string)$c['body'],$contact,$coupon))?:[]),fn($x)=>$x!==''));
  $blocks=[];foreach($paras as $i=>$p)$blocks[]=$i===0?['lead'=>$p]:['p'=>$p];
  if($coupon)$blocks[]=['callout'=>['title'=>'Tu código','text'=>couponSentence($coupon)]];
- if(trim((string)$c['cta_label'])!=='')$blocks[]=['cta'=>['label'=>mb_substr((string)$c['cta_label'],0,40),'url'=>$sessionUrl??trackedUrl((string)($c['cta_path']??'/'),$token,$name)]];
+ if(trim((string)$c['cta_label'])!=='')$blocks[]=['cta'=>['label'=>mb_substr((string)$c['cta_label'],0,40),'url'=>$sessionUrl??trackedUrl((string)($c['cta_path']??'/'),$token,$name,$coupon['code']??null)]];
  $unsub=unsubUrl((int)$contact['id']);
  $m=['kind'=>'marketing','subject'=>$subject,'preheader'=>mb_substr(mkFill((string)($c['preheader']??''),$contact,$coupon),0,150),'eyebrow'=>'Fromheartbeat','title'=>mkFill((string)$c['title'],$contact,$coupon),'hero'=>mailHasAsset('hero-update.jpg')?'hero-update.jpg':'','reference'=>'','blocks'=>$blocks];
  if($promo){$m['unsub']=$unsub;$m['foot']=legalFoot('Recibes este correo porque aceptaste recibir ofertas y novedades de Fromheartbeat.');}
@@ -106,6 +106,7 @@ function campaignQueue(int $id,int $max=5000): array {
  while($queued+$skipped<$max&&($rows=audienceRows($seg,$ch,500,$after))){
   foreach($rows as $c){
    $after=(int)$c['id'];
+   if(sql('SELECT status FROM campaigns WHERE id=?',[$id])->fetchColumn()==='cancelled')return ['queued'=>$queued,'skipped'=>$skipped,'pending'=>false,'cancelled'=>true];
    if(sql('SELECT id FROM campaign_sends WHERE campaign_id=? AND contact_id=?',[$id,$c['id']])->fetch()){$skipped++;continue;}
    $token=newToken();
    try{sql('INSERT INTO campaign_sends(campaign_id,contact_id,channel,token,status,created_at) VALUES(?,?,?,?,?,?)',[$id,$c['id'],$ch,$token,'queued',nowUtc()]);}catch(PDOException $e){$skipped++;continue;}
@@ -116,7 +117,7 @@ function campaignQueue(int $id,int $max=5000): array {
   }
  }
  $left=audienceRows($seg,$ch,1,$after);   // anything beyond $max waits for the next worker pass
- sql('UPDATE campaigns SET status=?,queued_at=? WHERE id=?',[$left?'sending':'sent',nowUtc(),$id]);
+ sql("UPDATE campaigns SET status=?,queued_at=? WHERE id=? AND status<>'cancelled'",[$left?'sending':'sent',nowUtc(),$id]);
  return ['queued'=>$queued,'skipped'=>$skipped,'pending'=>(bool)$left];
 }
 function campaignsDue(): int { $n=0;foreach(sql("SELECT id FROM campaigns WHERE status IN ('scheduled','sending') AND (scheduled_at IS NULL OR scheduled_at<=?)",[nowUtc()])->fetchAll() as $r){campaignQueue((int)$r['id']);$n++;}return $n; }
@@ -125,7 +126,7 @@ function campaignTest(int $id,string $to,string $adminName='Equipo'): void {
  growthEnsure();$camp=campaignRow($id);$fake=['id'=>0,'name'=>$adminName,'email'=>$to];$tok=newToken();
  $cp=$camp['coupon_id']?sql('SELECT * FROM coupons WHERE id=?',[$camp['coupon_id']])->fetch():null;
  if(!$cp&&$camp['personal_coupon'])$cp=['code'=>'GRACIAS-PRUEBA','kind'=>'percent','value'=>(int)(json_decode((string)$camp['personal_coupon'],true)['value']??10),'ends_at'=>gmdate('Y-m-d H:i:s',time()+30*86400)];
- [$subject,$body]=marketingBody($fake,campaignContent($camp),$tok,$cp,false);
+ [$subject,$body]=marketingBody($fake,campaignContent($camp),$tok,$cp,true);   // the test is the real message, unsubscribe link and footer included
  enqueue('camptest:'.$id.':'.bin2hex(random_bytes(4)),$to,'[Prueba] '.$subject,$body);
 }
 function touchSend(string $token,string $col): void {
@@ -151,7 +152,10 @@ function smsEnqueue(array $contact,string $text,?int $campaignId,bool $promo): b
 /** 'log' (default) only records what WOULD be sent; 'twilio' really sends. Add a driver here for another provider. */
 function smsFlush(int $limit=50): int {
  $n=0;foreach(sql("SELECT * FROM sms_outbox WHERE status='queued' ORDER BY id LIMIT ".(int)$limit)->fetchAll() as $m){
+  $claim=db()->prepare("UPDATE sms_outbox SET status='sending' WHERE id=? AND status='queued'");$claim->execute([$m['id']]);if($claim->rowCount()!==1)continue;   // two workers never send the same message
   try{
+   $c=sql('SELECT * FROM contacts WHERE id=?',[$m['contact_id']])->fetch();
+   if(!$c||!canMarket($c,'sms')){sql("UPDATE sms_outbox SET status='skipped',error='baja' WHERE id=?",[$m['id']]);continue;}   // unsubscribed after it was queued: it does not go
    if(smsDriver()==='twilio'){
     need(env('TWILIO_SID')!==''&&env('TWILIO_TOKEN')!==''&&env('TWILIO_FROM')!=='','Falta configurar Twilio.');
     $ch=curl_init('https://api.twilio.com/2010-04-01/Accounts/'.rawurlencode(env('TWILIO_SID')).'/Messages.json');
@@ -176,23 +180,25 @@ function sentRecently(int $contactId): bool { $c=sql('SELECT last_marketing_at F
 function automationsRun(int $limit=100): array {
  growthEnsure();$stats=[];
  foreach(sql('SELECT * FROM automations WHERE enabled=1')->fetchAll() as $a){
-  $k=$a['akey'];$delay=max(0,(int)$a['delay_hours'])*3600;$cut=gmdate('Y-m-d H:i:s',time()-$delay);$tpl=$a['personal_coupon']?json_decode((string)$a['personal_coupon'],true):null;$sent=0;
-  if($k==='abandoned'){$rows=sql("SELECT o.*,c.id AS cid FROM orders o JOIN contacts c ON c.id=o.contact_id WHERE o.status IN ('created','payment_pending') AND o.created_at<=? AND o.created_at>=? ORDER BY o.id LIMIT ".(int)$limit,[$cut,gmdate('Y-m-d H:i:s',time()-7*86400)])->fetchAll();}
-  elseif($k==='post_purchase'){$rows=sql("SELECT o.*,c.id AS cid FROM orders o JOIN contacts c ON c.id=o.contact_id WHERE o.status='completed' AND o.updated_at<=? AND o.updated_at>=? ORDER BY o.id LIMIT ".(int)$limit,[$cut,gmdate('Y-m-d H:i:s',time()-30*86400)])->fetchAll();}
-  else{$rows=sql("SELECT c.id AS cid,0 AS id FROM contacts c WHERE c.orders_paid>=1 AND c.last_order_at<=? AND c.last_order_at>=? ORDER BY c.id LIMIT ".(int)$limit,[$cut,gmdate('Y-m-d H:i:s',time()-$delay-30*86400)])->fetchAll();}
+  $k=$a['akey'];$delay=max(0,(int)$a['delay_hours'])*3600;$cut=gmdate('Y-m-d H:i:s',time()-$delay);$tpl=$a['personal_coupon']?json_decode((string)$a['personal_coupon'],true):null;$sent=0;$aid=(int)$a['id'];
+  // "not already done" is part of the query, so the same first people never crowd out the rest
+  if($k==='abandoned'){$rows=sql("SELECT o.*,c.id AS cid FROM orders o JOIN contacts c ON c.id=o.contact_id WHERE o.audience='person' AND o.status IN ('created','payment_pending') AND o.created_at<=? AND o.created_at>=? AND NOT EXISTS(SELECT 1 FROM automation_runs r WHERE r.automation_id=? AND r.contact_id=o.contact_id AND r.order_id=o.id) ORDER BY o.id LIMIT ".(int)$limit,[$cut,gmdate('Y-m-d H:i:s',time()-7*86400),$aid])->fetchAll();}
+  elseif($k==='post_purchase'){$rows=sql("SELECT o.*,c.id AS cid FROM orders o JOIN contacts c ON c.id=o.contact_id WHERE o.status='completed' AND o.updated_at<=? AND o.updated_at>=? AND NOT EXISTS(SELECT 1 FROM automation_runs r WHERE r.automation_id=? AND r.contact_id=o.contact_id AND r.order_id=o.id) ORDER BY o.id LIMIT ".(int)$limit,[$cut,gmdate('Y-m-d H:i:s',time()-30*86400),$aid])->fetchAll();}
+  else{$rows=sql("SELECT c.id AS cid,0 AS id FROM contacts c WHERE c.orders_paid>=1 AND c.last_order_at<=? AND c.last_order_at>=? AND NOT EXISTS(SELECT 1 FROM automation_runs r WHERE r.automation_id=? AND r.contact_id=c.id AND r.created_at>=c.last_order_at) ORDER BY c.id LIMIT ".(int)$limit,[$cut,gmdate('Y-m-d H:i:s',time()-$delay-30*86400),$aid])->fetchAll();}
   foreach($rows as $r){
    $contact=sql('SELECT * FROM contacts WHERE id=?',[$r['cid']])->fetch();if(!$contact)continue;$orderId=(int)$r['id'];
+   if($contact['email_unsub_at']!==null)continue;   // unsubscribed people get nothing, not even reminders
    if($k==='abandoned'&&sql("SELECT id FROM orders WHERE contact_id=? AND status IN (".inList(PAID_STATES).") AND created_at>=?",array_merge([$contact['id']],PAID_STATES,[$r['created_at']]))->fetch())continue;   // already bought since
    $promo=$k!=='abandoned';$optin=canMarket($contact,'email');
    if($promo&&(!$optin||sentRecently((int)$contact['id'])))continue;
-   if($contact['email_unsub_at']!==null)continue;   // unsubscribed people get nothing, not even reminders
-   if(!$promo&&!$optin&&sql("SELECT id FROM automation_runs WHERE automation_id=? AND contact_id=?",[$a['id'],$contact['id']])->fetch())continue;   // one reminder per person for non-subscribers
+   // one reminder per person every few days (not per order): five forgotten carts are still one email
+   if(!$promo&&sql("SELECT id FROM automation_runs WHERE automation_id=? AND contact_id=? AND created_at>?",[$aid,$contact['id'],gmdate('Y-m-d H:i:s',time()-max(3,marketingCapDays())*86400)])->fetch())continue;
    $token=newToken();
-   try{sql('INSERT INTO automation_runs(automation_id,contact_id,order_id,token,created_at) VALUES(?,?,?,?,?)',[$a['id'],$contact['id'],$orderId,$token,nowUtc()]);}catch(PDOException $e){continue;}
+   try{sql('INSERT INTO automation_runs(automation_id,contact_id,order_id,token,created_at) VALUES(?,?,?,?,?)',[$aid,$contact['id'],$orderId,$token,nowUtc()]);}catch(PDOException $e){continue;}
    $cp=($optin&&is_array($tpl)&&$tpl)?personalCoupon($contact,$tpl,'auto:'.$k):null;
    $content=['campaign_name'=>'auto-'.$k,'subject'=>$a['subject'],'preheader'=>'','title'=>$a['title'],'body'=>$a['body'],'cta_label'=>$a['cta_label'],'cta_path'=>'/'];
    $session=null;if($k==='abandoned'&&$orderId){$o=sql('SELECT * FROM orders WHERE id=?',[$orderId])->fetch();if($o)$session=mailSessionUrl($o).'';}
-   [$subject,$body]=marketingBody($contact,$content,$token,$cp,$cp!==null||($promo&&$optin),$session);
+   [$subject,$body]=marketingBody($contact,$content,$token,$cp,true,$session);   // every one of these carries the unsubscribe link and headers
    enqueue('auto:'.$k.':'.$contact['id'].':'.$orderId,$contact['email'],$subject,$body);
    if($promo||$optin)sql('UPDATE contacts SET last_marketing_at=? WHERE id=?',[nowUtc(),$contact['id']]);$sent++;
   }

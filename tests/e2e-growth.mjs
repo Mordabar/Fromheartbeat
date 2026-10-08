@@ -19,9 +19,13 @@ const browser = await launch(), r = runner(`growth ${mode}`), errors = [];
   await t.F(() => window.__fhb.go('checkout')); await t.settle(3);
   if (!t.mobile || true) { await t.page.click('.j-next[data-plain],.j-plain').catch(() => {}); await sleep(700); }
   await r.step('the checkout asks for a coupon and shows the season discount', async () => { const v = await t.page.locator('#totals').innerText(); if (!/Mes de la madre/i.test(v) || !/Total a pagar/.test(v)) throw new Error(v); });
-  await r.step('both marketing boxes exist and are NOT pre-checked', async () => { const v = await t.F(() => ['optin_email', 'optin_sms'].map(n => { const e = document.querySelector(`input[name=${n}]`); return !!e && !e.checked; })); if (v.join() !== 'true,true') throw new Error(v.join()); });
+  await r.step('the offers box exists, is NOT pre-checked and says it asks for confirmation; there is no SMS box', async () => { const v = await t.F(() => { const e = document.querySelector('input[name=optin_email]'); return [!!e && !e.checked, /confirmar/i.test(e?.closest('label')?.textContent || ''), !document.querySelector('input[name=optin_sms]')]; }); if (v.join() !== 'true,true,true') throw new Error(v.join()); });
+  await t.page.fill('#f-coupon', 'peor5'); await t.page.click('#coupon-apply'); await sleep(900);
+  await r.step('a coupon worse than the season is explained, never blocks, and the price stays', async () => { const m = await t.page.locator('#coupon-msg').innerText(), v = await t.page.locator('#totals').innerText(); if (!/descuento mejor/i.test(m) || !/Mes de la madre/i.test(v)) throw new Error(m + ' | ' + v); });
   await t.page.fill('#f-coupon', 'gracias30'); await t.page.click('#coupon-apply'); await sleep(900);
   await r.step('a better coupon replaces the season discount and says so', async () => { const v = await t.page.locator('#totals').innerText(), m = await t.page.locator('#coupon-msg').innerText(); if (!/Cupón GRACIAS30/.test(v) || /Mes de la madre/.test(v) || !/aplicado/i.test(m)) throw new Error(v + ' | ' + m); });
+  await r.step('the price on the pay button follows the coupon', async () => { const txt = await t.page.locator('#next').innerText(); if (!/90\.930/.test(txt)) throw new Error(txt); });
+  await r.step('Enter in the coupon box applies it and does not send the order', async () => { await t.page.fill('#f-coupon', 'GRACIAS30'); await t.page.press('#f-coupon', 'Enter'); await sleep(900); const o = await t.F(() => window.__fhb.order()); const m = await t.page.locator('#coupon-msg').innerText(); if (o) throw new Error('order was created'); if (!/aplicado/i.test(m)) throw new Error(m); });
   await t.shot('growth-checkout');
   await r.step('a wrong coupon shows a clear message and keeps the price', async () => { await t.page.fill('#f-coupon', 'NOEXISTE'); await t.page.click('#coupon-apply'); await sleep(800); const m = await t.page.locator('#coupon-msg').innerText(); if (!/no existe/i.test(m)) throw new Error(m); });
   await t.page.fill('#f-coupon', 'GRACIAS30'); await t.page.click('#coupon-apply'); await sleep(900);
@@ -61,8 +65,8 @@ const browser = await launch(), r = runner(`growth ${mode}`), errors = [];
   await shot('coupons');
   await r.step('an invalid coupon shows the server message in the form', async () => { await page.fill('#g-coupon [name=code]', 'malo90'); await page.fill('#g-coupon [name=value]', '95'); await page.click('#g-coupon button.primary'); await page.waitForFunction(() => /90/.test(document.querySelector('#g-err')?.textContent || ''), null, {timeout: 8000}); });
   await page.click('[data-g-tab=promos]'); await page.waitForSelector('#g-promo'); await shot('promos');
-  await page.click('[data-g-tab=contacts]'); await page.waitForSelector('.g-table');
-  await r.step('contacts list with consent flags; a row opens the detail with proof of consent', async () => { await page.click('tr[data-g-contact]'); await page.waitForSelector('#g-contact-detail .a-card', {timeout: 8000}); const t = await page.locator('#g-contact-detail').innerText(); if (!/permisos \(evidencia\)/i.test(t) || !/pedidos/i.test(t)) throw new Error(t.slice(0, 200)); });
+  await page.click('[data-g-tab=contacts]'); await page.waitForSelector('.g-items');
+  await r.step('contacts list with consent flags; a row opens the detail with proof of consent', async () => { await page.click('.g-contact'); await page.waitForSelector('#g-contact-detail .a-card', {timeout: 8000}); const t = await page.locator('#g-contact-detail').innerText(); if (!/permisos \(evidencia\)/i.test(t) || !/pedidos/i.test(t)) throw new Error(t.slice(0, 200)); });
   await shot('contacts');
   await page.click('[data-g-tab=campaigns]'); await page.waitForSelector('[data-g-new-camp]'); await page.click('[data-g-new-camp]'); await page.waitForSelector('#g-camp');
   await r.step('build a campaign: audience preset, personal coupon, live count', async () => {
@@ -75,7 +79,8 @@ const browser = await launch(), r = runner(`growth ${mode}`), errors = [];
   await page.click('[data-g-tab=automations]'); await page.waitForSelector('.g-auto');
   await r.step('four automations, all off by default, with their copy', async () => { const n = await page.locator('.g-auto').count(); const on = await page.locator('.g-auto input[name=enabled]:checked').count(); if (n !== 4 || on !== 0) throw new Error(n + '/' + on); });
   await shot('automations');
-  await r.step('no horizontal scroll on this screen size', async () => { const ow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth); if (ow > 2) throw new Error('overflow ' + ow); });
+  await r.step('no horizontal scroll on any tab at this screen size', async () => { for (const k of ['overview', 'coupons', 'promos', 'contacts', 'campaigns', 'automations']) { await page.click(`[data-g-tab=${k}]`); await sleep(900); const ow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth); if (ow > 2) throw new Error(k + ' overflow ' + ow); } });
+  await r.step('interactive controls in the panel are at least 44px tall', async () => { await page.click('[data-g-tab=coupons]'); await sleep(700); const small = await page.evaluate(() => [...document.querySelectorAll('.g-tabs button,.g-range button,.g-link,.g-presets button,.a-actions button,.g-contact')].filter(e => e.offsetParent && e.getBoundingClientRect().height < 43).map(e => e.textContent.trim().slice(0, 20))); if (small.length) throw new Error(small.join(' | ')); });
   await ctx.close();
 }
 r.finish({errors: errors.filter(e => !/Failed to load resource/.test(e))});

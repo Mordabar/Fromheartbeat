@@ -34,7 +34,7 @@ t('una promoción que aún no empieza no aplica',priceQuote('personalizada')['to
 sql("UPDATE promotions SET starts_at=NULL,active=0 WHERE name='Mes de la madre'");t('una promoción apagada no aplica',priceQuote('personalizada')['total']===$LIST);
 sql("UPDATE promotions SET active=1");$promoId=(int)sql("SELECT id FROM promotions")->fetchColumn();
 coupon(['code'=>'AMOR10','kind'=>'percent','value'=>10]);
-$q=priceQuote('personalizada','amor10');t('un cupón peor que la promoción no la reemplaza y avisa',$q['coupon']===null&&$q['coupon_error']!==null&&$q['total']===$LIST-intdiv($LIST*20,100),json_encode($q['coupon_error']));
+$q=priceQuote('personalizada','amor10');t('un cupón peor que la promoción no la reemplaza: se vende al precio de temporada y se avisa (sin bloquear)',$q['coupon']===null&&$q['coupon_error']===null&&$q['coupon_note']!==null&&$q['total']===$LIST-intdiv($LIST*20,100),json_encode($q['coupon_note']));
 coupon(['code'=>'AMOR30','kind'=>'percent','value'=>30]);
 $q=priceQuote('personalizada',' amor30 ');t('un cupón mejor reemplaza la promoción (se escribe en cualquier formato)',$q['coupon']['code']==='AMOR30'&&$q['total']===$LIST-intdiv($LIST*30,100)&&$q['promo']===null);
 coupon(['code'=>'SUMA5','kind'=>'percent','value'=>5,'stackable'=>1]);
@@ -58,8 +58,11 @@ t('sin casilla marcada, no hay consentimiento',(int)sql('SELECT email_optin FROM
 $oc=buy('dos@example.com','personalizada',['coupon'=>'amor30','optin_email'=>true,'optin_sms'=>true,'attr'=>['v'=>'vis_abcdefghijklmnop','ft'=>['s'=>'instagram','c'=>'mes-madre'],'lt'=>['s'=>'email<script>','c'=>'camp"1'],'c'=>str_repeat('a',32)]]);
 t('con cupón el pedido guarda el código y el descuento',$oc['coupon_code']==='AMOR30'&&(int)$oc['amount_in_cents']===$LIST-intdiv($LIST*30,100));
 $ct=contactByEmail('dos@example.com');
-t('la casilla de correo queda registrada con su origen y su evidencia',canMarket($ct)&&$ct['email_optin_source']==='checkout'&&(int)sql("SELECT COUNT(*) FROM consent_log WHERE contact_id=? AND channel='email' AND action='grant'",[$ct['id']])->fetchColumn()===1);
-t('el SMS exige casilla y número válido',canMarket($ct,'sms'));
+t('la casilla de correo solo PIDE el permiso: queda pendiente y se manda un correo de confirmación',!canMarket($ct)&&$ct['email_optin_pending_at']!==null&&(int)sql("SELECT COUNT(*) FROM consent_log WHERE contact_id=? AND action='request'",[$ct['id']])->fetchColumn()===1&&(int)sql("SELECT COUNT(*) FROM mail_queue WHERE recipient='dos@example.com' AND dedupe_key LIKE 'optin:%'")->fetchColumn()===1);
+t('el SMS no se activa desde el pago (hace falta verificar el teléfono)',!canMarket($ct,'sms')&&(int)$ct['sms_optin']===0);
+consentSet((int)$ct['id'],'email',true,'double-optin');$ct=contactByEmail('dos@example.com');
+t('al confirmar desde su correo el permiso queda activo con su prueba',canMarket($ct)&&$ct['email_optin_source']==='double-optin'&&$ct['email_optin_pending_at']===null&&(int)sql("SELECT COUNT(*) FROM consent_log WHERE contact_id=? AND action='grant'",[$ct['id']])->fetchColumn()===1);
+consentSet((int)$ct['id'],'sms',true,'test-otp');   // (lo que haría una verificación por código)
 t('la atribución se guarda limpia (sin etiquetas ni comillas)',$oc['first_source']==='instagram'&&$oc['last_source']==='emailscript'&&$oc['last_campaign']==='camp1'&&$oc['visitor_id']==='vis_abcdefghijklmnop'&&$oc['send_token']===str_repeat('a',32),json_encode([$oc['last_source'],$oc['last_campaign']]));
 t('queda el evento order_created con el importe',(int)sql("SELECT value_in_cents FROM events WHERE name='order_created' AND order_id=?",[$oc['id']])->fetchColumn()===(int)$oc['amount_in_cents']);
 t('un cupón inválido impide crear el pedido',thrown(fn()=>buy('tres@example.com','personalizada',['coupon'=>'NOEXISTE']))!==null&&!contactByEmail('tres@example.com'));
@@ -117,7 +120,7 @@ $s9=contactByEmail('nueve@seg.test');consentSet((int)$s9['id'],'email',true,'tes
 t('solo entra quien aceptó y no se dio de baja',audienceCount([])>=3&&!in_array('ocho@seg.test',array_column(audienceRows([]),'email'),true)&&!in_array('tres@seg.test',array_column(audienceRows([]),'email'),true));
 t('filtro por compras mínimas',array_column(audienceRows(['orders_min'=>3]),'email')===['nueve@seg.test']);
 t('filtro por inactividad (más de 100 días sin comprar)',array_column(audienceRows(['last_order_days_min'=>100]),'email')===['nueve@seg.test']);
-t('filtro por gasto mínimo en pesos',array_column(audienceRows(['spent_min_cop'=>800000]),'email')===['nueve@seg.test']);
+t('filtro por gasto mínimo en pesos',array_column(audienceRows(['spent_min_cop'=>800000]),'email')===['nueve@seg.test'],json_encode(array_column(audienceRows(['spent_min_cop'=>800000]),'email')));
 t('filtro por etiqueta',array_column(audienceRows(['tag'=>'vip']),'email')===['nueve@seg.test']);
 t('«nunca compró» excluye a quien ya pagó',!in_array('seis@example.com',array_column(audienceRows(['never_paid'=>1]),'email'),true)&&in_array('siete@seg.test',array_column(audienceRows(['never_paid'=>1]),'email'),true));
 t('filtro por producto comprado',array_column(audienceRows(['product'=>'dedicatoria']),'email')===['seis@example.com']);
@@ -128,14 +131,15 @@ t('el SMS exige casilla de SMS y teléfono',audienceCount([],'sms')===1);   // s
 echo "— campañas de correo\n";
 sql("INSERT INTO campaigns(name,channel,subject,preheader,title,body,cta_label,cta_path,coupon_id,personal_coupon,segment,status,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
  ['Día de la madre','email','{nombre}, una canción para mamá','Un detalle','Para *mamá*',"Hola {nombre}.\n\nEste mes tenemos algo para ti.",'Crear mi canción','//evil.example/x',null,json_encode(['kind'=>'percent','value'=>15,'valid_days'=>20]),json_encode([]),'draft',nowUtc()]);
-$cid1=(int)db()->lastInsertId();sql("UPDATE contacts SET name=? WHERE id=?",['<b>Sofía</b> Gómez',$s7['id']]);
-$r=campaignQueue($cid1);$sends=sql('SELECT * FROM campaign_sends WHERE campaign_id=?',[$cid1])->fetchAll();$optin=audienceCount([]);
+$cid1=(int)db()->lastInsertId();sql("UPDATE contacts SET name=? WHERE id=?",['<b>Sofía</b> Gómez',$s7['id']]);sql("UPDATE contacts SET name='Sofía Gómez' WHERE id=?",[$s9['id']]);
+$optin=audienceCount([]);$r=campaignQueue($cid1);$sends=sql('SELECT * FROM campaign_sends WHERE campaign_id=?',[$cid1])->fetchAll();
 t('se crea un envío por contacto elegible, ninguno para quien no aceptó',$r['queued']===$optin&&count($sends)===$optin,json_encode([$r,$optin]));
 t('la campaña ya enviada no se puede reenviar',thrown(fn()=>campaignQueue($cid1))!==null);
 $mail=sql("SELECT * FROM mail_queue WHERE dedupe_key=?",['camp:'.$cid1.':'.$s7['id']])->fetch();$parts=mailParts($mail['body']);
 t('el correo lleva la marca de baja con un clic y el enlace visible',$parts['unsub']!==null&&str_contains($parts['html'],'Cancelar suscripción')&&str_contains($parts['text'],'Cancelar suscripción: '));
 t('el pie legal dice por qué recibe el correo',str_contains($parts['html'],'aceptaste recibir ofertas'));
-t('el nombre se inserta sin HTML (escapado)',!str_contains($parts['html'],'<b>Sofía')&&str_contains($mail['subject'],'Sofía'),$mail['subject']);
+t('un nombre con HTML no entra al correo (solo letras)',!str_contains($parts['html'],'<b>Sofía')&&!str_contains($mail['subject'],'<'),$mail['subject']);
+$m9=sql('SELECT * FROM mail_queue WHERE dedupe_key=?',['camp:'.$cid1.':'.$s9['id']])->fetch();t('un nombre normal sí se usa en el asunto',str_contains($m9['subject'],'Sofía'),$m9['subject']);
 t('el botón no puede apuntar fuera del sitio (//evil.example → inicio)',!str_contains($parts['html'],'evil.example')&&str_contains($parts['html'],'c='.sql('SELECT token FROM campaign_sends WHERE campaign_id=? AND contact_id=?',[$cid1,$s7['id']])->fetchColumn()));
 t('lleva el píxel de apertura',str_contains($parts['html'],'action=o&amp;t='));
 $codes=sql("SELECT code FROM coupons WHERE source=?",['campaign:'.$cid1])->fetchAll(PDO::FETCH_COLUMN);
@@ -160,7 +164,7 @@ $ab=buy('abandono@example.com');$abNo=buy('nobaja@example.com');consentSet((int)
 sql("UPDATE orders SET created_at=? WHERE id IN (?,?)",[gmdate('Y-m-d H:i:s',time()-3*3600),$ab['id'],$abNo['id']]);
 $st=automationsRun();$m1=sql("SELECT * FROM mail_queue WHERE recipient='abandono@example.com' AND dedupe_key LIKE 'auto:abandoned:%'")->fetch();
 t('el recordatorio de pedido sin pagar llega una vez',(bool)$m1&&$st['abandoned']>=1);
-$pp=mailParts($m1['body']);t('a quien no aceptó marketing se le manda sin cupón ni marca de baja de promoción',$pp['unsub']===null&&!str_contains($pp['html'],'Tu código')&&str_contains($pp['html'],'session='));
+$pp=mailParts($m1['body']);t('a quien no aceptó marketing se le manda sin cupón, pero con enlace de baja',$pp['unsub']!==null&&str_contains($pp['html'],'Cancelar suscripción')&&!str_contains($pp['html'],'Tu código')&&str_contains($pp['html'],'session='));
 automationsRun();t('correr de nuevo no repite',(int)sql("SELECT COUNT(*) FROM mail_queue WHERE recipient='abandono@example.com' AND dedupe_key LIKE 'auto:abandoned:%'")->fetchColumn()===1);
 t('quien se dio de baja no recibe ni recordatorios',!sql("SELECT id FROM mail_queue WHERE recipient='nobaja@example.com' AND dedupe_key LIKE 'auto:%'")->fetch());
 sql("UPDATE orders SET status='paid' WHERE id=?",[$ab['id']]);
@@ -190,5 +194,73 @@ t('el resumen cuenta recompra y audiencia',$ov['kpi']['repeat_orders']>=1&&$ov['
 t('el embudo y las fuentes salen del resumen',count($ov['funnel'])===5&&$ov['funnel'][0]['visitors']>=1&&is_array($ov['sources']));
 t('las campañas muestran apertura, clics y pedidos atribuidos',$ov['campaigns'][0]['orders']>=1&&$ov['campaigns'][0]['open_rate']>0);
 t('el CSV neutraliza fórmulas',csvCell('=HYPERLINK("x")')==="\"'=HYPERLINK(\"\"x\"\")\""&&csvCell('+57')==="\"'+57\"");
+
+
+echo "— rondas de revisión: abuso, consentimiento, cupones y envío\n";
+// double opt-in cannot be forced on someone else
+$vic=buy('victima@x.test');$vc=contactByEmail('victima@x.test');consentSet((int)$vc['id'],'email',true,'t');consentSet((int)$vc['id'],'email',false,'baja-link');
+$n0=(int)sql("SELECT COUNT(*) FROM mail_queue WHERE recipient='victima@x.test' AND dedupe_key LIKE 'optin:%'")->fetchColumn();
+buy('victima@x.test','personalizada',['optin_email'=>true]);$vc=contactByEmail('victima@x.test');
+t('teclear el correo de alguien que se dio de baja no lo vuelve a suscribir ni le escribe',!canMarket($vc)&&$vc['email_unsub_at']!==null&&(int)sql("SELECT COUNT(*) FROM mail_queue WHERE recipient='victima@x.test' AND dedupe_key LIKE 'optin:%'")->fetchColumn()===$n0);
+$nw=buy('nuevo-opt@x.test','personalizada',['optin_email'=>true]);buy('nuevo-opt@x.test','personalizada',['optin_email'=>true]);
+t('pedir el permiso dos veces seguidas manda un solo correo de confirmación',(int)sql("SELECT COUNT(*) FROM mail_queue WHERE recipient='nuevo-opt@x.test' AND dedupe_key LIKE 'optin:%'")->fetchColumn()===1&&!canMarket(contactByEmail('nuevo-opt@x.test')));
+t('el enlace de confirmación es firmado y solo sirve para su contacto',hash_equals(optinToken((int)contactByEmail('nuevo-opt@x.test')['id']),optinToken((int)contactByEmail('nuevo-opt@x.test')['id']))&&optinToken(1)!==optinToken(2));
+// suppression of someone who never opted in
+$ghost=contactByEmail('abandono@example.com');$never=buy('nunca@x.test');$gc=contactByEmail('nunca@x.test');consentSet((int)$gc['id'],'email',false,'baja-link');
+t('darse de baja sin haber aceptado queda registrado (y detiene los recordatorios)',contactByEmail('nunca@x.test')['email_unsub_at']!==null&&(int)sql("SELECT COUNT(*) FROM consent_log WHERE contact_id=? AND action='revoke'",[$gc['id']])->fetchColumn()===1);
+// aliases are the same person
+$g1=buy('mi.correo@gmail.com');$g2=buy('micorreo+oferta@gmail.com');t('alias de Gmail (puntos y +etiqueta) son la misma persona',(int)$g1['contact_id']===(int)$g2['contact_id']);
+coupon(['code'=>'PRIM1','kind'=>'percent','value'=>40,'first_order_only'=>1]);sql("UPDATE promotions SET active=0");
+pay($g1);t('el cupón de primera compra no se reutiliza con un alias del mismo correo',priceQuote('personalizada','PRIM1','M.i.correo+x@gmail.com')['coupon_error']!==null);
+t('el mensaje de reglas por persona no revela si es cliente',priceQuote('personalizada','PRIM1','M.i.correo+x@gmail.com')['coupon_error']===priceQuote('personalizada','VUELVE','nadie-nuevo@x.test')['coupon_error']);
+t('la vista pública del cupón no incluye el nombre interno',!array_key_exists('label',quoteView(priceQuote('personalizada','AMOR30'))['coupon']));
+// rounding: whole pesos
+sql("UPDATE promotions SET active=1,value=33");coupon(['code'=>'SUMA7','kind'=>'percent','value'=>7,'stackable'=>1]);$qq=priceQuote('personalizada','SUMA7');
+t('con descuentos acumulados el importe sigue en pesos enteros',$qq['total']%100===0&&$qq['discount']%100===0,$qq['total']);sql("UPDATE promotions SET active=0,value=20");
+// coupon limits: the order that waited too long is priced again at payment
+coupon(['code'=>'UNO1','kind'=>'percent','value'=>35,'max_redemptions'=>1]);$ow=buy('espera@x.test','personalizada',['coupon'=>'UNO1']);
+sql("UPDATE orders SET created_at=? WHERE id=?",[gmdate('Y-m-d H:i:s',time()-80*3600),$ow['id']]);sql("UPDATE coupon_redemptions SET created_at=? WHERE order_id=?",[gmdate('Y-m-d H:i:s',time()-80*3600),$ow['id']]);
+buy('otro-uno@x.test','personalizada',['coupon'=>'UNO1']);   // the reservation of the first one has expired, so the second order gets the last use
+$re=repriceStale(getO((int)$ow['id']));
+t('un pedido con cupón que esperó más de 48 h se vuelve a calcular al pagar: si el cupón ya no alcanza, se cobra el precio vigente',$re['coupon_code']===null&&(int)$re['amount_in_cents']===$LIST&&(int)sql("SELECT COUNT(*) FROM coupon_redemptions WHERE order_id=? AND status IN ('reserved','applied')",[$ow['id']])->fetchColumn()===0,json_encode([$re['coupon_code'],$re['amount_in_cents']]));
+t('y queda anotado en el historial del pedido',(int)sql("SELECT COUNT(*) FROM order_history WHERE order_id=? AND note LIKE 'Actualizamos el precio%'",[$ow['id']])->fetchColumn()===1);
+$fresh=buy('fresco@x.test','personalizada',['coupon'=>'AMOR30']);t('dentro de las 48 h el precio no se toca',(int)repriceStale(getO((int)$fresh['id']))['amount_in_cents']===(int)$fresh['amount_in_cents']);
+// cancelled then paid anyway: the coupon was used
+coupon(['code'=>'CANCEL1','kind'=>'percent','value'=>30,'max_redemptions'=>1]);$oz=buy('cancel@x.test','personalizada',['coupon'=>'CANCEL1']);growthOnCancelled($oz);sql("UPDATE orders SET status='cancelled' WHERE id=?",[$oz['id']]);pay(getO((int)$oz['id']));
+t('un pedido cancelado que se paga igual cuenta como uso del cupón',(int)sql("SELECT COUNT(*) FROM coupon_redemptions WHERE order_id=? AND status='applied'",[$oz['id']])->fetchColumn()===1&&priceQuote('personalizada','CANCEL1','otra@x.test')['coupon_error']!==null);
+// sending: unsubscribed after queueing → nothing goes out
+$sq=contactByEmail('dos@example.com');smsEnqueue($sq,'Oferta',null,true);consentSet((int)$sq['id'],'sms',false,'baja-link');$flushed=smsFlush();
+t('un SMS en cola no sale si la persona se dio de baja después',sql('SELECT status FROM sms_outbox ORDER BY id DESC LIMIT 1')->fetchColumn()==='skipped');
+// reminders: one per person, only people orders, unsubscribe link, no starvation
+sql("UPDATE automations SET enabled=1,delay_hours=0 WHERE akey='abandoned'");sql("DELETE FROM automation_runs");
+for($i=0;$i<3;$i++)buy('muchos@x.test');$mm=contactByEmail('muchos@x.test');sql("UPDATE orders SET created_at=? WHERE contact_id=?",[gmdate('Y-m-d H:i:s',time()-4*3600),$mm['id']]);
+$bz=buy('empresa@x.test','jingle',['brief'=>$brief+['brand'=>'Marca X','campaign'=>'Campaña X','channels'=>'TV','license_scope'=>'Un año']]);
+sql("UPDATE orders SET created_at=? WHERE contact_id=?",[gmdate('Y-m-d H:i:s',time()-4*3600),$bz['contact_id']]);
+automationsRun();
+t('cinco carritos de la misma persona son un solo recordatorio',(int)sql("SELECT COUNT(*) FROM mail_queue WHERE recipient='muchos@x.test' AND dedupe_key LIKE 'auto:abandoned:%'")->fetchColumn()===1);
+t('a una empresa con propuesta pendiente no se le manda «termina tu pedido»',!sql("SELECT id FROM mail_queue WHERE recipient='empresa@x.test' AND dedupe_key LIKE 'auto:abandoned:%'")->fetch());
+sql("DELETE FROM automation_runs");sql("UPDATE orders SET status='paid' WHERE status IN ('created','payment_pending')");
+for($i=0;$i<103;$i++){$em="lote$i@x.test";sql("INSERT INTO contacts(email,email_canon,name,created_at) VALUES(?,?,?,?)",[$em,$em,'Lote',nowUtc()]);$cidl=(int)db()->lastInsertId();
+ sql("INSERT INTO customers(name,email,phone,contact_id) VALUES(?,?,?,?)",['Lote',$em,'3001234567',$cidl]);$cu=(int)db()->lastInsertId();
+ sql("INSERT INTO orders(reference,customer_id,product_code,product_name,amount_in_cents,audience,brief,consent_version,idempotency_key,request_hash,token_hash,token_expires_at,status,contact_id,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",['L-'.$i,$cu,'personalizada','x',12990000,'person','{}','x',bin2hex(random_bytes(8)).$i,'h','h',gmdate('Y-m-d H:i:s',time()+86400),'created',$cidl,gmdate('Y-m-d H:i:s',time()-4*3600)]);}
+for($i=0;$i<3;$i++)automationsRun();
+t('con más de 100 pendientes, las pasadas siguientes atienden al resto (nadie se queda sin turno)',(int)sql("SELECT COUNT(*) FROM automation_runs r JOIN contacts c ON c.id=r.contact_id WHERE c.email LIKE 'lote%'")->fetchColumn()===103);
+// analytics cannot be inflated from the browser
+$beforeP=(int)sql("SELECT COUNT(*) FROM events WHERE name='purchase'")->fetchColumn();
+t('el navegador no puede inventar ventas ni pedidos',trackBatch(['v'=>'visitante_1234567890','e'=>array_fill(0,5,['n'=>'purchase'])])===0&&(int)sql("SELECT COUNT(*) FROM events WHERE name='purchase'")->fetchColumn()===$beforeP);
+trackBatch(['v'=>'visitante_1234567890','e'=>[['n'=>'view','p'=>'/x','d'=>['email'=>'ana@x.co','view'=>'lobby'],'us'=>5,'um'=>['x'],'uc'=>null]]]);
+t('solo se guardan las claves permitidas y valores de texto; tipos raros no rompen',!str_contains((string)sql("SELECT props FROM events WHERE path='/x' ORDER BY id DESC LIMIT 1")->fetchColumn(),'ana@x.co'));
+$lastO=buy('tipos@x.test','personalizada',['attr'=>['v'=>'visitante_1234567890','ft'=>['s'=>5,'c'=>['x']],'lt'=>['s'=>true]]]);t('una atribución con tipos raros no rompe el pedido',(bool)$lastO);
+// segments: absurd numbers and the rest period
+t('números absurdos en un segmento no rompen',audienceCount(['last_order_days_min'=>'9999999999999999','orders_min'=>'99999999999999999999'])===0);
+$rest=contactByEmail('siete@seg.test');sql("UPDATE contacts SET last_marketing_at=? WHERE id=?",[nowUtc(),$rest['id']]);
+t('quien recibió una promoción hace poco descansa, salvo que la campaña diga lo contrario',!in_array('siete@seg.test',array_column(audienceRows([]),'email'),true)&&in_array('siete@seg.test',array_column(audienceRows(['include_capped'=>1]),'email'),true)&&cappedCount([])>=1);
+// customers from before this layer
+sql("INSERT INTO customers(name,email,phone) VALUES('Antiguo','antiguo@x.test','3001112222')");$lc=(int)db()->lastInsertId();
+sql("INSERT INTO orders(reference,customer_id,product_code,product_name,amount_in_cents,audience,brief,consent_version,idempotency_key,request_hash,token_hash,token_expires_at,status) VALUES('OLD-1',?,'personalizada','x',12990000,'person','{}','x','oldkey1','h','h',?,'completed')",[$lc,gmdate('Y-m-d H:i:s',time()+86400)]);
+growthBackfill();$ac=contactByEmail('antiguo@x.test');
+t('los clientes de antes pasan a ser contactos (sin permiso de marketing) con su historial de compras',$ac&&(int)$ac['orders_paid']===1&&(int)$ac['spent_in_cents']===12990000&&!canMarket($ac));
+t('el CSV neutraliza también espacios y saltos antes de la fórmula',csvCell("\n=1+1")==="\"'\n=1+1\""&&csvCell(" =1+1")==="\"' =1+1\"");
+t('el pedido que ve el cliente no trae datos internos de marketing',!array_key_exists('send_token',orderView(getO((int)$oc['id'])))&&!array_key_exists('visitor_id',orderView(getO((int)$oc['id'])))&&!array_key_exists('contact_id',orderView(getO((int)$oc['id']))));
 
 echo "\n$ok bien, $bad mal\n";exit($bad?1:0);

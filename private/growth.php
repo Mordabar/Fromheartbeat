@@ -9,14 +9,15 @@ declare(strict_types=1);
 
 const GROWTH_SCHEMA='2026-10-a';
 const PAID_STATES=['paid','in_production','review','completed'];
-const PRICE_FLOOR=100000;   // 1.000 COP in cents: a total below this never reaches the payment provider
+const PRICE_FLOOR=150000;   // 1.500 COP in cents: a total below this never reaches the payment provider
+const PRICE_FREEZE_HOURS=48;   // an unpaid order keeps the price (season/coupon) it was made with this long; after that it is re-priced at payment
 function nowUtc(): string { return gmdate('Y-m-d H:i:s'); }
 function inList(array $values): string { return implode(',',array_fill(0,count($values),'?')); }
 
 // ------------------------------------------------------------------------------------------------ schema
 function growthDdl(): array {
  $t=[];
- $t[]="CREATE TABLE IF NOT EXISTS contacts ({ID}, email VARCHAR(254) NOT NULL UNIQUE, name VARCHAR(120) NOT NULL DEFAULT '', phone VARCHAR(40) NOT NULL DEFAULT '',
+ $t[]="CREATE TABLE IF NOT EXISTS contacts ({ID}, email VARCHAR(254) NOT NULL UNIQUE, email_canon VARCHAR(254) NOT NULL DEFAULT '', email_optin_pending_at DATETIME NULL, name VARCHAR(120) NOT NULL DEFAULT '', phone VARCHAR(40) NOT NULL DEFAULT '',
   email_optin TINYINT NOT NULL DEFAULT 0, email_optin_at DATETIME NULL, email_optin_source VARCHAR(40) NULL, email_unsub_at DATETIME NULL,
   sms_optin TINYINT NOT NULL DEFAULT 0, sms_optin_at DATETIME NULL, sms_unsub_at DATETIME NULL,
   first_source VARCHAR(60) NULL, first_campaign VARCHAR(80) NULL, orders_paid INT NOT NULL DEFAULT 0, spent_in_cents BIGINT NOT NULL DEFAULT 0,
@@ -43,7 +44,7 @@ function growthDdl(): array {
  return $t;
 }
 function growthIndexes(): array {
- return ['CREATE INDEX ix_contacts_optin ON contacts(email_optin,email_unsub_at)','CREATE INDEX ix_contacts_last ON contacts(last_order_at)','CREATE INDEX ix_consent_contact ON consent_log(contact_id)',
+ return ['CREATE INDEX ix_contacts_optin ON contacts(email_optin,email_unsub_at)','CREATE INDEX ix_contacts_canon ON contacts(email_canon)','CREATE INDEX ix_contacts_last ON contacts(last_order_at)','CREATE INDEX ix_consent_contact ON consent_log(contact_id)',
   'CREATE INDEX ix_redeem_coupon ON coupon_redemptions(coupon_id,status)','CREATE INDEX ix_events_name ON events(name,created_at)','CREATE INDEX ix_events_visitor ON events(visitor_id)',
   'CREATE UNIQUE INDEX ux_sends_cc ON campaign_sends(campaign_id,contact_id)','CREATE INDEX ix_sends_contact ON campaign_sends(contact_id)','CREATE UNIQUE INDEX ux_runs ON automation_runs(automation_id,contact_id,order_id)',
   'CREATE INDEX ix_sms_status ON sms_outbox(status)','CREATE INDEX ix_orders_contact ON orders(contact_id)','CREATE INDEX ix_orders_paid ON orders(status,paid_at)'];
@@ -64,7 +65,7 @@ function growthMigrate(): array {
  foreach(growthDdl() as $ddl){db()->exec(str_replace(['{ID}','{ENGINE}'],[$id,$engine],$ddl));}
  foreach(growthColumns() as $table=>$cols)foreach($cols as $c=>$def)if(!growthColumnExists($table,$c)){db()->exec("ALTER TABLE $table ADD COLUMN $c $def");$done[]="$table.$c";}
  foreach(growthIndexes() as $ix){try{db()->exec($ix);}catch(Throwable $e){/* already there */}}
- growthSeedAutomations();
+ growthSeedAutomations();growthBackfill();
  return $done;
 }
 /** Cheap guard used by every entry point that touches the new tables: migrates once per deployment, then it is a file check. */
@@ -77,6 +78,18 @@ function growthEnsure(): bool {
   return $ok=true;
  }catch(Throwable $e){error_log('FHB growth migrate '.$e->getMessage());return $ok=false;}   // the sale flow must keep working even if the database user cannot alter tables
 }
+/** Customers who bought BEFORE this layer existed become contacts (no marketing permission: they never gave any) so recompra and win-back can reach them once they opt in. */
+function growthBackfill(): void {
+ foreach(sql('SELECT id,name,email,phone FROM customers WHERE contact_id IS NULL ORDER BY id LIMIT 20000')->fetchAll() as $c){
+  $id=contactUpsert((string)$c['email'],(string)$c['name'],(string)$c['phone']);sql('UPDATE customers SET contact_id=? WHERE id=?',[$id,$c['id']]);sql('UPDATE orders SET contact_id=? WHERE customer_id=? AND contact_id IS NULL',[$id,$c['id']]);
+ }
+ foreach(sql('SELECT id FROM contacts WHERE orders_paid=0 AND first_paid_at IS NULL')->fetchAll() as $c){
+  $r=sql('SELECT COUNT(*) n,COALESCE(SUM(amount_in_cents),0) s,MIN(created_at) f,MAX(created_at) l FROM orders WHERE contact_id=? AND status IN ('.inList(PAID_STATES).')',array_merge([$c['id']],PAID_STATES))->fetch();
+  if((int)$r['n']>0)sql('UPDATE contacts SET orders_paid=?,spent_in_cents=?,first_paid_at=?,last_order_at=? WHERE id=?',[$r['n'],$r['s'],$r['f'],$r['l'],$c['id']]);
+ }
+}
+/** For code that runs inside a payment/cancel transaction: never migrate there (DDL would end the transaction). */
+function growthSchemaReady(): bool { static $r=null;return $r??=is_file(storage().'/growth-schema-'.GROWTH_SCHEMA.'.ok'); }
 function growthSeedAutomations(): void {
  $defs=[
   ['abandoned','Pedido sin pagar',0,2,'Tu canción te está esperando','Tu canción *te espera.*',"Guardamos tu historia tal como la contaste. Cuando quieras, completa el pago y el estudio empieza a trabajar en tu canción.",'Terminar mi pedido',null],
@@ -91,7 +104,16 @@ function growthSeedAutomations(): void {
 }
 
 // ------------------------------------------------------------------------------------------------ contacts & consent
-function contactByEmail(string $email): ?array { $r=sql('SELECT * FROM contacts WHERE email=?',[strtolower(trim($email))])->fetch();return $r?:null; }
+/** gmail ignores dots and +tags: alias tricks must not look like new people. Other providers: only +tag is ignored. */
+function canonEmail(string $email): string {
+ $e=strtolower(trim($email));if(!str_contains($e,'@'))return $e;[$l,$d]=explode('@',$e,2);$l=explode('+',$l,2)[0];
+ if(in_array($d,['gmail.com','googlemail.com'],true)){$l=str_replace('.','',$l);$d='gmail.com';}
+ return $l.'@'.$d;
+}
+function contactByEmail(string $email): ?array {
+ $e=strtolower(trim($email));$r=sql('SELECT * FROM contacts WHERE email=?',[$e])->fetch();if($r)return $r;
+ $r=sql('SELECT * FROM contacts WHERE email_canon=? ORDER BY id LIMIT 1',[canonEmail($e)])->fetch();return $r?:null;
+}
 /** One row per email address, whatever the number of orders. Names/phones only fill gaps; they never overwrite what the person typed first. */
 function contactUpsert(string $email,string $name,string $phone,array $attr=[]): int {
  $email=strtolower(trim($email));$c=contactByEmail($email);
@@ -100,7 +122,7 @@ function contactUpsert(string $email,string $name,string $phone,array $attr=[]):
   if($c['phone']===''&&$phone!=='')sql('UPDATE contacts SET phone=? WHERE id=?',[$phone,$c['id']]);
   return (int)$c['id'];
  }
- try{sql('INSERT INTO contacts(email,name,phone,first_source,first_campaign,created_at) VALUES(?,?,?,?,?,?)',[$email,$name,$phone,$attr['first_source']??null,$attr['first_campaign']??null,nowUtc()]);}
+ try{sql('INSERT INTO contacts(email,email_canon,name,phone,first_source,first_campaign,created_at) VALUES(?,?,?,?,?,?,?)',[$email,canonEmail($email),mb_substr($name,0,120),mb_substr($phone,0,40),$attr['first_source']??null,$attr['first_campaign']??null,nowUtc()]);}
  catch(PDOException $e){$c=contactByEmail($email);if($c)return (int)$c['id'];throw $e;}
  return (int)contactByEmail($email)['id'];
 }
@@ -108,12 +130,32 @@ function contactUpsert(string $email,string $name,string $phone,array $attr=[]):
 function consentSet(int $contactId,string $channel,bool $grant,string $source,string $textVersion='2026-10'): void {
  need(in_array($channel,['email','sms'],true),'Canal inválido.');$now=nowUtc();$c=sql('SELECT * FROM contacts WHERE id=?',[$contactId])->fetch();if(!$c)return;
  $isOn=(int)$c[$channel.'_optin']===1&&$c[$channel.'_unsub_at']===null;
- if($grant===$isOn)return;   // no change, no noise in the evidence log
- if($grant)sql("UPDATE contacts SET {$channel}_optin=1,{$channel}_optin_at=?,{$channel}_unsub_at=NULL".($channel==='email'?',email_optin_source=?':'')." WHERE id=?",$channel==='email'?[$now,$source,$contactId]:[$now,$contactId]);
- else sql("UPDATE contacts SET {$channel}_optin=0,{$channel}_unsub_at=? WHERE id=?",[$now,$contactId]);
- $ip=hash('sha256',($_SERVER['REMOTE_ADDR']??'cli').env('APP_KEY'));
- sql('INSERT INTO consent_log(contact_id,channel,action,source,text_version,ip_hash,created_at) VALUES(?,?,?,?,?,?,?)',[$contactId,$channel,$grant?'grant':'revoke',mb_substr($source,0,40),$textVersion,substr($ip,0,16),$now]);
+ // granting twice, or revoking someone already suppressed, writes nothing; revoking a person who never opted in DOES record the suppression (reminders stop too)
+ if($grant?$isOn:$c[$channel.'_unsub_at']!==null)return;
+ if($grant)sql("UPDATE contacts SET {$channel}_optin=1,{$channel}_optin_at=?,{$channel}_unsub_at=NULL".($channel==='email'?',email_optin_source=?,email_optin_pending_at=NULL':'')." WHERE id=?",$channel==='email'?[$now,$source,$contactId]:[$now,$contactId]);
+ else sql("UPDATE contacts SET {$channel}_optin=0,{$channel}_unsub_at=?".($channel==='email'?',email_optin_pending_at=NULL':'')." WHERE id=?",[$now,$contactId]);
+ consentLog($contactId,$channel,$grant?'grant':'revoke',$source,$textVersion);
 }
+function consentLog(int $contactId,string $channel,string $action,string $source,string $textVersion='2026-10'): void {
+ $ip=hash('sha256',($_SERVER['REMOTE_ADDR']??'cli').env('APP_KEY'));
+ sql('INSERT INTO consent_log(contact_id,channel,action,source,text_version,ip_hash,created_at) VALUES(?,?,?,?,?,?,?)',[$contactId,$channel,$action,mb_substr($source,0,40),$textVersion,substr($ip,0,16),nowUtc()]);
+}
+/**
+ * Double opt-in. Ticking the box at checkout only ASKS: the person who owns the mailbox must click the link we send.
+ * Nothing is asked of someone who unsubscribed (they can resubscribe themselves on the unsubscribe page), who is already in,
+ * or who was asked in the last 7 days. Typing somebody else's address therefore cannot subscribe them.
+ */
+function consentRequest(int $contactId): void {
+ $c=sql('SELECT * FROM contacts WHERE id=?',[$contactId])->fetch();if(!$c||canMarket($c)||$c['email_unsub_at']!==null)return;
+ if($c['email_optin_pending_at']!==null&&$c['email_optin_pending_at']>gmdate('Y-m-d H:i:s',time()-7*86400))return;
+ sql('UPDATE contacts SET email_optin_pending_at=? WHERE id=?',[nowUtc(),$contactId]);consentLog($contactId,'email','request','checkout');
+ $url=appUrl('/baja.php?a=confirm&c='.$contactId.'&ch=email&t='.optinToken($contactId));
+ $m=['kind'=>'optin','subject'=>'Confirma que quieres recibir ofertas','preheader'=>'Un clic y listo. Si no fuiste tú, ignora este correo.','eyebrow'=>'Fromheartbeat','title'=>'Un clic *y listo.*','hero'=>'','reference'=>'','blocks'=>[
+  ['lead'=>mkFill('{nombre}, alguien (esperamos que tú) pidió recibir ofertas y novedades de Fromheartbeat en este correo.',$c)],['p'=>'Para activarlo, confirma con este botón. Si no fuiste tú, no hagas nada: no te escribiremos.'],
+  ['cta'=>['label'=>'Sí, quiero recibirlas','url'=>$url]]],'foot'=>legalFoot('Recibes este correo porque se pidió una suscripción con tu dirección. No se activa hasta que confirmes.')];
+ enqueue('optin:'.$contactId.':'.gmdate('oW'),$c['email'],$m['subject'],mailBuild($m));
+}
+function optinToken(int $contactId): string { need(strlen(env('APP_KEY'))>=32,'Falta configurar la clave de la aplicación.',503);return hash_hmac('sha256','optin:email:'.$contactId,env('APP_KEY')); }
 function canMarket(array $c,string $channel='email'): bool { return (int)$c[$channel.'_optin']===1&&$c[$channel.'_unsub_at']===null; }
 /** Unsubscribe links carry an HMAC of the contact: no table of tokens to leak, nothing to guess. */
 function unsubToken(int $contactId,string $channel='email'): string { need(strlen(env('APP_KEY'))>=32,'Falta configurar la clave de la aplicación.',503);return hash_hmac('sha256','unsub:'.$channel.':'.$contactId,env('APP_KEY')); }
@@ -130,17 +172,20 @@ function promotionsActive(): array {
 function codesOf(?string $csv): array { return $csv===null||trim($csv)===''?[]:array_values(array_filter(array_map('trim',explode(',',$csv)))); }
 function discountOf(string $kind,int $value,int $base,?int $cap=null): int {
  $d=$kind==='percent'?intdiv($base*$value,100):$value;if($cap!==null&&$cap>0)$d=min($d,$cap);
+ $d=intdiv($d,100)*100;   // whole pesos: the amount charged never has a fraction of a peso
  return max(0,min($d,$base));
 }
 function promoFits(array $pr,array $p): bool { $codes=codesOf($pr['product_codes']);return $p['audience']==='person'&&(!$codes||in_array($p['code'],$codes,true)); }
 function couponCode(string $raw): string { return strtoupper(preg_replace('/[^A-Za-z0-9_-]/','',trim($raw))); }
-function couponUsed(int $couponId,?int $contactId=null): int {
- $q='SELECT COUNT(*) FROM coupon_redemptions WHERE coupon_id=? AND (status=\'applied\' OR (status=\'reserved\' AND created_at>?))';$p=[$couponId,gmdate('Y-m-d H:i:s',time()-48*3600)];
+function couponUsed(int $couponId,?int $contactId=null,int $exceptOrder=0): int {
+ $q='SELECT COUNT(*) FROM coupon_redemptions WHERE coupon_id=? AND order_id<>? AND (status=\'applied\' OR (status=\'reserved\' AND created_at>?))';$p=[$couponId,$exceptOrder,gmdate('Y-m-d H:i:s',time()-PRICE_FREEZE_HOURS*3600)];
  if($contactId!==null){$q.=' AND contact_id=?';$p[]=$contactId;}
- return (int)sql($q,$p)->fetchColumn();
+ return (int)sql($q.(couponLock()?' FOR UPDATE':''),$p)->fetchColumn();   // inside an order transaction a locking read sees the other order's reservation that just committed
 }
+function couponLock(?bool $set=null): bool { static $v=false;if($set!==null)$v=$set;return $v; }
 /** Null when the coupon works for this purchase, otherwise the sentence to show the customer. */
-function couponProblem(array $cp,array $p,int $base,?array $contact): ?string {
+function couponProblem(array $cp,array $p,int $base,?array $contact,int $exceptOrder=0): ?string {
+ $generic='Este cupón no es válido para este pedido.';   // rules that depend on WHO is buying never say why: that would tell strangers who is a customer
  $now=nowUtc();
  if(!(int)$cp['active'])return 'Este cupón no está disponible.';
  if($cp['starts_at']!==null&&$cp['starts_at']>$now)return 'Este cupón aún no está vigente.';
@@ -148,20 +193,20 @@ function couponProblem(array $cp,array $p,int $base,?array $contact): ?string {
  $codes=codesOf($cp['product_codes']);if($codes&&!in_array($p['code'],$codes,true))return 'Este cupón no aplica a esta experiencia.';
  if($p['audience']!=='person')return 'Este cupón aplica a las experiencias para personas.';
  if((int)$cp['min_amount_in_cents']>$base)return 'Este cupón aplica a compras desde '.mailMoney((int)$cp['min_amount_in_cents']).'.';
- if($cp['contact_id']!==null&&(!$contact||(int)$contact['id']!==(int)$cp['contact_id']))return 'Este cupón es personal: úsalo con el correo al que lo enviamos.';
- if($cp['max_redemptions']!==null&&couponUsed((int)$cp['id'])>=(int)$cp['max_redemptions'])return 'Este cupón ya alcanzó su límite de usos.';
- if($contact&&couponUsed((int)$cp['id'],(int)$contact['id'])>=max(1,(int)$cp['per_contact_limit']))return 'Ya usaste este cupón.';
- if((int)$cp['first_order_only']&&$contact&&(int)$contact['orders_paid']>0)return 'Este cupón es para tu primera canción.';
- if((int)$cp['returning_only']&&(!$contact||(int)$contact['orders_paid']<1))return 'Este cupón es para clientes que ya hicieron una canción.';
+ if($cp['contact_id']!==null&&(!$contact||(int)$contact['id']!==(int)$cp['contact_id']))return $generic;
+ if($cp['max_redemptions']!==null&&couponUsed((int)$cp['id'],null,$exceptOrder)>=(int)$cp['max_redemptions'])return 'Este cupón ya alcanzó su límite de usos.';
+ if($contact&&couponUsed((int)$cp['id'],(int)$contact['id'],$exceptOrder)>=max(1,(int)$cp['per_contact_limit']))return $generic;
+ if((int)$cp['first_order_only']&&$contact&&(int)$contact['orders_paid']>0)return $generic;
+ if((int)$cp['returning_only']&&(!$contact||(int)$contact['orders_paid']<1))return $generic;
  return null;
 }
 /**
  * The ONLY place a price is decided. The browser sends a product code and maybe a coupon; the total comes from here.
  * Best of promotion vs coupon, unless the coupon is marked stackable (then promotion first, coupon on what is left).
  */
-function priceQuote(string $productCode,string $couponRaw='',?string $email=null): array {
+function priceQuote(string $productCode,string $couponRaw='',?string $email=null,int $exceptOrder=0): array {
  $p=catalog()[$productCode]??null;need((bool)$p,'Selecciona un producto.');
- $list=(int)$p['price'];$q=['list'=>$list,'promo'=>null,'promo_discount'=>0,'coupon'=>null,'coupon_discount'=>0,'coupon_error'=>null,'discount'=>0,'total'=>$list];
+ $list=(int)$p['price'];$q=['list'=>$list,'promo'=>null,'promo_discount'=>0,'coupon'=>null,'coupon_discount'=>0,'coupon_error'=>null,'coupon_note'=>null,'discount'=>0,'total'=>$list];
  if($p['audience']!=='person'){if(couponCode($couponRaw)!=='')$q['coupon_error']='Los cupones aplican a las experiencias para personas. Para empresas, el descuento se acuerda en la propuesta.';return $q;}
  foreach(promotionsActive() as $pr)if(promoFits($pr,$p)){$d=discountOf($pr['kind'],(int)$pr['value'],$list);if($d>$q['promo_discount']){$q['promo']=$pr;$q['promo_discount']=$d;}}
  $code=couponCode($couponRaw);
@@ -169,13 +214,13 @@ function priceQuote(string $productCode,string $couponRaw='',?string $email=null
   $cp=sql('SELECT * FROM coupons WHERE code=?',[$code])->fetch();$contact=$email!==null&&$email!==''?contactByEmail($email):null;
   if(!$cp)$q['coupon_error']='Ese cupón no existe. Revisa que esté bien escrito.';
   else{
-   $base=$cp['stackable']?$list-$q['promo_discount']:$list;$err=couponProblem($cp,$p,$base,$contact);
+   $base=$cp['stackable']?$list-$q['promo_discount']:$list;$err=couponProblem($cp,$p,$base,$contact,$exceptOrder);
    if($err!==null)$q['coupon_error']=$err;
    else{
     $d=discountOf($cp['kind'],(int)$cp['value'],$base,$cp['max_discount_in_cents']!==null?(int)$cp['max_discount_in_cents']:null);
     if($cp['stackable']){$q['coupon']=$cp;$q['coupon_discount']=$d;}
     elseif($d>$q['promo_discount']){$q['coupon']=$cp;$q['coupon_discount']=$d;$q['promo']=null;$q['promo_discount']=0;}
-    else $q['coupon_error']='Ya tienes un descuento mejor aplicado a esta experiencia.';
+    else $q['coupon_note']='Ya tienes un descuento mejor aplicado a esta experiencia: el cupón no se suma.';
    }
   }
  }
@@ -185,7 +230,7 @@ function priceQuote(string $productCode,string $couponRaw='',?string $email=null
 /** What the browser may show: no internals, no other people's data. */
 function quoteView(array $q): array {
  return ['list'=>$q['list'],'total'=>$q['total'],'discount'=>$q['discount'],'promo'=>$q['promo']?['name'=>$q['promo']['name'],'badge'=>$q['promo']['badge'],'discount'=>$q['promo_discount']]:null,
-  'coupon'=>$q['coupon']?['code'=>$q['coupon']['code'],'label'=>$q['coupon']['label'],'discount'=>$q['coupon_discount']]:null,'coupon_error'=>$q['coupon_error']];
+  'coupon'=>$q['coupon']?['code'=>$q['coupon']['code'],'discount'=>$q['coupon_discount']]:null,'coupon_error'=>$q['coupon_error'],'coupon_note'=>$q['coupon_note']??null];
 }
 /** Public price list with the active season applied, for the catalog and the 3D podiums. */
 function publicPrices(): array {
@@ -194,16 +239,31 @@ function publicPrices(): array {
 }
 function publicBanner(): string { foreach(promotionsActive() as $pr)if(trim((string)$pr['banner'])!=='')return (string)$pr['banner'];return ''; }
 
+/**
+ * Called when payment is about to open. An unpaid order keeps its price for PRICE_FREEZE_HOURS; after that it is priced again with today's season and the
+ * coupon (if it still qualifies), so a promotion or a coupon limit cannot be used months later. Whatever changes is written on the order and its history.
+ */
+function repriceStale(array $o): array {
+ if(!growthSchemaReady()||$o['audience']!=='person'||!in_array($o['status'],['created','payment_pending'],true))return $o;
+ if(strtotime((string)$o['created_at'].' UTC')>time()-PRICE_FREEZE_HOURS*3600)return $o;
+ if(sql("SELECT id FROM payment_attempts WHERE order_id=? AND status='APPROVED'",[$o['id']])->fetch())return $o;
+ $email=(string)sql('SELECT email FROM customers WHERE id=?',[$o['customer_id']])->fetchColumn();$q=priceQuote($o['product_code'],(string)($o['coupon_code']??''),$email,(int)$o['id']);
+ if((int)$q['total']===(int)$o['amount_in_cents'])return $o;
+ sql('UPDATE orders SET amount_in_cents=?,list_amount_in_cents=?,discount_in_cents=?,coupon_code=?,promo_id=? WHERE id=?',[$q['total'],$q['list'],$q['discount'],$q['coupon']['code']??null,$q['promo']['id']??null,$o['id']]);
+ sql("UPDATE coupon_redemptions SET status='void' WHERE order_id=? AND status='reserved'",[$o['id']]);
+ if($q['coupon']){sql("DELETE FROM coupon_redemptions WHERE order_id=?",[$o['id']]);sql('INSERT INTO coupon_redemptions(coupon_id,order_id,contact_id,discount_in_cents,status,created_at) VALUES(?,?,?,?,?,?)',[$q['coupon']['id'],$o['id'],$o['contact_id'],$q['coupon_discount'],'reserved',nowUtc()]);}
+ $o=sql('SELECT * FROM orders WHERE id=?',[$o['id']])->fetch();history($o,'Actualizamos el precio con las condiciones vigentes: '.mailMoney((int)$o['amount_in_cents']).'.','sistema');return $o;
+}
 /** Locks the coupon row, re-checks the limits inside the order transaction, and reserves one use. */
 function couponReserve(array $cp,int $orderId,int $contactId,int $discount,array $p,int $base): void {
  $locked=sql('SELECT * FROM coupons WHERE id=? FOR UPDATE',[$cp['id']])->fetch();
  $contact=sql('SELECT * FROM contacts WHERE id=?',[$contactId])->fetch()?:null;
- $err=couponProblem($locked,$p,$base,$contact);need($err===null,$err??'Cupón no válido.',409);
+ couponLock(true);try{$err=couponProblem($locked,$p,$base,$contact,$orderId);}finally{couponLock(false);}need($err===null,$err??'Cupón no válido.',409);
  sql('INSERT INTO coupon_redemptions(coupon_id,order_id,contact_id,discount_in_cents,status,created_at) VALUES(?,?,?,?,?,?)',[$cp['id'],$orderId,$contactId,$discount,'reserved',nowUtc()]);
 }
 
 // ------------------------------------------------------------------------------------------------ attribution & analytics
-function cleanTag(?string $s,int $max=60): ?string { if($s===null)return null;$s=trim((string)preg_replace('/[^\p{L}\p{N}_\-. ]/u','',$s));$s=mb_substr($s,0,$max);return $s===''?null:$s; }
+function cleanTag(mixed $s,int $max=60): ?string { if(!is_string($s))return null;$s=trim((string)preg_replace('/[^\p{L}\p{N}_\-. ]/u','',$s));$s=mb_substr($s,0,$max);return $s===''?null:$s; }
 /** Accepts what the browser collected about where the visit came from; keeps only short, plain labels. */
 function attributionFrom(mixed $a): array {
  $a=is_array($a)?$a:[];$ft=is_array($a['ft']??null)?$a['ft']:[];$lt=is_array($a['lt']??null)?$a['lt']:[];
@@ -212,9 +272,10 @@ function attributionFrom(mixed $a): array {
  return ['visitor'=>$v,'send_token'=>$tok,'first_source'=>cleanTag($ft['s']??null),'first_campaign'=>cleanTag($ft['c']??null,80),'last_source'=>cleanTag($lt['s']??null),'last_campaign'=>cleanTag($lt['c']??null,80)];
 }
 const TRACK_EVENTS=['view','pick','select_product','begin_checkout','coupon_try','coupon_ok','order_created','payment_open','purchase','play','share','library','campaign_click','optin'];
+const TRACK_FROM_BROWSER=['view','pick','select_product','begin_checkout','payment_open','play','share','library','campaign_click'];   // sales and coupon events come from the server only: the browser cannot inflate them
 function trackInsert(string $visitor,string $name,array $d=[]): void {
  if(!in_array($name,TRACK_EVENTS,true))return;
- $props=isset($d['props'])?mb_substr(json_encode($d['props'],JSON_UNESCAPED_UNICODE),0,600):null;
+ $props=null;if(isset($d['props'])&&is_array($d['props'])){$keep=[];foreach(['view','k','v','product','kind','coupon','repeat'] as $k)if(array_key_exists($k,$d['props'])&&(is_scalar($d['props'][$k])||$d['props'][$k]===null))$keep[$k]=is_string($d['props'][$k])?mb_substr($d['props'][$k],0,30):$d['props'][$k];$props=$keep?json_encode($keep,JSON_UNESCAPED_UNICODE):null;}
  sql('INSERT INTO events(created_at,visitor_id,name,path,props,utm_source,utm_medium,utm_campaign,device,order_id,value_in_cents) VALUES(?,?,?,?,?,?,?,?,?,?,?)',
   [nowUtc(),$visitor,$name,isset($d['path'])?mb_substr((string)$d['path'],0,120):null,$props,cleanTag($d['us']??null),cleanTag($d['um']??null),cleanTag($d['uc']??null,80),in_array($d['dev']??'',['m','d','t'],true)?$d['dev']:null,$d['order_id']??null,$d['value']??null]);
 }
@@ -222,29 +283,31 @@ function trackInsert(string $visitor,string $name,array $d=[]): void {
 function trackBatch(array $in): int {
  if(!growthEnsure())return 0;$v=$in['v']??'';need(is_string($v)&&preg_match('/^[A-Za-z0-9_-]{16,40}$/D',$v)===1,'Visitante inválido.');
  $n=0;foreach(array_slice(is_array($in['e']??null)?$in['e']:[],0,20) as $e){
-  if(!is_array($e)||!is_string($e['n']??null)||!in_array($e['n'],TRACK_EVENTS,true))continue;
+  if(!is_array($e)||!is_string($e['n']??null)||!in_array($e['n'],TRACK_FROM_BROWSER,true))continue;
   $tok=$e['c']??null;
   if($e['n']==='campaign_click'&&is_string($tok)&&preg_match('/^[a-f0-9]{32}$/D',$tok))campaignClicked($tok);
-  trackInsert($v,$e['n'],['path'=>is_string($e['p']??null)?$e['p']:null,'props'=>is_array($e['d']??null)?array_slice($e['d'],0,6):null,'us'=>$e['us']??null,'um'=>$e['um']??null,'uc'=>$e['uc']??null,'dev'=>$e['dev']??null]);$n++;
+  trackInsert($v,$e['n'],['path'=>is_string($e['p']??null)?$e['p']:null,'props'=>is_array($e['d']??null)?$e['d']:null,'us'=>$e['us']??null,'um'=>$e['um']??null,'uc'=>$e['uc']??null,'dev'=>$e['dev']??null]);$n++;
  }
  return $n;
 }
 
 // ------------------------------------------------------------------------------------------------ hooks called by the order flow
+function growthSafeValue(callable $fn,mixed $default=null): mixed { try{return $fn();}catch(Throwable $e){error_log('FHB growth '.$e->getMessage());return $default;} }
 function growthSafe(callable $fn): void { try{$fn();}catch(Throwable $e){error_log('FHB growth '.get_class($e).' '.$e->getMessage());} }
 /** An order was just paid (inside applyPayment's transaction): stats, coupon use, attribution, one server-side purchase event. */
 function growthOnPaid(array $o): void {
- growthSafe(function()use($o){
-  growthEnsure();$o=sql('SELECT * FROM orders WHERE id=?',[$o['id']])->fetch();if(!$o||!$o['contact_id'])return;
+ if(!growthSchemaReady())return;
+ growthSafe(function()use($o){$o=sql('SELECT * FROM orders WHERE id=?',[$o['id']])->fetch();if(!$o||!$o['contact_id'])return;
   $c=sql('SELECT * FROM contacts WHERE id=?',[$o['contact_id']])->fetch();if(!$c)return;$now=nowUtc();
   $repeat=(int)$c['orders_paid']>0?1:0;
   sql('UPDATE orders SET paid_at=?,is_repeat=? WHERE id=?',[$now,$repeat,$o['id']]);
   sql('UPDATE contacts SET orders_paid=orders_paid+1,spent_in_cents=spent_in_cents+?,last_order_at=?,first_paid_at=COALESCE(first_paid_at,?) WHERE id=?',[(int)$o['amount_in_cents'],$now,$now,$c['id']]);
-  sql("UPDATE coupon_redemptions SET status='applied' WHERE order_id=? AND status='reserved'",[$o['id']]);
+  sql("UPDATE coupon_redemptions SET status='applied' WHERE order_id=? AND status IN ('reserved','void')",[$o['id']]);   // a cancelled order that gets paid anyway did use the coupon
   if($o['send_token']){sql('UPDATE campaign_sends SET converted_order_id=? WHERE token=? AND converted_order_id IS NULL',[$o['id'],$o['send_token']]);sql('UPDATE automation_runs SET converted_order_id=? WHERE token=? AND converted_order_id IS NULL',[$o['id'],$o['send_token']]);}
   trackInsert($o['visitor_id']?:str_repeat('0',16),'purchase',['order_id'=>$o['id'],'value'=>(int)$o['amount_in_cents'],'props'=>['product'=>$o['product_code'],'coupon'=>$o['coupon_code'],'repeat'=>$repeat],'us'=>$o['last_source'],'uc'=>$o['last_campaign']]);
  });
 }
 function growthOnCancelled(array $o): void {
- growthSafe(function()use($o){growthEnsure();sql("UPDATE coupon_redemptions SET status='void' WHERE order_id=? AND status='reserved'",[$o['id']]);});
+ if(!growthSchemaReady())return;
+ growthSafe(function()use($o){sql("UPDATE coupon_redemptions SET status='void' WHERE order_id=? AND status='reserved'",[$o['id']]);});
 }
