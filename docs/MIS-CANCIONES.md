@@ -1,0 +1,36 @@
+# Mis canciones: todas las sesiones de un cliente bajo su correo
+
+## El problema
+Cada pedido tenía su propio enlace y la sesión no se unía al correo del cliente: para ver cada canción había que abrir cada correo por separado, y se perdía la experiencia de posventa.
+
+## Qué hace ahora
+- **Abrir cualquier enlace privado abre toda la colección de ese correo.** Al validar el enlace (`exchange`), el navegador queda autorizado para el correo del pedido (en minúsculas) y puede abrir todos los pedidos de esa dirección que no hayan vencido. El enlace sigue siendo el único «llave»: no hay cuentas ni contraseñas.
+- **Con 2 o más pedidos** el enlace aterriza en **«Mis canciones»**: una pared de vinilos en 3D (portada de cada canción o una etiqueta con la inicial de quien la recibe, un anillo del color de su estado, «Para Mamá · Lista para escuchar»). Se toca un disco y se entra a su sesión. Con más de 6 canciones hay «Anteriores / Siguientes». El disco del enlace abierto brilla.
+- **Con un solo pedido** se entra directo a la sesión, como antes.
+- **«Mi sesión»** (cabecera o menú) abre la colección; si no hay nada en el navegador muestra la sala vacía y el formulario «Recibir mi enlace por correo».
+- **Recibir mi enlace** (`recover`): ahora llega **un solo correo** con el enlace del pedido más reciente y la lista de pedidos activos; ese enlace abre toda la colección.
+- Desde una sesión, la flecha de la barra inferior vuelve a «Mis canciones».
+- La versión de texto lista las mismas canciones.
+
+## Compartir sin abrir tu colección: enlace de regalo
+Como el enlace privado ahora abre *todas* las canciones del correo, reenviarlo a otra persona le mostraría todo. Por eso existe el **enlace de regalo**:
+- El comprador toca **Compartir** (disco 3D, panel de texto o botón en la sala) y se copia (o se comparte desde el teléfono) un enlace de **solo lectura de esa canción**.
+- Quien lo abre ve la canción, para quién es y quién la regala (solo el nombre de pila), puede escucharla y descargar los archivos de **entrega**. No ve correo, teléfono, pagos, historial, archivos privados del cliente, ni las otras canciones; no puede escribir, subir, pagar ni compartir.
+- Secreto distinto del enlace privado (un HMAC propio por pedido); uno no sirve como el otro. Solo se puede crear cuando la canción está en revisión o entregada.
+- El correo «Recibir mi enlace» recuerda no compartir el enlace privado y usar «Compartir».
+
+## Seguridad (qué se garantiza y cómo se prueba)
+- Nunca se autoriza un correo por escribirlo en el formulario de compra: solo por **abrir un enlace enviado a ese correo** (prueba de acceso al buzón).
+- `tests/sessions-email.py` (27 comprobaciones): aislamiento entre correos, mayúsculas, vencimiento, regalo de solo lectura, que el regalo no escala, `recover` con un solo correo y respuesta idéntica para correos desconocidos.
+- Los pedidos vencidos (`LINK_DAYS`, 365 por defecto) salen de la colección.
+
+## Entrega y sala (mismo trabajo)
+- **Entrega 3D**: portada con vista previa, «N archivos para descargar» y una tarjeta por archivo («Canción · MP3 — Para escuchar y compartir», «Master · WAV», «Portada», «Video») con botón **Descargar** y el tamaño.
+- **Barra inferior con etiquetas** en la sesión: Estado · Canción · Mensajes · Material, con insignias (mensajes sin leer, material que falta).
+- **Mensajes y Subir material** tienen botón propio a la vista en la sala principal.
+- **Versión de texto** rediseñada como app: una tarjeta con la acción principal, cuatro accesos grandes (Escuchar, Mensajes, Material, Compartir), descargas en tarjetas y avance compacto. Botones con color y brillo, opciones táctiles más claras.
+
+## Archivos
+Nuevos: `assets/st-library.js`, `docs/MIS-CANCIONES.md`, `tests/sessions-email.py`, `tests/e2e-library.mjs`, `tests/e2e-share.mjs`, `tests/support/seed-library.sh`, `tests/shot-*.mjs`.
+Cambiados: `api.php`, `private/domain.php`, `private/mail.php`, `assets/app.js`, `assets/session-ui.js`, `assets/session-ui.css`, `assets/studio.css`, `assets/studio.js`, `assets/stations.js`, `assets/st-cockpit.js`, `assets/st-rooms.js`, `tests/e2e-room.mjs`, `tests/e2e-secondary.mjs`.
+No hay cambios de base de datos ni de `.htaccess`.
