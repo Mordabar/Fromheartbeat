@@ -56,11 +56,11 @@ function giftView(array $o):array {
 function ownsOrder(array $o):bool { return isset($_SESSION['admin_id'])||isset($_SESSION['orders'][$o['reference']])||isset($_SESSION['emails'][orderEmail($o)]); }
 function sessionIsOwner(string $reference):bool { $o=sql('SELECT * FROM orders WHERE reference=?',[$reference])->fetch(); return $o&&ownsOrder($o); }
 // Every song the browser may open as its owner: orders of the granted email addresses plus the links opened directly.
-const PAID_STATES="'paid','in_production','review','completed'";
+const PAID_SQL="'paid','in_production','review','completed'";
 function myOrders():array {
  sessionBoot(); $emails=array_keys($_SESSION['emails']??[]); $refs=array_keys($_SESSION['orders']??[]);$rows=[];
  // By email only orders that were paid: anyone can type someone else's address when buying, so an unpaid order must not show up in a stranger's crate.
- if($emails)$rows=sql('SELECT o.id,o.reference,o.product_code,o.product_name,o.amount_in_cents,o.status,o.production_stage,o.created_at,o.brief FROM orders o JOIN customers c ON o.customer_id=c.id WHERE c.email IN ('.implode(',',array_fill(0,count($emails),'?')).') AND o.status IN ('.PAID_STATES.') AND o.token_expires_at>UTC_TIMESTAMP() ORDER BY o.id DESC LIMIT 60',$emails)->fetchAll();
+ if($emails)$rows=sql('SELECT o.id,o.reference,o.product_code,o.product_name,o.amount_in_cents,o.status,o.production_stage,o.created_at,o.brief FROM orders o JOIN customers c ON o.customer_id=c.id WHERE c.email IN ('.implode(',',array_fill(0,count($emails),'?')).') AND o.status IN ('.PAID_SQL.') AND o.token_expires_at>UTC_TIMESTAMP() ORDER BY o.id DESC LIMIT 60',$emails)->fetchAll();
  $have=array_column($rows,'reference'); $more=array_values(array_diff($refs,$have));
  if($more)$rows=array_merge($rows,sql('SELECT id,reference,product_code,product_name,amount_in_cents,status,production_stage,created_at,brief FROM orders WHERE reference IN ('.implode(',',array_fill(0,count($more),'?')).') AND token_expires_at>UTC_TIMESTAMP()',$more)->fetchAll());
  usort($rows,fn($a,$b)=>$b['id']<=>$a['id']);
@@ -94,15 +94,30 @@ function createOrder(array $in):array {
  need(($in['consent']??false)===true,'Acepta los términos y la política de privacidad.');
  $c=['name'=>field($in,'name',2,120),'email'=>strtolower(field($in,'email',5,254)),'phone'=>field($in,'phone',7,40)];
  need((bool)filter_var($c['email'],FILTER_VALIDATE_EMAIL),'Escribe un correo válido.'); $brief=validateBrief($in['brief']??[],$p['audience']);
- $key=field($in,'idempotency_key',32,100); $key=hash('sha256',$key); $requestHash=hash('sha256',json_encode([$code,$c,$brief],JSON_UNESCAPED_UNICODE));
+ $key=field($in,'idempotency_key',32,100); $key=hash('sha256',$key); $requestHash=hash('sha256',json_encode([$code,$c,$brief,function_exists('couponCode')?couponCode((string)($in['coupon']??'')):''],JSON_UNESCAPED_UNICODE));
  $existing=sql('SELECT * FROM orders WHERE idempotency_key=?',[$key])->fetch();
  if($existing){need(hash_equals($existing['request_hash'],$requestHash),'Este intento ya contiene otra sesión. Inicia una nueva.',409); need(isset($_SESSION['orders'][$existing['reference']]),'Este pedido ya existe. Usa tu enlace privado.',409);return $existing;}
+ // The price is decided here, never by the browser: list price, active season, coupon (see growth.php).
+ $g=growthEnsure();$q=$g?priceQuote($code,(string)($in['coupon']??''),$c['email']):['list'=>$p['price'],'total'=>$p['price'],'discount'=>0,'coupon'=>null,'coupon_discount'=>0,'promo'=>null,'promo_discount'=>0,'coupon_error'=>null];
+ need($q['coupon_error']===null,(string)$q['coupon_error'],409);
  db()->beginTransaction();
  try {
   sql('INSERT INTO customers(name,email,phone) VALUES(?,?,?)',array_values($c)); $cid=db()->lastInsertId();
   $ref='FHB-'.date('ymd').'-'.strtoupper(bin2hex(random_bytes(5))); $token=privateLink(['reference'=>$ref]);
-  sql('INSERT INTO orders(reference,customer_id,product_code,product_name,amount_in_cents,audience,brief,consent_version,idempotency_key,request_hash,token_hash,token_expires_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',[$ref,$cid,$code,$p['name'],$p['price'],$p['audience'],json_encode($brief,JSON_UNESCAPED_UNICODE),'2026-09-11',$key,$requestHash,hash('sha256',$token),gmdate('Y-m-d H:i:s',time()+86400*(int)env('LINK_DAYS','365'))]);
-  $o=sql('SELECT * FROM orders WHERE reference=?',[$ref])->fetch(); history($o,'Historia recibida. Tu sesión está guardada.');
+  sql('INSERT INTO orders(reference,customer_id,product_code,product_name,amount_in_cents,audience,brief,consent_version,idempotency_key,request_hash,token_hash,token_expires_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',[$ref,$cid,$code,$p['name'],$q['total'],$p['audience'],json_encode($brief,JSON_UNESCAPED_UNICODE),'2026-09-11',$key,$requestHash,hash('sha256',$token),gmdate('Y-m-d H:i:s',time()+86400*(int)env('LINK_DAYS','365'))]);
+  $o=sql('SELECT * FROM orders WHERE reference=?',[$ref])->fetch();
+  if($g){   // one identity per email, the price breakdown, where the visit came from, and the consent the person gave (or not)
+   $at=attributionFrom($in['attr']??null);$contactId=contactUpsert($c['email'],$c['name'],$c['phone'],$at);
+   sql('UPDATE customers SET contact_id=? WHERE id=?',[$contactId,$cid]);
+   sql('UPDATE orders SET contact_id=?,list_amount_in_cents=?,discount_in_cents=?,coupon_code=?,promo_id=?,visitor_id=?,first_source=?,first_campaign=?,last_source=?,last_campaign=?,send_token=? WHERE id=?',
+    [$contactId,$q['list'],$q['discount'],$q['coupon']['code']??null,$q['promo']['id']??null,$at['visitor'],$at['first_source'],$at['first_campaign'],$at['last_source'],$at['last_campaign'],$at['send_token'],$o['id']]);
+   if($q['coupon'])couponReserve($q['coupon'],(int)$o['id'],$contactId,(int)$q['coupon_discount'],$p+['code'=>$code],$q['coupon']['stackable']?$q['list']-$q['promo_discount']:$q['list']);
+   if(($in['optin_email']??false)===true)consentSet($contactId,'email',true,'checkout');
+   if(($in['optin_sms']??false)===true&&phoneE164($c['phone']))consentSet($contactId,'sms',true,'checkout');
+   trackInsert($at['visitor']??str_repeat('0',16),'order_created',['order_id'=>$o['id'],'value'=>(int)$q['total'],'props'=>['product'=>$code,'coupon'=>$q['coupon']['code']??null],'us'=>$at['last_source'],'uc'=>$at['last_campaign']]);
+   $o=sql('SELECT * FROM orders WHERE id=?',[$o['id']])->fetch();
+  }
+  history($o,'Historia recibida. Tu sesión está guardada.');
   notifyJourney($o,$p['audience']==='business'?'received_business':'received',[],'created:'.$ref,'Nuevo pedido',$p['audience']==='business'?'Llegó un brief de marca. Revísalo y envía la propuesta con alcance, licencia y precio.':'Entró una historia nueva. Queda pendiente el pago del cliente.');
   db()->commit(); $_SESSION['orders'][$ref]=true; return $o;
  }catch(Throwable $e){if(db()->inTransaction())db()->rollBack();throw $e;}
@@ -169,7 +184,7 @@ function applyPayment(array $t,string $checksum):array {
   if($a['status']!=='APPROVED')sql('UPDATE payment_attempts SET transaction_id=?,status=? WHERE id=?',[$t['id'],$t['status'],$a['id']]);
   if($t['status']==='APPROVED' && $a['status']!=='APPROVED') {
    if(in_array($o['status'],['created','payment_pending','cancelled'],true)) {
-    $attention=$o['status']==='cancelled'?1:0;$o['status']='paid';sql('UPDATE orders SET status=?,requires_attention=? WHERE id=?',['paid',$attention,$o['id']]);history($o,'Pago confirmado. Tu sesión ha comenzado.','wompi');notifyJourney($o,'paid',['at'=>gmdate('Y-m-d H:i:s'),'transaction'=>(string)$t['id']],'paid:'.$o['reference'],'Pago confirmado','Wompi confirmó el pago. La sesión pasó a «Pagado»: toca comenzar la producción.');
+    $attention=$o['status']==='cancelled'?1:0;$o['status']='paid';sql('UPDATE orders SET status=?,requires_attention=? WHERE id=?',['paid',$attention,$o['id']]);growthOnPaid($o);history($o,'Pago confirmado. Tu sesión ha comenzado.','wompi');notifyJourney($o,'paid',['at'=>gmdate('Y-m-d H:i:s'),'transaction'=>(string)$t['id']],'paid:'.$o['reference'],'Pago confirmado','Wompi confirmó el pago. La sesión pasó a «Pagado»: toca comenzar la producción.');
    } else { sql('UPDATE orders SET requires_attention=1 WHERE id=?',[$o['id']]);history($o,'Se recibió una aprobación adicional. Conciliar posible pago duplicado.','wompi',false);enqueue('duplicate:'.$t['id'],env('TEAM_EMAIL'),'Revisar pago adicional '.$o['reference'],'Revisar transacción '.$t['id'].' en Wompi antes de realizar cualquier reembolso.'); }
   }
   if(in_array($t['status'],['DECLINED','ERROR'],true) && in_array($o['status'],['created','payment_pending'],true))notifyJourney($o,'payment_failed',['payment'=>$t['status']],'payfail:'.$t['id']);

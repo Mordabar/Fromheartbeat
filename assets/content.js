@@ -16,7 +16,7 @@ export function buildContent(boot, tracks, money) {
   const o = boot.options;
   return {
     banks: o.genre, moods: o.mood, voices: o.voice, languages: o.language, tempos: o.tempo, occasions: OCCASIONS,
-    products: boot.catalog.filter(p => p.audience === 'person').map(p => ({code: p.code, name: p.name, price: p.price, priceText: money(p.price) + ' COP', tag: p.tag, features: p.features, description: p.description})),
+    products: boot.catalog.filter(p => p.audience === 'person').map(p => { const b = boot.prices?.[p.code], total = b?.total ?? p.price; return ({code: p.code, name: p.name, price: total, listPrice: p.price, listText: total < p.price ? money(p.price) : '', badge: b?.badge || '', priceText: money(total) + ' COP', tag: p.tag, features: p.features, description: p.description}); }),
     tracks,
   };
 }

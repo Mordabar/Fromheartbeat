@@ -85,7 +85,14 @@ export function buildMood(s) {
     });
     c.setLineDash([10, 10]); c.strokeStyle = 'rgba(198,162,255,.4)'; c.beginPath(); c.moveTo(w * 0.08, h * 0.8); c.lineTo(w * 0.92, h * 0.8); c.stroke(); c.setLineDash([]);
     c.fillStyle = '#a992d9'; c.font = `700 ${w * 0.036}px ${FONT.sans}`; c.fillText('TOTAL', w * 0.1, h * 0.845);
-    neonText(c, p ? p.priceText : '—', w * 0.9, h * 0.905, {size: w * 0.115, color: p ? (PRODUCT_COLOR[p.code] || '#c6a2ff') : '#c6a2ff', align: 'right', blur: 16, maxW: w * 0.8});
+    const qd = d.quote;   // season / coupon: «ANTES $X» crossed out, and what took it down, in green
+    if (qd && qd.discount > 0) {
+      c.textAlign = 'right'; c.fillStyle = '#9d8bc4'; c.font = `700 ${w * 0.034}px ${FONT.sans}`; const was = 'ANTES ' + new Intl.NumberFormat('es-CO', {style: 'currency', currency: 'COP', maximumFractionDigits: 0}).format(qd.list / 100), tw = c.measureText(was).width;
+      c.fillText(was, w * 0.9, h * 0.832); c.strokeStyle = '#9d8bc4'; c.lineWidth = 3; c.beginPath(); c.moveTo(w * 0.9 - tw, h * 0.832); c.lineTo(w * 0.9, h * 0.832); c.stroke();
+      c.textAlign = 'left'; c.fillStyle = '#3dffc5'; c.font = `800 ${w * 0.032}px ${FONT.sans}`; const tag = qd.coupon ? 'CUPÓN ' + qd.coupon.code : (qd.promo?.badge || 'TEMPORADA'); fit(c, tag + ' · −' + new Intl.NumberFormat('es-CO', {maximumFractionDigits: 0}).format(qd.discount / 100), w * 0.5, w * 0.032, 800, FONT.sans, 12); c.fillText(tag + ' · −' + new Intl.NumberFormat('es-CO', {maximumFractionDigits: 0}).format(qd.discount / 100), w * 0.1, h * 0.885);
+      c.textAlign = 'left';
+    }
+    neonText(c, qd && qd.total ? new Intl.NumberFormat('es-CO', {style: 'currency', currency: 'COP', maximumFractionDigits: 0}).format(qd.total / 100) + ' COP' : (p ? p.priceText : '—'), w * 0.9, h * 0.905, {size: w * 0.115, color: p ? (PRODUCT_COLOR[p.code] || '#c6a2ff') : '#c6a2ff', align: 'right', blur: 16, maxW: w * 0.8});
   }, {px: 130});
   st.ticket.mesh.position.set(0, 0, 2.2); st.ticket.mesh.position.y = -1.0; st.group.add(st.ticket.mesh); st.ticket.mesh.visible = false;
   st.ticketRows = TICKET_ROWS.map(([, label, step], i) => {

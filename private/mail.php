@@ -14,16 +14,19 @@ const MAIL_SANS="Manrope,'Helvetica Neue',Helvetica,Arial,sans-serif";
 function mh(string $s): string { return htmlspecialchars($s,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8'); }
 /** Splits a stored queue body into ['html'=>?string,'text'=>string]. Legacy plain-text rows have html=null. */
 function mailParts(string $body): array {
- if(!str_starts_with($body,MAIL_HTML_MARK))return ['html'=>null,'text'=>$body];
+ $unsub=null;if(preg_match('~^<!--fhb:unsub=(\S+?)-->\n~',$body,$mm)){$unsub=$mm[1];$body=substr($body,strlen($mm[0]));}
+ if(!str_starts_with($body,MAIL_HTML_MARK))return ['html'=>null,'text'=>$body,'unsub'=>$unsub];
  $rest=substr($body,strlen(MAIL_HTML_MARK));$i=strpos($rest,MAIL_TEXT_MARK);
- return $i===false?['html'=>$rest,'text'=>'']:['html'=>substr($rest,0,$i),'text'=>substr($rest,$i+strlen(MAIL_TEXT_MARK))];
+ return $i===false?['html'=>$rest,'text'=>'','unsub'=>$unsub]:['html'=>substr($rest,0,$i),'text'=>substr($rest,$i+strlen(MAIL_TEXT_MARK)),'unsub'=>$unsub];
 }
 /** Fills a PHPMailer message from a stored queue body: HTML + AltBody in CRLF/quoted-printable, or legacy plain text. */
 function mailFill(object $mail,string $stored): void {
  $crlf=fn(string $s)=>(string)preg_replace('/\R/u',"\r\n",$s);$p=mailParts($stored);
  if(mailSupport()!=='')$mail->addReplyTo(mailSupport(),'Fromheartbeat');
  $h=parse_url(appUrl('/'),PHP_URL_HOST);if(is_string($h)&&$h!=='')$mail->Hostname=$h;
- $mail->addCustomHeader('Auto-Submitted','auto-generated');
+ if(!empty($p['unsub'])){   // promotional mail: one-click unsubscribe for the mail apps (RFC 8058), and it is bulk, not an automatic notice
+  $mail->addCustomHeader('List-Unsubscribe','<'.$p['unsub'].'>');$mail->addCustomHeader('List-Unsubscribe-Post','List-Unsubscribe=One-Click');$mail->addCustomHeader('Precedence','bulk');
+ }else $mail->addCustomHeader('Auto-Submitted','auto-generated');
  if($p['html']!==null){$mail->isHTML(true);$mail->Encoding='quoted-printable';$mail->Body=$crlf($p['html']);$mail->AltBody=$crlf($p['text']);}else $mail->Body=$crlf($p['text']);
 }
 function mailMoney(int $cents): string { return '$'.number_format($cents/100,0,',','.').' COP'; }
@@ -212,9 +215,11 @@ function mailLayoutHtml(array $m): string {
  $a=fn(string $label,string $href)=>'<a href="'.mh($href).'" style="display:inline-block;padding:11px 12px;color:'.$C['neon'].';text-decoration:underline;">'.mh($label).'</a>';
  $links=[];if(!$team){if(!empty($m['sessionUrl']))$links[]=$a('Mi sesión',$m['sessionUrl']);$links[]=$a('Preguntas frecuentes',appUrl('/?ver=info'));$links[]=$a('Términos',appUrl('/?ver=terminos'));$links[]=$a('Privacidad',appUrl('/?ver=privacidad'));}
  else{$links[]=$a('Abrir el panel',appUrl('/admin.html'));}
+ if(!empty($m['unsub']))$links[]=$a('Cancelar suscripción',(string)$m['unsub']);
  $help=[];foreach(array_chunk($links,2) as $row)$help[]=implode('',$row).'<br>';
  $mailto=$support!==''?$a($support,'mailto:'.$support):'';
  $foot=$team?'Aviso interno del estudio. No lo reenvíes fuera del equipo.':'Recibes este correo porque hiciste un pedido en Fromheartbeat. Tu enlace privado es personal y abre todas tus canciones: no lo compartas. Para regalar una, usa «Compartir» dentro de tu sesión.';
+ if(!empty($m['foot']))$foot=(string)$m['foot'];
  $fontCss='';if(mailHasAsset('fonts/cormorant-garamond.woff2')&&mailHasAsset('fonts/manrope.woff2')){
   $fu=str_replace(['"',')','\\',"'"],'',mailAsset('fonts/'));
   $fontCss='<!--[if !mso]><!--><style>@font-face{font-family:"Cormorant Garamond";src:url('.$fu.'cormorant-garamond.woff2) format("woff2");font-weight:300 700;font-style:normal;font-display:swap}@font-face{font-family:Manrope;src:url('.$fu.'manrope.woff2) format("woff2");font-weight:200 800;font-style:normal;font-display:swap}</style><!--<![endif]-->';
@@ -265,7 +270,8 @@ function mailLayoutText(array $m): string {
  if(($m['layout']??'')!=='team'){$out[]='Preguntas frecuentes: '.appUrl('/?ver=info');$out[]='Términos: '.appUrl('/?ver=terminos');$out[]='Privacidad: '.appUrl('/?ver=privacidad');}
  $s=mailSupport();if($s!=='')$out[]='Escríbenos: '.$s;
  if(!empty($m['reference']))$out[]='Referencia '.$m['reference'];
- $out[]=($m['layout']??'')==='team'?'Aviso interno del estudio.':'Tu enlace privado es personal y abre todas tus canciones: no lo compartas. Para regalar una, usa «Compartir» dentro de tu sesión.';
+ if(!empty($m['unsub']))$out[]='Cancelar suscripción: '.$m['unsub'];
+ $out[]=!empty($m['foot'])?(string)$m['foot']:(($m['layout']??'')==='team'?'Aviso interno del estudio.':'Tu enlace privado es personal y abre todas tus canciones: no lo compartas. Para regalar una, usa «Compartir» dentro de tu sesión.');
  return implode(PHP_EOL,$out).PHP_EOL;
 }
 

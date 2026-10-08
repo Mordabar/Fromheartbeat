@@ -5,6 +5,8 @@ import {Studio, MOODS} from './studio.js';
 import {StudioGesture, firstMissingBrief} from './spatial-controls.js';
 import {iconFor, iconSvg, LANGUAGE_BADGE} from './icons.js';
 import {GENRE_INFO, MOOD_INFO, OCCASIONS, buildContent} from './content.js';
+import {tracker} from './track.js';
+const track=(n,d,p)=>tracker.track(n,d,p);
 const $=(s)=>document.querySelector(s), esc=(s)=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money=n=>new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',maximumFractionDigits:0}).format(n/100);
 const root=$('#content'), audio=$('#sample-audio');
@@ -12,7 +14,7 @@ let boot,view='lobby',lastView='lobby',currentOrder=null,playing=-1,studio,genre
 let productPreview=1, modalReturnFocus=null, plainMode=false, sessionFocus='session', sessionPanel=null, customTrack=null;   // sessionFocus: corner of the 3D session room the camera is on · sessionPanel: the small panel (talk | files | full) opened from it
    // plainMode: the visitor chose the plain-text panels; it follows them from step to step
 const trail=[]; // screens visited, so "back" returns where the customer came from (e.g. About → the step they were on)
-let draft={product:'personalizada',genre:'',mood:'',voice:'',language:'Español',tempo:'A tu criterio',recipient:'',occasion:'',story:'',details:'',name:'',email:'',phone:'',key:crypto.randomUUID()};
+let draft={product:'personalizada',genre:'',mood:'',voice:'',language:'Español',tempo:'A tu criterio',recipient:'',occasion:'',story:'',details:'',name:'',email:'',phone:'',coupon:'',optin_email:false,optin_sms:false,key:crypto.randomUUID()};
 try{const saved=JSON.parse(sessionStorage.getItem('fhb-draft'));if(saved)draft={...draft,...saved};}catch{}
 draft.audience='person';
 const save=()=>{try{sessionStorage.setItem('fhb-draft',JSON.stringify(draft));}catch{}};
@@ -33,6 +35,23 @@ const STEPS={
  checkout:{title:'Tus datos y pago',hint:'Son dos minutos: revisa, dinos dónde enviártela y paga.',zone:'Tu sesión',need:'Completa tus datos y acepta los términos.'}
 };
 const ZONES={lobby:'Tu estudio',samples:'La pared de vinilos',info:'Información',about:'Nosotros',session:'Tu sesión',recover:'Tu sesión',library:'Mis canciones',terms:'Información',privacy:'Información'};
+// Prices: the server decides (season + coupon). The browser only shows what it was told and asks again when the coupon or the email changes.
+let quote=null,couponBusy=false;
+const priceBase=code=>boot.prices?.[code]||null;
+function viewQuote(){const p=selectedProduct(),b=priceBase(p.code),list=b?.list??p.price,total=b?.total??p.price;
+ if(quote&&quote.product===p.code&&quote.coupon===(draft.coupon||'').trim().toUpperCase()&&quote.q)return quote.q;
+ return{list,total,discount:list-total,promo:b&&b.total<b.list?{name:b.promo,badge:b.badge,discount:list-total}:null,coupon:null,coupon_error:null};}
+async function applyCoupon(silent=false){const p=selectedProduct(),code=(draft.coupon||'').trim();
+ if(!code){quote=null;sync3D();updateTotals();return;}
+ couponBusy=true;updateTotals();
+ try{const r=await api('coupon-check',{product:p.code,coupon:code,email:draft.email||'',v:tracker.visitor||undefined});quote={product:p.code,coupon:code.toUpperCase(),q:r.quote};if(r.quote.coupon_error&&!silent)toast(r.quote.coupon_error);else if(r.quote.coupon&&!silent)toast('Cupón aplicado: '+money(r.quote.coupon.discount)+' menos.');}
+ catch(e){quote=null;if(!silent)toast(e.message);}
+ couponBusy=false;sync3D();updateTotals();}
+function totalsMarkup(){const q=viewQuote();const rows=[];if(q.discount>0){rows.push(`<div class="total-sub"><span>Precio</span><span>${money(q.list)} COP</span></div>`);if(q.promo)rows.push(`<div class="total-sub off"><span>${esc(q.promo.badge||'Temporada')} · ${esc(q.promo.name||'')}</span><span>−${money(q.promo.discount)}</span></div>`);if(q.coupon)rows.push(`<div class="total-sub off"><span>Cupón ${esc(q.coupon.code)}</span><span>−${money(q.coupon.discount)}</span></div>`);}
+ return `${rows.join('')}<div class="total-row"><span>Total a pagar</span><strong>${money(q.total)} COP</strong></div>`;}
+function updateTotals(){const box=root.querySelector('#totals');if(box)box.innerHTML=totalsMarkup();const m=root.querySelector('#coupon-msg'),q=viewQuote();if(m){m.className='c-coupon-msg'+(q.coupon_error?' bad':q.coupon?' ok':'');m.textContent=couponBusy?'Revisando tu cupón…':q.coupon_error?q.coupon_error:q.coupon?'Cupón aplicado ✓':'';}
+ const b=root.querySelector('#coupon-apply');if(b)b.disabled=couponBusy;}
+const priceHtml=p=>{const b=priceBase(p.code);return b&&b.total<b.list?`<s class="was">${money(b.list)}</s> ${money(b.total)} <small>COP</small>${b.badge?` <em class="sale">${esc(b.badge)}</em>`:''}`:`${money(p.price)} <small>COP</small>`;};
 const catalogPerson=()=>boot.catalog.filter(p=>p.audience==='person');
 const selectedProduct=()=>catalogPerson().find(p=>p.code===draft.product)||catalogPerson().find(p=>p.code==='personalizada');
 
@@ -60,7 +79,7 @@ const simpleHead=(title,hint='',back='back')=>`<div class="head-row"><button cla
 
 function wizardHead(step){const i=FLOW.indexOf(step),m=STEPS[step];return `<div class="head-row"><button class="icon-btn" data-go="${i?FLOW[i-1]:'lobby'}" aria-label="${i?'Paso anterior':'Volver al inicio'}">${ic('back')}</button><span class="step-count">Paso ${i+1} de ${FLOW.length} · ${m.zone}</span><button class="icon-btn" data-go="lobby" aria-label="Salir al inicio (tu avance se guarda)">${ic('close')}</button></div><div class="progress" aria-hidden="true">${FLOW.map((s,j)=>`<i class="${j<i?'done':j===i?'now':''}"></i>`).join('')}</div><h1 id="panel-title">${m.title}</h1><p class="hint">${m.hint}</p>`;}
 function summaryText(){if(view==='checkout')return boot.commerceReady?'El pago seguro se abre aquí mismo · tu historia queda guardada':'Tu historia queda guardada y te avisamos para pagar';return [draft.genre,draft.mood,draft.voice&&`Voz ${draft.voice.toLowerCase()}`].filter(Boolean).map(esc).join(' · ')||'Tu canción empieza aquí';}
-function nextLabel(step){if(returnTo&&step!=='checkout')return 'Listo, volver al pago';if(step==='products')return firstMissingBrief(draft)?'Crear con este paquete':'Revisar mi canción';if(step==='checkout'){const p=selectedProduct();return boot.commerceReady?`Ir a pagar ${money(p.price)}`:'Guardar mi sesión';}return 'Siguiente';}
+function nextLabel(step){if(returnTo&&step!=='checkout')return 'Listo, volver al pago';if(step==='products')return firstMissingBrief(draft)?'Crear con este paquete':'Revisar mi canción';if(step==='checkout'){const p=selectedProduct();return boot.commerceReady?`Ir a pagar ${money(viewQuote().total)}`:'Guardar mi sesión';}return 'Siguiente';}
 function wizardFoot(step){const ok=valid(step),i=FLOW.indexOf(step);return `<p class="summary" id="summary">${summaryText()}</p><button class="primary next ${ok?'':'locked'}" id="next" ${step==='checkout'?'type="submit" form="checkout-form"':`type="button" data-next="${nextTarget(step)}"`} aria-disabled="${!ok}">${nextLabel(step)} <span>→</span></button>`;}
 // Say exactly what is missing, in words, and put the cursor there.
 function clearFieldErrors(){document.querySelectorAll('.field.invalid,.check.invalid').forEach(x=>{x.classList.remove('invalid');x.querySelector('.field-err')?.remove();x.querySelector('[aria-describedby^=err-]')?.removeAttribute('aria-describedby');});}
@@ -84,7 +103,7 @@ const faqBlock=()=>`<div class="faq">${boot.content.faq.map(f=>`<details class="
 // Where "Crear mi canción" should land: the step the customer left, or the first unfinished one.
 function resumeStep(){if(flowView)return flowView;if(!draft.genre)return 'genre';return FLOW.find(s=>s!=='checkout'&&!valid(s))||'products';}
 function createCta(label='Crear mi canción'){const started=!!(flowView||draft.genre);const step=resumeStep();return `<button class="primary" data-go="resume">${started?`Continuar · paso ${FLOW.indexOf(step)+1}`:label} ${ic('arrow')}</button>`;}
-function lobby(){const from=money(Math.min(...catalogPerson().map(p=>p.price)));return shell({cls:'lobby-panel',head:`<p class="eyebrow"><span class="live-dot"></span> ESTUDIO DE CANCIONES PERSONALIZADAS</p><h1 id="panel-title">Tu historia.<br><em>Su próxima canción.</em></h1>`,body:`<p class="lede">Entra, encuentra tu sonido y convierte lo que sientes en una canción para alguien especial.</p><p class="microcopy">Desde <b>${from} COP</b> · Sin crear cuenta</p>`,foot:`<div class="foot-row">${createCta('Entrar al estudio')}<button class="secondary" data-go="samples">${ic('play')} Escuchar</button></div><p class="lobby-note">Hecho para una persona. Escuchado para siempre.</p>`});}
+function lobby(){const from=money(Math.min(...catalogPerson().map(p=>priceBase(p.code)?.total??p.price)));return shell({cls:'lobby-panel',head:`<p class="eyebrow"><span class="live-dot"></span> ESTUDIO DE CANCIONES PERSONALIZADAS</p><h1 id="panel-title">Tu historia.<br><em>Su próxima canción.</em></h1>`,body:`<p class="lede">Entra, encuentra tu sonido y convierte lo que sientes en una canción para alguien especial.</p><p class="microcopy">Desde <b>${from} COP</b> · Sin crear cuenta</p>`,foot:`<div class="foot-row">${createCta('Entrar al estudio')}<button class="secondary" data-go="samples">${ic('play')} Escuchar</button></div><p class="lobby-note">Hecho para una persona. Escuchado para siempre.</p>`});}
 const PILLAR_ICONS=['pen','mic','shield'];
 function aboutView(){const c=boot.content;return shell({cls:'tall',head:simpleHead(esc(c.about.title),'Un estudio para convertir historias en canciones.'),body:`${c.about.paragraphs.map(p=>`<p class="lede">${esc(p)}</p>`).join('')}<div class="pillars">${c.about.pillars.map((p,i)=>`<div class="card pillar"><b>${ic(PILLAR_ICONS[i]||'sparkle')}</b><div><strong>${esc(p.title)}</strong><p>${esc(p.text)}</p></div></div>`).join('')}</div>${c.reviews.some(r=>!r.sample)?`<h2 class="section-label">${ic('star')} Reseñas</h2>${reviewsBlock(c.reviews.filter(r=>!r.sample))}`:''}<h2 class="section-label">${ic('sparkle')} Preguntas frecuentes</h2>${faqBlock()}`,foot:`<div class="foot-row">${createCta()}<button class="secondary" data-go="samples">${ic('headphones')} Escuchar</button></div>`});}
 
@@ -96,7 +115,7 @@ function moodStep(){return `<div class="opts grid">${boot.options.mood.map(m=>op
 function voiceStep(){return group(`${ic('mic')} Voz`,'voice',boot.options.voice,v=>({sub:{Femenina:'Una cantante',Masculina:'Un cantante',Dúo:'Ella y él',Coro:'Varias voces','A tu criterio':'Lo decidimos'}[v]}))+`<details class="advanced-options"><summary>Idioma y ritmo <span>${esc(draft.language)} · ${esc(draft.tempo)}</span></summary>`+group(`${ic('users')} Idioma`,'language',boot.options.language)+group(`${ic('clock')} Tempo`,'tempo',boot.options.tempo,v=>({sub:{Lento:'Balada, calma',Medio:'Para cantar',Rápido:'Para bailar','A tu criterio':'Según el género'}[v]}))+`</details>`;}
 function field(name,label,{type='text',min=0,max=200,placeholder='',area=false,required=true,hint=''}={}){return `<label class="field"><span>${label}</span>${hint?`<small class="field-hint">${hint}</small>`:''}${area?`<textarea name="${name}" minlength="${min}" maxlength="${max}" ${required?'required':''} placeholder="${esc(placeholder)}">${esc(draft[name])}</textarea>`:`<input name="${name}" type="${type}" value="${esc(draft[name])}" minlength="${min}" maxlength="${max}" ${required?'required':''} placeholder="${esc(placeholder)}" autocomplete="${{name:'name',email:'email',phone:'tel'}[name]||'off'}">`}</label>`;}
 function storyStep(){return `<form id="story-form" novalidate>${field('recipient','¿Para quién es?',{min:2,max:120,placeholder:'Su nombre, como tú le dices'})}<fieldset class="opt-group"><legend>${ic('gift')} ¿Qué celebran?</legend><div class="opts chips">${occasions.map(o=>opt('occasion',o)).join('')}</div></fieldset>${field('occasion','Ocasión',{min:2,max:100,placeholder:'O escribe la tuya'})}${field('story','Su historia',{area:true,min:30,max:6000,placeholder:'Cómo se conocieron. Ese viaje. Una frase que solo ustedes entienden…'})}<p class="form-note"><span id="story-count">${draft.story.length}</span> / 6.000 · mínimo 30 caracteres</p>${field('details','Detalles que no pueden faltar (opcional)',{area:true,max:2000,required:false,placeholder:'Nombres, apodos, pronunciación, algo que prefieras evitar.'})}</form>`;}
-function productsStep(){return `<div class="opts products">${catalogPerson().map((p,i)=>{const on=draft.product===p.code;return `<div class="product-card"><div class="package-art ${p.code}"><span>${iconSvg(iconFor('product',p.code),'pkg-svg')}</span><b>${['01 / ESENCIAL','02 / SIGNATURE','03 / CINEMA'][i]}</b></div><button type="button" class="opt product-opt ${on?'on':''}" data-pick="product" data-value="${p.code}" data-index="${i}" aria-pressed="${on}"><span class="product-top"><span class="tag">${esc(p.tag)}</span><b class="tick" aria-hidden="true">${ic('check')}</b></span><span class="opt-label">${esc(p.name)}</span><span class="price">${money(p.price)} <small>COP</small></span><span class="points">${(PRODUCT_POINTS[p.code]||[]).map(([i,t])=>`<i>${ic(i)}${t}</i>`).join('')}</span></button><details class="product-details" open><summary>Qué incluye</summary><ul>${p.features.map(f=>`<li>${esc(f)}</li>`).join('')}</ul></details></div>`;}).join('')}</div><p class="form-note">Todas se graban con artistas. Las más completas añaden edición vocal, mezcla y master.</p>`;}
+function productsStep(){return `<div class="opts products">${catalogPerson().map((p,i)=>{const on=draft.product===p.code;return `<div class="product-card"><div class="package-art ${p.code}"><span>${iconSvg(iconFor('product',p.code),'pkg-svg')}</span><b>${['01 / ESENCIAL','02 / SIGNATURE','03 / CINEMA'][i]}</b></div><button type="button" class="opt product-opt ${on?'on':''}" data-pick="product" data-value="${p.code}" data-index="${i}" aria-pressed="${on}"><span class="product-top"><span class="tag">${esc(p.tag)}</span><b class="tick" aria-hidden="true">${ic('check')}</b></span><span class="opt-label">${esc(p.name)}</span><span class="price">${priceHtml(p)}</span><span class="points">${(PRODUCT_POINTS[p.code]||[]).map(([i,t])=>`<i>${ic(i)}${t}</i>`).join('')}</span></button><details class="product-details" open><summary>Qué incluye</summary><ul>${p.features.map(f=>`<li>${esc(f)}</li>`).join('')}</ul></details></div>`;}).join('')}</div><p class="form-note">Todas se graban con artistas. Las más completas añaden edición vocal, mezcla y master.</p>`;}
 const PRODUCT_POINTS={dedicatoria:[['mic','Grabada por artistas'],['clock','Entrega más rápida']],personalizada:[['mic','Cantante real'],['refresh','1 ronda de ajustes']],full:[['music','Canción + video'],['gift','Presentación especial']]};
 const testCard=()=>boot.testMode&&boot.commerceReady?`<details class="test-card"><summary>${ic('flask')} Estás en modo de pruebas · no se cobra nada</summary><p>Tarjeta aprobada: <code>4242 4242 4242 4242</code> · Rechazada: <code>4111 1111 1111 1111</code>. Cualquier fecha futura y CVC de 3 dígitos.</p></details>`:'';
 function checkoutStep(){const p=selectedProduct(),recap3d=!(studio?.light||plainMode)&&!!studio?.renderer;
@@ -105,8 +124,8 @@ function checkoutStep(){const p=selectedProduct(),recap3d=!(studio?.light||plain
  const pay=boot.commerceReady?`<ul class="c-trust"><li>${ic('lock')}<span>Pagas en la página segura de <b>Wompi</b>. Fromheartbeat nunca ve ni guarda tu tarjeta.</span></li><li>${ic('arrow')}<span>El pago se abre en una <b>ventana segura sobre esta misma página</b>: no sales de Fromheartbeat. Al terminar, tu sesión empieza sola.</span></li><li>${ic('check')}<span>Tu historia queda guardada <b>antes</b> de pagar: no se pierde si algo falla.</span></li></ul>`:`<p class="c-soon">${ic('clock')}<span>Los pagos en línea se están configurando. Guardaremos tu sesión y te avisaremos por correo para completar el pago.</span></p>`;
  return `<form id="checkout-form" novalidate class="c-form">
   ${recap3d?`<p class="c-hint">${ic('pen')}<span>Tu canción está en el ticket del estudio: <b>toca cualquier línea</b> para cambiarla.</span></p>`:sec(1,'Tu canción','Revisa que todo esté bien. Puedes cambiar lo que quieras.',`<div class="recap">${row('sliders','Sonido',esc([draft.genre,draft.mood].join(' · ')),'genre')}${row('mic','Voz',esc([draft.voice,draft.language,draft.tempo].join(' · ')),'voice')}${row('heart','Para',esc(`${draft.recipient} · ${draft.occasion}`),'story')}${row('gift','Experiencia',`${esc(p.name)}`,'products')}</div>`)}
-  ${sec(recap3d?1:2,'¿A dónde te la enviamos?','Con estos datos recibes tu enlace privado. No creas cuenta ni contraseña.',`${field('name','Tu nombre completo',{min:2,max:120,placeholder:'Ana Pérez'})}${field('email','Tu correo',{type:'email',max:254,placeholder:'ana@ejemplo.com',hint:'Aquí te llega el enlace a tu sesión.'})}${field('phone','Tu celular',{type:'tel',min:7,max:40,placeholder:'300 123 4567',hint:'Solo lo usamos si hay algo urgente de tu canción.'})}<label class="check"><input type="checkbox" name="consent" required ${draft.consent?'checked':''}><span>Acepto los <button type="button" data-go="terms">términos</button> y la <button type="button" data-go="privacy">política de privacidad</button>, y puedo compartir esta historia.</span></label>`)}
-  ${sec(recap3d?2:3,'Pago seguro',boot.commerceReady?'Un último paso y el estudio empieza.':'Casi listo.',`<div class="total-row"><span>Total a pagar</span><strong>${money(p.price)} COP</strong></div>${pay}<p class="form-error" id="checkout-error" role="alert"></p>`)}
+  ${sec(recap3d?1:2,'¿A dónde te la enviamos?','Con estos datos recibes tu enlace privado. No creas cuenta ni contraseña.',`${field('name','Tu nombre completo',{min:2,max:120,placeholder:'Ana Pérez'})}${field('email','Tu correo',{type:'email',max:254,placeholder:'ana@ejemplo.com',hint:'Aquí te llega el enlace a tu sesión.'})}${field('phone','Tu celular',{type:'tel',min:7,max:40,placeholder:'300 123 4567',hint:'Solo lo usamos si hay algo urgente de tu canción.'})}<label class="check"><input type="checkbox" name="consent" required ${draft.consent?'checked':''}><span>Acepto los <button type="button" data-go="terms">términos</button> y la <button type="button" data-go="privacy">política de privacidad</button>, y puedo compartir esta historia.</span></label><label class="check optin"><input type="checkbox" name="optin_email" ${draft.optin_email?'checked':''}><span>Quiero recibir ofertas y novedades de Fromheartbeat por correo <small>(opcional · puedes cancelar cuando quieras)</small></span></label><label class="check optin"><input type="checkbox" name="optin_sms" ${draft.optin_sms?'checked':''}><span>Y también por mensaje de texto <small>(opcional)</small></span></label>`)}
+  ${sec(recap3d?2:3,'Pago seguro',boot.commerceReady?'Un último paso y el estudio empieza.':'Casi listo.',`<div class="c-coupon"><label class="field" for="f-coupon"><span>¿Tienes un cupón?</span></label><div class="c-coupon-row"><input id="f-coupon" name="coupon" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="40" placeholder="Escribe tu código" value="${esc(draft.coupon||'')}"><button type="button" id="coupon-apply" class="secondary">Aplicar</button></div><p id="coupon-msg" class="c-coupon-msg" role="status"></p></div><div id="totals">${totalsMarkup()}</div>${pay}<p class="form-error" id="checkout-error" role="alert"></p>`)}
   ${testCard()}
  </form>`;}
 function wizardView(step){const body={genre:genreStep,mood:moodStep,voice:voiceStep,story:storyStep,products:productsStep,checkout:checkoutStep}[step]();return shell({cls:`wizard step-${step}`,head:wizardHead(step),body,foot:wizardFoot(step)});}
@@ -132,7 +151,7 @@ const DRAWER_VIEWS=['about','terms','privacy','recover','checkout','story'];
 const announce=text=>{const l=$('#live');l.textContent='';requestAnimationFrame(()=>{l.textContent=text;});};
 let returnTo=null;
 const nextTarget=step=>returnTo&&step!=='checkout'?'checkout':step==='products'?(firstMissingBrief(draft)||'checkout'):FLOW[FLOW.indexOf(step)+1];
-function sync3D(){if(!studio)return;studio.setDraft(draft);if(studio.stations.session){studio.stations.session.focus=libraryFocus;studio.stations.session.setOrders(myOrders);}studio.stations.cockpit?.setOrder(currentOrder);renderHud();}
+function sync3D(){if(!studio)return;studio.setDraft({...draft,quote:viewQuote()});if(studio.stations.session){studio.stations.session.focus=libraryFocus;studio.stations.session.setOrders(myOrders);}studio.stations.cockpit?.setOrder(currentOrder);renderHud();}
 function mountOptions(){const host=$('#mobile-content');if(root.parentElement!==host)host.append(root);document.body.classList.toggle('mobile-studio',isMobile());}
 function syncInert(){const k=$('#stage-keys');if(k)k.inert=optionsDialog.open&&(DRAWER_VIEWS.includes(view)||(view==='session'&&!!sessionPanel));}
 function openOptions(){mountOptions();if(!optionsDialog.open){modalReturnFocus=document.activeElement;optionsDialog.show();document.body.classList.add('options-open');$('#close-options').focus({preventScroll:true});}syncInert();renderHud();frameStudio();}
@@ -185,7 +204,7 @@ function sessionPrimary(){const o=currentOrder,st=studio?.stations.cockpit,audio
  return{act:'status',icon:'sliders',label:'Ver estado'};}
 // Gifting: a link that only plays and downloads this one song, whoever opens it. The buyer's other songs stay private.
 async function shareSong(){
- const o=currentOrder;if(!o||o.shared)return;
+ const o=currentOrder;if(!o||o.shared)return;track('share',{});
  try{
   const {url}=await api('share',{reference:o.reference}),title=o.brief?.recipient?`Una canción para ${o.brief.recipient}`:'Una canción de Fromheartbeat';
   if(navigator.share&&isMobile()){try{await navigator.share({title,text:`${title}. Hecha a mano en Fromheartbeat.`,url});return;}catch(e){if(e.name==='AbortError')return;}}
@@ -214,6 +233,7 @@ function renderHud(){
  else if(view==='library'){kicker='Tu colección privada';title='Mis canciones';}
  else if(view==='info')title='Información del estudio';
  cap.hidden=!title||drawer||studio?.light;
+ {const pb=$('#promo-banner');if(pb){pb.hidden=!(boot.banner&&['lobby','products'].includes(view))||drawer||!!studio?.light;if(boot.banner&&pb.textContent!==boot.banner)pb.textContent=boot.banner;}}
  cap.innerHTML=title?`<p class="cap-kicker">${esc(kicker)}</p><h2 class="cap-title">${esc(title)}</h2>`:'';
  const show=view!=='lobby'&&!drawer&&!studio?.light;
  jr.hidden=!show;document.body.classList.toggle('journey-on',show);$('#lobby-hint').hidden=view!=='lobby'||drawer||!!studio?.light;
@@ -252,7 +272,7 @@ function mountUploads(){const el=root.querySelector('[data-uploader]');if(el&&cu
 async function refreshAfterUpload(ref){if(view!=='session'||currentOrder?.reference!==ref)return;const inUp=!!document.activeElement?.closest?.('#s-upload');try{currentOrder=(await api('order',null,'&reference='+encodeURIComponent(ref))).order;render(false);if(inUp)root.querySelector('[data-u-pick]')?.focus({preventScroll:true});}catch{}}
 // The library of songs: everything the browser may open as owner. Refreshed whenever the visitor walks up to it.
 let openingLibrary=false;
-async function openLibrary(){openingLibrary=true;try{try{myOrders=(await api('my-orders')).orders;}catch{}
+async function openLibrary(){track('library',{});openingLibrary=true;try{try{myOrders=(await api('my-orders')).orders;}catch{}
  if(myOrders.length===1)await loadOrder(myOrders[0].reference);else go(myOrders.length?'library':'mail');}catch(e){toast(e.message);}finally{openingLibrary=false;}}
 async function refreshLibrary(){try{const r=await api('my-orders');myOrders=r.orders;}catch{return;}
  if(view==='library'&&myOrders.length===1)loadOrder(myOrders[0].reference).catch(()=>{});else if(view==='recover'||view==='library')render(false);}
@@ -291,10 +311,12 @@ function go(next){
  if((DRAWER_VIEWS.includes(view)&&!ticketFirst)||keepPlain||(wasLegal&&drawerWasOpen)||studio?.light||(view==='session'&&sessionPanel))openOptions();
  frameStudio();studio?.moveTo(next==='session'?sessionFocus:next);
  announce(`${STEPS[view]?.title||ZONES[view]||'Estudio'}`);
+ track('view',{view},'/'+view);if(view==='checkout'){track('begin_checkout',{product:draft.product});if((draft.coupon||'').trim())applyCoupon(true);}
 }
 
 // A choice made in the scene (or in the plain-text panel) lands here: the draft is the single source of truth.
 function applyPick(name,value){
+ track('pick',{k:name,v:String(value).slice(0,30)});
  draft[name]=value;save();
  if(name==='mood')studio?.tone(value);
  if(name==='occasion'){const input=root.querySelector('input[name=occasion]');if(input)input.value=value;}
@@ -302,7 +324,7 @@ function applyPick(name,value){
 }
 const PICK_VIEW={genre:'genre',mood:'mood',voice:'voice',language:'voice',tempo:'voice'};
 const PICK_SAY={genre:'Género',mood:'Emoción',voice:'Voz',language:'Idioma',tempo:'Ritmo'};
-function chooseProduct(index){const p=catalogPerson()[index];if(!p)return;productPreview=index;applyPick('product',p.code);announce(`Experiencia elegida: ${p.name}`);if(!optionsDialog.open)render(false);}
+function chooseProduct(index){const p=catalogPerson()[index];if(!p)return;track('select_product',{product:p.code});productPreview=index;applyPick('product',p.code);announce(`Experiencia elegida: ${p.name}`);if(!optionsDialog.open)render(false);}
 function onAction(a){
  if(!a||!studio)return;
  studio.burst(studio.lastHit,a.type==='rec'?0xff3d7f:a.type==='listen'?0x22e4ff:studio.accent);
@@ -347,6 +369,7 @@ document.addEventListener('click',async e=>{const el=e.target.closest('button');
   return;}
  if(el.dataset.track!==undefined){playTrack(Number(el.dataset.track));return;}
  if(el.dataset.order){loadOrder(el.dataset.order).catch(e=>toast(e.message));return;}
+ if(el.id==='coupon-apply'){applyCoupon(false);return;}
  if(el.id==='forget-device'){api('forget',{}).then(()=>{myOrders=[];currentOrder=null;libraryFocus=null;toast('Listo: este dispositivo ya no tiene tus sesiones.');go('lobby');}).catch(e=>toast(e.message));return;}
  if(el.id==='resume-payment'){resumePayment(el);return;}
  if(el.dataset.quick){const t=el.closest('form').elements.message;if(!t.value.includes(el.dataset.quick))t.value=(t.value?t.value+' ':'')+el.dataset.quick+'. ';t.focus();return;}
@@ -354,16 +377,18 @@ document.addEventListener('click',async e=>{const el=e.target.closest('button');
  if(el.id==='refresh-order')refreshOrder().catch(e=>toast(e.message));
 });
 document.addEventListener('input',e=>{const t=e.target;if(t.closest?.('.field.invalid,.check.invalid'))clearFieldErrors();if(t.name&&t.name in draft){draft[t.name]=t.value;save();if(t.name==='story')$('#story-count').textContent=draft.story.length;if(t.name==='occasion')root.querySelectorAll('[data-pick=occasion]').forEach(b=>{const on=b.dataset.value===t.value;b.classList.toggle('on',on);b.setAttribute('aria-pressed',String(on));});if(['recipient','occasion','story'].includes(t.name))sync3D();}refreshFoot();});
-document.addEventListener('change',e=>{if(e.target.name==='consent'){draft.consent=e.target.checked;save();refreshFoot();}});
+document.addEventListener('change',e=>{if(e.target.name==='consent'){draft.consent=e.target.checked;save();refreshFoot();}
+ if(e.target.name==='optin_email'||e.target.name==='optin_sms'){draft[e.target.name]=e.target.checked;save();}
+ if((e.target.name==='email'&&draft.coupon)||e.target.name==='coupon'){if(e.target.name==='coupon'&&!draft.coupon.trim())applyCoupon(true);else if(draft.coupon.trim())applyCoupon(true);}});
 document.addEventListener('submit',async e=>{e.preventDefault();const form=e.target;
  if(form.id==='story-form'){$('#next')?.click();return;}
  if(form.id==='checkout-form'&&(firstMissingBrief(draft)||!valid('checkout'))){checkoutProblem(form);return;}
  const btn=form.id==='checkout-form'?$('#next'):root.querySelector(`[form="${form.id}"]`)||form.querySelector('button');
  if(btn){btn.disabled=true;btn.setAttribute('aria-busy','true');if(form.id==='checkout-form'){btn.dataset.idle=btn.innerHTML;btn.textContent='Guardando tu historia…';}}
   try{
-  if(form.id==='checkout-form'){const {order}=await api('orders',{product:draft.product,name:draft.name,email:draft.email,phone:draft.phone,consent:form.elements.consent.checked,idempotency_key:draft.key,brief:Object.fromEntries(['genre','mood','voice','language','tempo','recipient','occasion','story','details'].map(k=>[k,draft[k]]))});currentOrder=order;history.replaceState({},'',`?session=${order.reference}`);
+  if(form.id==='checkout-form'){const {order}=await api('orders',{product:draft.product,coupon:(draft.coupon||'').trim(),optin_email:!!draft.optin_email,optin_sms:!!draft.optin_sms,attr:tracker.attribution(),name:draft.name,email:draft.email,phone:draft.phone,consent:form.elements.consent.checked,idempotency_key:draft.key,brief:Object.fromEntries(['genre','mood','voice','language','tempo','recipient','occasion','story','details'].map(k=>[k,draft[k]]))});currentOrder=order;history.replaceState({},'',`?session=${order.reference}`);
    // The song is saved: start a clean draft for a future one, keeping the buyer's contact details.
-   draft={...draft,genre:'',mood:'',voice:'',recipient:'',occasion:'',story:'',details:'',consent:false,key:crypto.randomUUID()};flowView=null;trail.length=0;save();
+   draft={...draft,genre:'',mood:'',voice:'',recipient:'',occasion:'',story:'',details:'',consent:false,coupon:'',optin_email:false,optin_sms:false,key:crypto.randomUUID()};quote=null;flowView=null;trail.length=0;save();
    if(boot.commerceReady){let pay;try{pay=await api('checkout',{reference:order.reference});}catch(err){await loadOrder(order.reference);const pe=$('#payment-error');if(pe)pe.textContent=err.message;else toast(err.message);return;}
     const r=await startPayment(pay,order.reference);if(r==='redirect')return;
     await loadOrder(order.reference);if(currentOrder.status==='paid')studio?.celebrate();else if(r==='closed')toast('Tu pago quedó pendiente. Puedes retomarlo desde tu sesión.');return;}
@@ -380,6 +405,7 @@ function loadWompi(){if(window.WidgetCheckout)return Promise.resolve();return wo
  s.onload=()=>{clearTimeout(t);if(window.WidgetCheckout)ok();else{wompiLoad=null;no(new Error('widget'));}};
  s.onerror=()=>{clearTimeout(t);wompiLoad=null;s.remove();no(new Error('blocked'));};document.head.append(s);});}
 async function startPayment(pay,ref){
+ track('payment_open',{product:currentOrder?.product_code});
  let tx;try{await loadWompi();tx=await new Promise((done,fail)=>{try{new window.WidgetCheckout(pay.widget).open(r=>done(r?.transaction||null));}catch(e){fail(e);}});}catch{tx=undefined;}
  if(tx===undefined){toast('Abriendo el pago seguro de Wompi…');location.assign(pay.url);return 'redirect';}
  if(tx?.id){try{await api('reconcile',{reference:ref,transaction:String(tx.id)});}catch{/* the webhook and the session poll settle it */}}
@@ -422,7 +448,7 @@ setInterval(()=>{if(studio&&boot)frameStudio();},400);
 // ---- Player: play/pause, previous/next, click or drag the bar to seek, keyboard arrows ----
 const clock=s=>Number.isFinite(s)?Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0'):'0:00';
 function syncPlayer(){const on=!audio.paused;studio?.setPlaying(on&&!customTrack?playing:-1);studio?.setOrderPlaying(on&&!!customTrack);document.body.classList.toggle('sound-on',on);$('#audio-dock').classList.toggle('is-playing',on);$('#sound-toggle').setAttribute('aria-pressed',String(on));$('#sound-toggle').setAttribute('aria-label',on?'Pausar canción':'Reproducir una canción');const t=$('#player-toggle');t.innerHTML=ic(on?'pause':'play');t.setAttribute('aria-label',on?'Pausar canción':'Reproducir canción');if(view==='samples')root.querySelectorAll('.track').forEach((b,i)=>{const p=i===playing&&on;b.classList.toggle('playing',p);b.setAttribute('aria-label',`${p?'Pausar':'Escuchar'} ${tracks[i].name}`);b.querySelector('.play').innerHTML=ic(p?'pause':'play');});}
-async function playTrack(index){customTrack=null;if(!tracks.length){toast('Pronto encontrarás canciones aquí.');return;}index=(index+tracks.length)%tracks.length;if(playing===index&&!audio.paused){audio.pause();return;}const changed=playing!==index;playing=index;const t=tracks[index];if(changed||!audio.src)audio.src=t.audio||'assets/audio/'+t.file+'.mp3';$('#track-name').textContent=t.name;$('.dock-cover').style.backgroundImage=`url("${t.cover||'assets/images/covers/'+t.file+'.webp'}")`;$('#track-genre').textContent=t.genre;$('#audio-dock').hidden=false;requestAnimationFrame(frameStudio);document.body.classList.add('audio-open');if(changed)paintSeek(0);try{studio?.connectAudio(audio);await audio.play();}catch{toast('No se pudo reproducir esta canción. Inténtalo otra vez.');}syncPlayer();}
+async function playTrack(index){track('play',{kind:'sample'});customTrack=null;if(!tracks.length){toast('Pronto encontrarás canciones aquí.');return;}index=(index+tracks.length)%tracks.length;if(playing===index&&!audio.paused){audio.pause();return;}const changed=playing!==index;playing=index;const t=tracks[index];if(changed||!audio.src)audio.src=t.audio||'assets/audio/'+t.file+'.mp3';$('#track-name').textContent=t.name;$('.dock-cover').style.backgroundImage=`url("${t.cover||'assets/images/covers/'+t.file+'.webp'}")`;$('#track-genre').textContent=t.genre;$('#audio-dock').hidden=false;requestAnimationFrame(frameStudio);document.body.classList.add('audio-open');if(changed)paintSeek(0);try{studio?.connectAudio(audio);await audio.play();}catch{toast('No se pudo reproducir esta canción. Inténtalo otra vez.');}syncPlayer();}
 const seekEl=$('#audio-seek');let seeking=false;
 function paintSeek(ratio){ratio=Math.max(0,Math.min(1,ratio||0));seekEl.style.setProperty('--p',(ratio*100).toFixed(2)+'%');seekEl.setAttribute('aria-valuenow',String(Math.round(ratio*100)));seekEl.setAttribute('aria-valuetext',`${clock(ratio*audio.duration)} de ${clock(audio.duration)}`);$('#audio-time').textContent=clock(ratio*(audio.duration||0));}
 const ratioAt=e=>{const r=seekEl.getBoundingClientRect();return (e.clientX-r.left)/r.width;};
@@ -445,7 +471,7 @@ audio.onended=()=>{if(customTrack){syncPlayer();return;}playTrack(playing+1);};
 $('#player-toggle').innerHTML=ic('play');
 
 // The song of the customer's own session plays through the same dock as the studio's collection.
-async function playOrderAudio(){
+async function playOrderAudio(){track('play',{kind:'order'});
  const f=studio?.stations.cockpit?.audioFile();if(!f){toast('Tu canción aparecerá aquí en cuanto el estudio la suba.');return;}
  const url=`api.php?action=file&id=${f.id}`;if(customTrack===url&&!audio.paused){audio.pause();return;}
  const cover=(currentOrder?.files||[]).filter(x=>x.kind==='delivery'&&x.mime.startsWith('image/')).pop();
@@ -456,7 +482,7 @@ async function playOrderAudio(){
 }
 async function refreshOrder(){if(!currentOrder)return;currentOrder=(await api('order',null,'&reference='+encodeURIComponent(currentOrder.reference))).order;if(sessionPanel)render(false);else sync3D();}
 async function loadOrder(ref){currentOrder=(await api('order',null,'&reference='+encodeURIComponent(ref))).order;go('session');if(!currentOrder.shared)api('my-orders').then(r=>{myOrders=r.orders;if(view==='session')renderHud();}).catch(()=>{});}
-async function start(){try{boot=await api('bootstrap');configureUploads({getCsrf:()=>boot.csrf,setCsrf:t=>{boot.csrf=t;},config:boot.uploads,onBatchDone:refreshAfterUpload});if(Array.isArray(boot.tracks))tracks=boot.tracks;if(!catalogPerson().some(p=>p.code===draft.product))draft.product='personalizada';studio=new Studio($('#studio'));if(studio.light)document.body.classList.add('light-mode');studio.setContent(buildContent(boot,tracks,money));studio.stations.cockpit?.setCommerce(boot.commerceReady);if(boot.commerceReady)setTimeout(()=>loadWompi().catch(()=>{}),2500);onUploadStats(u=>{if(currentOrder&&u.ref===currentOrder.reference)studio?.stations.cockpit?.setUpload(u);});studio.setTracks(tracks);studio.setDraft(draft);if(draft.mood)studio.tone(draft.mood);hydrateIcons();render();frameStudio();if(studio.light)openOptions();
+async function start(){try{boot=await api('bootstrap');tracker.init(()=>boot.csrf);configureUploads({getCsrf:()=>boot.csrf,setCsrf:t=>{boot.csrf=t;},config:boot.uploads,onBatchDone:refreshAfterUpload});if(Array.isArray(boot.tracks))tracks=boot.tracks;if(!catalogPerson().some(p=>p.code===draft.product))draft.product='personalizada';studio=new Studio($('#studio'));if(studio.light)document.body.classList.add('light-mode');studio.setContent(buildContent(boot,tracks,money));studio.stations.cockpit?.setCommerce(boot.commerceReady);if(boot.commerceReady)setTimeout(()=>loadWompi().catch(()=>{}),2500);onUploadStats(u=>{if(currentOrder&&u.ref===currentOrder.reference)studio?.stations.cockpit?.setUpload(u);});studio.setTracks(tracks);studio.setDraft(draft);if(draft.mood)studio.tone(draft.mood);hydrateIcons();render();frameStudio();if(studio.light)openOptions();
  if(new URLSearchParams(location.search).has('e2e'))window.__fhb={studio,go,draft:()=>draft,view:()=>view,onAction,order:()=>currentOrder,focus:()=>sessionFocus,panel:()=>sessionPanel};
  const params=new URLSearchParams(location.search);const ref=params.get('session');if(ref){const hash=new URLSearchParams(location.hash.slice(1));const token=hash.get('token');const gift=params.get('share')==='1';
   if(token){await api('exchange',gift?{reference:ref,token,kind:'share'}:{reference:ref,token});history.replaceState({},'',`?session=${encodeURIComponent(ref)}${gift?'&share=1':''}`);}if(params.get('id')){try{await api('reconcile',{reference:ref,transaction:params.get('id')});}catch(e){toast(e.message);}}if(!gift){try{myOrders=(await api('my-orders')).orders;}catch{}}

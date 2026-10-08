@@ -1,6 +1,7 @@
 // Studio control room. The same language as the customer's session: one colour per state, six production stages,
 // messages as a conversation. Everything the server needs is unchanged (same endpoints, same payloads).
 import {STAGE_INFO, STATE, ago, parseDate, who} from './session-ui.js';
+import {createGrowth} from './admin-growth.js';
 import {configure as configureUploads, mount as mountUploader, uploaderHtml, busy as uploadsBusy} from './uploader.js';
 
 const root = document.querySelector('#admin-content');
@@ -36,7 +37,8 @@ function login() {
   root.innerHTML = `<form id="login" class="login a-login"><p class="a-eyebrow">Solo para el equipo</p><h1>De vuelta<br>en el estudio.</h1><label class="field">Correo<input type="email" name="email" required autocomplete="username" placeholder="tu@correo.com"></label><label class="field">Contraseña<input type="password" name="password" required autocomplete="current-password"></label><button class="primary full-width">Entrar al estudio</button><p class="form-error" role="alert"></p></form>`;
 }
 
-const adminNav = active => `<nav class="a-nav" aria-label="Administración"><button data-admin-page="orders" class="${active === 'orders' ? 'on' : ''}" ${active === 'orders' ? 'aria-current="page"' : ''}>${ic('headphones')} Sesiones</button><button data-admin-page="music" class="${active === 'music' ? 'on' : ''}" ${active === 'music' ? 'aria-current="page"' : ''}>${ic('music')} Catálogo musical</button></nav>`;
+const adminNav = active => `<nav class="a-nav" aria-label="Administración"><button data-admin-page="orders" class="${active === 'orders' ? 'on' : ''}" ${active === 'orders' ? 'aria-current="page"' : ''}>${ic('headphones')} Sesiones</button><button data-admin-page="music" class="${active === 'music' ? 'on' : ''}" ${active === 'music' ? 'aria-current="page"' : ''}>${ic('music')} Catálogo musical</button><button data-admin-page="growth" class="${active === 'growth' ? 'on' : ''}" ${active === 'growth' ? 'aria-current="page"' : ''}>${ic('star')} Crecimiento</button></nav>`;
+const growth = createGrowth({root, api: (...a) => api(...a), esc, money, tell, nav: adminNav});
 
 // ---- Sandbox lab (only when the server reports test mode) ---------------------------------------------------------------
 function labGuide() { return `<details class="a-lab"><summary>🧪 Modo de pruebas · cómo recorrer una compra completa</summary><ol><li><b>Comprador:</b> en <a href="./" target="_blank" rel="noopener">la tienda</a> crea una canción y paga con la tarjeta <code>4242 4242 4242 4242</code> (rechazo: <code>4111 1111 1111 1111</code>), fecha futura y CVC de 3 dígitos.</li><li>Vuelve a la pestaña de la tienda: la sesión pasa sola a <b>Pago confirmado</b>. Aquí también puedes usar <b>Verificar pago con Wompi</b>.</li><li><b>Vendedor:</b> abre la sesión, empieza la producción y avanza las etapas con mensajes visibles.</li><li>Pulsa <b>Añadir entregables de prueba</b> y marca <b>Entregada</b>. Full Experience además exige un MP4.</li><li>Con <b>Abrir como cliente</b> ves el Listening Room, y en <b>Correos generados</b> lo que recibiría el cliente.</li></ol></details>`; }
@@ -259,7 +261,7 @@ const origLogin = login;
 document.addEventListener('click', async e => {
   const btn = e.target.closest('button'); if (!btn) return;
   try {
-    if (btn.dataset.adminPage) { btn.dataset.adminPage === 'music' ? await musicList() : await list(); return; }
+    if (btn.dataset.adminPage) { btn.dataset.adminPage === 'music' ? await musicList() : btn.dataset.adminPage === 'growth' ? await growth.render() : await list(); return; }
     if (btn.dataset.musicEdit) { await musicList(btn.dataset.musicEdit); return; }
     if (btn.dataset.filter) { const k = btn.dataset.filter; filter = filter === k ? 'all' : k; shown = PAGE; renderBoard(); document.querySelector(`[data-filter="${k}"]`)?.focus(); return; }
     if (btn.dataset.more !== undefined) { shown += PAGE; renderBoard(); return; }

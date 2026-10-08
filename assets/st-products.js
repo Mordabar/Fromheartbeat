@@ -27,6 +27,7 @@ function drawFront(c, w, h, st) {
   c.font = `700 ${w * 0.04}px ${FONT.sans}`; const tw = c.measureText(p.tag).width + w * 0.09;
   roundRect(c, w / 2 - tw / 2, py - w * 0.038, tw, w * 0.076, w * 0.038); c.fillStyle = color + '2e'; c.fill(); c.lineWidth = 3; c.strokeStyle = color; c.stroke(); c.fillStyle = '#fff'; c.fillText(p.tag, w / 2, py + 1);
   const price = p.priceText.replace(' COP', '');
+  if (p.listText) { c.textAlign = 'center'; c.fillStyle = '#b9a6e6'; c.font = `700 ${w * 0.045}px ${FONT.sans}`; const wasTxt = p.listText, tw0 = c.measureText(wasTxt).width, yy = h * 0.69; c.fillText(wasTxt, w / 2, yy); c.strokeStyle = '#ff7fdc'; c.lineWidth = 3; c.beginPath(); c.moveTo(w / 2 - tw0 / 2, yy); c.lineTo(w / 2 + tw0 / 2, yy); c.stroke(); }
   neonText(c, price, w / 2, h * 0.755, {size: w * 0.15, color, blur: 20, maxW: w * 0.86});
   c.fillStyle = '#b9a6e6'; c.font = `700 ${w * 0.04}px ${FONT.sans}`; c.textAlign = 'center'; c.fillText('COP', w / 2, h * 0.815);
   (PRODUCT_POINTS[p.code] || []).forEach((t, i) => {

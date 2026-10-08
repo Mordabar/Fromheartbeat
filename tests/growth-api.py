@@ -1,0 +1,107 @@
+"""Crecimiento por HTTP: precios y cupones en el pedido, rutas de administración, baja con un clic, píxel y analítica.
+Uso:  bash tests/support/serve.sh && python3 tests/growth-api.py"""
+import os,sys,json,re,urllib.request,urllib.error
+sys.path.insert(0,os.path.join(os.path.dirname(__file__),'support'))
+from drv import *
+ok=fail=0
+def t(n,c,x=''):
+    global ok,fail
+    if c:ok+=1;print('  ok  ',n)
+    else:fail+=1;print('  FAIL',n,str(x)[:300])
+def raw(path,data=None,method=None):
+    req=urllib.request.Request('http://127.0.0.1:%s/%s'%(PORT,path),data=data,method=method or ('POST' if data is not None else 'GET'))
+    try:
+        r=urllib.request.urlopen(req);return r.status,r.read().decode('utf8','replace'),r.headers
+    except urllib.error.HTTPError as e:return e.code,e.read().decode('utf8','replace'),e.headers
+A=admin();C=Cl()
+print('— público')
+b=C.get('bootstrap');t('el arranque trae precios y banner',isinstance(b.get('prices'),dict) and 'personalizada' in b['prices'] and b['banner']=='',b.get('prices'))
+t('sin promoción el precio de lista es el total',b['prices']['personalizada']['total']==b['prices']['personalizada']['list'])
+code,_=C.post('coupon-check',dict(product='personalizada',coupon='NOEXISTE'));t('un cupón inexistente responde con mensaje, no con error',code==200 and C.post('coupon-check',dict(product='personalizada',coupon='NOEXISTE'))[1]['quote']['coupon_error'])
+req=urllib.request.Request('http://127.0.0.1:%s/api.php?action=coupon-check'%PORT,data=b'{}',headers={'Content-Type':'application/json'},method='POST')
+try:urllib.request.urlopen(req);t('sin CSRF se rechaza',False)
+except urllib.error.HTTPError as e:t('sin CSRF se rechaza',e.code==403)
+print('— administración')
+anon=Cl()
+for a in ['admin-growth-overview','admin-coupons','admin-promos','admin-contacts','admin-campaigns','admin-automations','admin-contacts-export']:
+    r=anon.get(a);t('sin sesión de admin: '+a+' → 401',r.get('_code')==401,r)
+for a,d in [('admin-coupon-save',{}),('admin-promo-save',{}),('admin-campaign-save',{}),('admin-campaign-send',{}),('admin-run-marketing',{}),('admin-growth-setup',{})]:
+    c,_=anon.post(a,d);t('sin sesión de admin: '+a+' → 401',c==401,c)
+t('el resumen carga vacío sin errores',A.get('admin-growth-overview')['kpi']['orders']==0)
+print('— cupones')
+c,r=A.post('admin-coupon-save',dict(code='madres20',kind='percent',value=20,label='Mes de la madre'));t('crear cupón',c==201,r)
+t('el código se guarda en mayúsculas',any(x['code']=='MADRES20' for x in A.get('admin-coupons')['coupons']))
+t('un código repetido se rechaza',A.post('admin-coupon-save',dict(code='MADRES20',kind='percent',value=5))[0]==409)
+t('un descuento mayor al 90 % se rechaza',A.post('admin-coupon-save',dict(code='LOCO',kind='percent',value=95))[0]==422)
+t('sin valor se rechaza',A.post('admin-coupon-save',dict(code='SINVALOR',kind='percent'))[0]==422)
+t('un código demasiado corto se rechaza',A.post('admin-coupon-save',dict(code='A',kind='percent',value=5))[0]==422)
+t('una fecha inválida se rechaza',A.post('admin-coupon-save',dict(code='FECHA1',kind='percent',value=5,ends_at='no-es-fecha'))[0]==422)
+cid=[x for x in A.get('admin-coupons')['coupons'] if x['code']=='MADRES20'][0]['id']
+qq=C.post('coupon-check',dict(product='personalizada',coupon=' madres20 '))[1]['quote'];t('el cupón responde con el precio rebajado',qq['total']==qq['list']-qq['list']*20//100 and qq['coupon']['code']=='MADRES20',qq)
+print('— pedido por API (el servidor decide)')
+o=mkorder(Cl(),'personalizada');t('sin cupón se cobra el precio de lista',o['amount_in_cents']==12990000)
+cl=Cl();bb=brief();code,r=cl.post('orders',dict(product='personalizada',consent=True,name='Ana Pérez',email='ana-api@example.com',phone='3001234567',brief=bb,idempotency_key=uuid.uuid4().hex+uuid.uuid4().hex,coupon='madres20',amount_in_cents=1,price=1,optin_email=True,attr=dict(v='visitante_api_123456',ft=dict(s='instagram',c='madres'),lt=dict(s='instagram',c='madres'))))
+t('con cupón el pedido cuesta lo que dice el servidor (el importe enviado se ignora)',code==201 and r['order']['amount_in_cents']==12990000-12990000*20//100,r)
+row=q("select * from orders where reference=?",r['order']['reference'])[0] if code==201 else {}
+t('el pedido guarda cupón, precio de lista y origen',row.get('coupon_code')=='MADRES20' and row.get('list_amount_in_cents')==12990000 and row.get('last_source')=='instagram',row)
+cont=q("select * from contacts where email='ana-api@example.com'")[0]
+t('queda un contacto con permiso de correo y su prueba',cont['email_optin']==1 and q("select count(*) n from consent_log where contact_id=?",cont['id'])[0]['n']==1)
+code,r2=Cl().post('orders',dict(product='personalizada',consent=True,name='Otra',email='ana-api@example.com',phone='3001234567',brief=bb,idempotency_key=uuid.uuid4().hex+uuid.uuid4().hex,coupon='MADRES20'))
+t('el mismo cupón no se reutiliza por la misma persona',code==409 and 'cupón' in json.dumps(r2,ensure_ascii=False).lower(),r2)
+code,r3=Cl().post('orders',dict(product='jingle',consent=True,name='Marca',email='marca@example.com',phone='3001234567',brief=dict(bb,brand='Marca X',campaign='Campaña X',channels='TV y radio',license_scope='Un año'),idempotency_key=uuid.uuid4().hex+uuid.uuid4().hex,coupon='MADRES20'))
+t('un cupón no se aplica a empresas',code==409,r3)
+print('— temporadas')
+c,_=A.post('admin-promo-save',dict(name='Black Friday',kind='percent',value=30,badge='-30%',banner='Black Friday: 30 % en todo',active=True));t('crear temporada',c==201)
+b=C.get('bootstrap');t('el arranque muestra el precio rebajado, la etiqueta y el banner',b['prices']['personalizada']['total']==12990000-12990000*30//100 and b['prices']['personalizada']['badge']=='-30%' and 'Black Friday' in b['banner'],b['prices'])
+o=mkorder(Cl(),'personalizada');t('un pedido nuevo ya sale con la temporada',o['amount_in_cents']==12990000-12990000*30//100)
+pid=A.get('admin-promos')['promos'][0]['id'];A.post('admin-promo-save',dict(id=pid,name='Black Friday',kind='percent',value=30,active=False))
+t('apagarla devuelve el precio de lista',C.get('bootstrap')['prices']['personalizada']['total']==12990000 and C.get('bootstrap')['banner']=='')
+print('— contactos')
+cs=A.get('admin-contacts','&q=ana-api')['contacts'];t('la búsqueda encuentra al contacto',len(cs)==1 and cs[0]['email']=='ana-api@example.com')
+d=A.get('admin-contact','&id=%d'%cs[0]['id']);t('el detalle trae pedidos y evidencia de consentimiento',len(d['orders'])>=1 and d['consent'][0]['action']=='grant')
+c,_=A.post('admin-contact-optout',dict(id=cs[0]['id'],channel='email'));t('el equipo puede quitar a alguien de las ofertas',c==200 and q("select email_optin from contacts where id=?",cs[0]['id'])[0]['email_optin']==0)
+ex("update contacts set name=? where id=?",'=cmd|calc',cs[0]['id'])
+st,body,h=raw('api.php?action=admin-contacts-export') if False else (None,None,None)
+req=urllib.request.Request('http://127.0.0.1:%s/api.php?action=admin-contacts-export'%PORT);A.op.open(req);csv=A.op.open(req).read().decode('utf8')
+t('el CSV neutraliza fórmulas y trae encabezados',"'=cmd|calc" in csv and csv.startswith('﻿"correo"'),csv[:200])
+print('— campañas')
+sg=A.post('admin-segment-preview',dict(segment={'orders_min':1,'tag':"x' OR '1'='1"}))[1];t('la vista previa de audiencia cuenta sin errores ni inyección',sg['count']==0)
+c,r=A.post('admin-campaign-save',dict(name='Prueba <script>',channel='email',subject='Hola {nombre}',title='Una *canción*',body='Hola.\n\nTexto.',cta_label='Crear',cta_path='//evil.example',segment={}));t('crear campaña',c==201,r)
+cid=r['id'];row=q('select * from campaigns where id=?',cid)[0];t('el botón de la campaña queda en una ruta del sitio',row['cta_path']=='/')
+c,r=A.post('admin-campaign-test',dict(id=cid));t('prueba al correo del admin',c==200,r)
+t('la prueba llega a la cola con prefijo [Prueba]',q("select count(*) n from mail_queue where subject like '[Prueba]%'")[0]['n']==1)
+c,r=A.post('admin-campaign-test',dict(id=cid,email='victima@example.com'));t('no se puede mandar «pruebas» a terceros',c==422,r)
+c,r=A.post('admin-campaign-send',dict(id=cid));t('enviar exige confirmación',c==422,r)
+c,r=A.post('admin-campaign-send',dict(id=cid,confirm=True));t('enviar a una audiencia vacía no falla',c==200 and r['queued']==0,r)
+t('una campaña enviada no se edita',A.post('admin-campaign-save',dict(id=cid,name='x',channel='email',subject='aaa',title='bbb',body='ccc',segment={}))[0]==409)
+c,r=A.post('admin-campaign-save',dict(name='SMS',channel='sms',body='Hola {nombre}',segment={}));t('crear campaña SMS',c==201,r)
+c,r=A.post('admin-campaign-save',dict(name='Futura',channel='email',subject='aaa',title='bbb',body='ccc',segment={},scheduled_at='2001-01-01 00:00:00'));t('no se programa en el pasado',c==422,r)
+print('— baja con un clic y píxel')
+import hmac,hashlib
+cont=q("select * from contacts where email='ana-api@example.com'")[0]
+ex("update contacts set email_optin=1,email_unsub_at=NULL where id=?",cont['id'])
+key='0123456789abcdef0123456789abcdef0123456789abcdef'
+tok=hmac.new(key.encode(),('unsub:email:%d'%cont['id']).encode(),hashlib.sha256).hexdigest()
+s1,page,_=raw('baja.php?c=%d&ch=email&t=%s'%(cont['id'],tok));t('la página de baja se muestra sin cambiar nada',s1==200 and 'Sí, dejar de recibirlos' in page and q("select email_optin from contacts where id=?",cont['id'])[0]['email_optin']==1)
+s2,page,_=raw('baja.php?c=%d&ch=email&t=%s'%(cont['id'],tok),b'do=unsub');t('confirmar da de baja',s2==200 and q("select email_unsub_at from contacts where id=?",cont['id'])[0]['email_unsub_at'] is not None)
+ex("update contacts set email_optin=1,email_unsub_at=NULL where id=?",cont['id'])
+s3,_,_=raw('baja.php?c=%d&ch=email&t=%s'%(cont['id'],tok),b'List-Unsubscribe=One-Click');t('el «un clic» de los programas de correo da de baja',s3==200 and q("select email_unsub_at from contacts where id=?",cont['id'])[0]['email_unsub_at'] is not None)
+s4,_,_=raw('baja.php?c=%d&ch=email&t=%s'%(cont['id'],'0'*64),b'do=unsub');t('un enlace falso se rechaza',s4==400)
+s5,_,_=raw('baja.php?c=%d&ch=email&t=%s'%(cont['id']+1,tok),b'do=unsub');t('el enlace de otra persona se rechaza',s5==400)
+s6,page,_=raw('baja.php?c=%d&ch=email&t=%s'%(cont['id'],tok),b'do=resub');t('se puede volver a suscribir',s6==200 and q("select email_optin from contacts where id=?",cont['id'])[0]['email_optin']==1)
+tk='a'*32;ex("insert into campaign_sends(campaign_id,contact_id,channel,token,status,created_at) values(?,?,?,?,?,datetime('now'))",cid,cont['id'],'email',tk,'sent')
+s7,gif,h=raw('api.php?action=o&t='+tk);t('el píxel devuelve un GIF y marca la apertura',s7==200 and h.get('Content-Type')=='image/gif' and q("select opened_at from campaign_sends where token=?",tk)[0]['opened_at'] is not None)
+s8,_,_=raw('api.php?action=o&t=nope');t('un token falso no rompe el píxel',s8==200)
+print('— analítica')
+V='visitante_http_0123456789'
+c,r=C.post('track',dict(v=V,e=[dict(n='view',p='/lobby',d={'view':'lobby'},us='instagram',um='social',uc='madres'),dict(n='select_product',d={'product':'full'}),dict(n='hack')]));t('el lote válido se guarda (los eventos desconocidos no)',c==200 and r['n']==2,r)
+t('los eventos guardan el origen sin datos personales',q("select utm_source,utm_campaign from events where visitor_id=? and name='view'",V)[0]=={'utm_source':'instagram','utm_campaign':'madres'})
+c,r=C.post('track',dict(v='<x>',e=[dict(n='view')]));t('un visitante inválido se rechaza',c==422)
+print('— automatizaciones y resumen')
+c,r=A.post('admin-automation-save',dict(akey='abandoned',enabled=True,delay_hours=0,subject='Tu canción te espera',title='Tu canción *te espera*',body='Texto largo suficiente.',cta_label='Terminar',personal_coupon=None));t('guardar una automatización',c==200,r)
+t('guardar con texto vacío se rechaza',A.post('admin-automation-save',dict(akey='abandoned',subject='',title='x',body='y'))[0]==422)
+t('una automatización inexistente da 404',A.post('admin-automation-save',dict(akey='nope',subject='aaa',title='bbb',body='ccc'))[0]==404)
+c,r=A.post('admin-run-marketing',{});t('ejecutar el motor a mano funciona',c==200 and 'abandoned' in r['automations'],r)
+ov=A.get('admin-growth-overview','&days=30');t('el resumen refleja contactos, campañas y automatizaciones',ov['audience']['contacts']>=2 and len(ov['automations'])==4 and len(ov['campaigns'])>=1,ov['audience'])
+t('el resumen acepta rangos y los acota',A.get('admin-growth-overview','&days=99999')['days']==365)
+print('%d ok, %d fallos'%(ok,fail));sys.exit(1 if fail else 0)

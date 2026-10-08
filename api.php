@@ -13,10 +13,12 @@ try {
   // Authoritative API result prevents tampering with reference/currency outside signed properties.
   $o=applyPayment($remote,$expected);jsonResponse(['received'=>true]);
  }
+ if($action==='o'&&$method==='GET')growthPixel();   // email open pixel: no session, no cookies
  sessionBoot();
  if($method==='POST')csrf();
- if($action==='bootstrap'&&$method==='GET')jsonResponse(['csrf'=>$_SESSION['csrf'],'tracks'=>musicPublic(),'catalog'=>array_values(catalog()),'options'=>briefOptions(),'content'=>siteContent(),'admin'=>isset($_SESSION['admin_id']),'environment'=>env('APP_ENV','production'),'commerceReady'=>env('COMMERCE_READY')==='true','testMode'=>testMode(),'heroVideo'=>env('HERO_VIDEO')==='true'&&is_file(__DIR__.'/assets/video/studio-loop.mp4')?'assets/video/studio-loop.mp4':null,'uploads'=>filesPublicConfig(),'support'=>env('SUPPORT_EMAIL'),'legal'=>['name'=>env('LEGAL_NAME'),'taxId'=>env('LEGAL_TAX_ID'),'address'=>env('LEGAL_ADDRESS')]]);
+ if($action==='bootstrap'&&$method==='GET')jsonResponse(['csrf'=>$_SESSION['csrf'],'tracks'=>musicPublic(),'catalog'=>array_values(catalog()),'prices'=>growthEnsure()?publicPrices():new stdClass,'banner'=>growthEnsure()?publicBanner():'','options'=>briefOptions(),'content'=>siteContent(),'admin'=>isset($_SESSION['admin_id']),'environment'=>env('APP_ENV','production'),'commerceReady'=>env('COMMERCE_READY')==='true','testMode'=>testMode(),'heroVideo'=>env('HERO_VIDEO')==='true'&&is_file(__DIR__.'/assets/video/studio-loop.mp4')?'assets/video/studio-loop.mp4':null,'uploads'=>filesPublicConfig(),'support'=>env('SUPPORT_EMAIL'),'legal'=>['name'=>env('LEGAL_NAME'),'taxId'=>env('LEGAL_TAX_ID'),'address'=>env('LEGAL_ADDRESS')]]);
  if($action==='music-media'&&$method==='GET')musicStream();
+ growthRoute($action,$method);
  if($action==='admin-music'&&$method==='GET'){admin();jsonResponse(['tracks'=>musicRead()]);}
  if($action==='admin-music-save'&&$method==='POST')musicSave();
  if($action==='feedback'&&$method==='POST'){
@@ -87,7 +89,7 @@ try {
    }
    if($status==='completed')$stage=5;
    $prevStatus=$o['status'];$prevStage=(int)$o['production_stage'];
-   sql('UPDATE orders SET status=?,production_stage=?,requires_attention=? WHERE id=?',[$status,$stage,($in['attention']??false)?1:0,$o['id']]);$o['status']=$status;$o['production_stage']=$stage;history($o,$note,'admin:'.$aid,$visible);
+   sql('UPDATE orders SET status=?,production_stage=?,requires_attention=? WHERE id=?',[$status,$stage,($in['attention']??false)?1:0,$o['id']]);$o['status']=$status;$o['production_stage']=$stage;history($o,$note,'admin:'.$aid,$visible);if($status==='cancelled'&&$prevStatus!=='cancelled')growthOnCancelled($o);
    $changed=$status!==$prevStatus||($status==='in_production'&&$stage>$prevStage);
    if(($in['notify']??false)===true)notifyJourney($o,$changed?(['in_production'=>'production','review'=>'review','completed'=>'completed','cancelled'=>'cancelled'][$status]??'update'):'update',['note'=>$note],'update:'.$ref.':'.bin2hex(random_bytes(6)),'Novedad enviada al cliente',$note);
    db()->commit();jsonResponse(['ok'=>true]);

@@ -1,0 +1,45 @@
+/* Admin · Crecimiento. Same tokens as the rest of the panel (--s-card, --s-line, tone colours). Mobile first. */
+.g-tabs{display:flex;gap:6px;overflow-x:auto;margin:0 0 16px;padding:4px;border-radius:999px;background:#ffffff0d;border:1px solid var(--s-line);scrollbar-width:none;width:fit-content;max-width:100%}
+.g-tabs::-webkit-scrollbar{display:none}
+.g-tabs button{flex:none;min-height:42px;padding:0 16px;border-radius:999px;font-size:14px;font-weight:700;color:#cbb8dd;white-space:nowrap}
+.g-tabs button.on{background:linear-gradient(135deg,#a56bff,#ff5fd0);color:#fff}
+.admin-shell .a-card{margin-bottom:14px}
+.g-range{display:flex;gap:6px;margin:0 0 12px}.g-range button{min-height:40px;padding:0 14px;border-radius:999px;border:1px solid var(--s-line);color:#cbb8dd;font-weight:700;font-size:13px}.g-range button.on{background:#ffffff1c;color:#fff;border-color:#c9a8ff}
+.g-kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin:0 0 14px}.g-kpis.small{margin:0}
+.g-kpi{padding:14px;border-radius:18px;background:linear-gradient(155deg,#2a1b4a,#170f29);border:1px solid var(--s-line)}
+.g-kpi small{display:block;font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--s-mute)}
+.g-kpi b{display:block;margin:4px 0 2px;font:600 24px/1.1 var(--serif,inherit);color:#fff;overflow-wrap:anywhere}.g-kpi em{display:block;font-style:normal;font-size:12px;color:#cbbbe8}
+.g-spark{display:block;width:100%;height:92px}.g-spark rect{fill:#b57cff}.g-spark rect:hover{fill:#ff4fd8}
+.g-funnel{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.g-funnel li{display:grid;grid-template-columns:1fr auto;gap:4px 12px;align-items:center;font-size:14px}.g-funnel li .g-bar{grid-column:1/-1;order:3}
+.g-funnel b small{color:#3dffc5;font-weight:700;margin-left:4px}
+.g-bar{display:block;height:8px;border-radius:5px;background:#ffffff14;overflow:hidden}.g-bar i{display:block;height:100%;border-radius:5px;background:linear-gradient(90deg,#8e5bff,#ff4fd8)}
+.g-table{width:100%;border-collapse:collapse;font-size:13.5px}
+.g-table th{padding:6px 8px;text-align:left;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--s-mute);border-bottom:1px solid var(--s-line)}
+.g-table td{padding:10px 8px;border-bottom:1px solid #ffffff10;vertical-align:top;overflow-wrap:anywhere}.g-table small{color:var(--s-mute)}
+.g-click{cursor:pointer}.g-click:hover,.g-click:focus-visible{background:#ffffff0d;outline:none}
+.g-pill{display:inline-block;margin:2px 4px 2px 0;padding:2px 9px;border-radius:999px;background:#ffffff14;font-size:11.5px;font-weight:700;color:#d9ccef}
+.g-pill.on{background:#3dffc526;color:#3dffc5}.g-pill.bad{background:#ff6b8a26;color:#ffb3c2}
+.g-link{padding:6px 0;margin-right:10px;min-height:36px;color:#e6d6ff;text-decoration:underline;text-underline-offset:3px;font-size:13px;font-weight:700}
+.g-form{display:flex;flex-direction:column;gap:12px}
+.g-row{display:grid;grid-template-columns:1fr;gap:12px}.g-row.wrap{grid-template-columns:1fr}
+.g-form .field input:not([type=checkbox]),.g-form .field select,.g-form .field textarea{width:100%;min-height:48px;font-size:16px}
+.g-form .field textarea{min-height:110px}
+.g-check{display:flex;gap:10px;align-items:center;min-height:44px;font-size:14px}.g-check input{width:22px;height:22px}
+.g-checks{margin:0;padding:12px 14px;border-radius:16px;border:1px solid var(--s-line);display:flex;flex-direction:column;gap:6px}
+.g-checks legend{padding:0 6px;font-size:13px;font-weight:700;color:#e6d6ff}.g-checks label:not(.field){display:flex;gap:10px;align-items:center;min-height:40px;font-size:14px}.g-checks small{color:var(--s-mute)}
+.g-presets{display:flex;flex-wrap:wrap;gap:8px}.g-presets button{min-height:42px;padding:0 14px;border-radius:999px;border:1px solid #c9a8ff55;color:#eadcff;font-size:13px;font-weight:700}.g-presets button.on{background:linear-gradient(135deg,#a56bff,#ff5fd0);border-color:transparent;color:#fff}
+.g-more summary{min-height:44px;display:flex;align-items:center;cursor:pointer;font-weight:700;font-size:13px;color:#e6d6ff}
+.g-preview{margin:6px 0;padding:12px 14px;border-radius:14px;background:#ffffff0b;font-size:14px}.g-warn{color:#ffd37a}
+.g-err p{margin:0 0 12px}.g-pager{display:flex;gap:12px;align-items:center;justify-content:center;margin-top:12px}
+.g-filter{align-items:end}.g-filter input,.g-filter select{width:100%;min-height:48px;font-size:16px}
+.g-list{margin:0 0 10px;padding-left:18px;font-size:13.5px;line-height:1.7;color:#d9ccef}.g-h3{margin:14px 0 6px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--s-mute)}
+.g-danger{border-color:#ff6b8a99;color:#ffd3dc}
+@media(min-width:760px){.g-kpis{grid-template-columns:repeat(3,1fr)}.g-row{grid-template-columns:repeat(2,1fr)}.g-row.wrap{grid-template-columns:repeat(2,1fr)}.g-filter{grid-template-columns:2fr 1fr auto auto}}
+@media(min-width:1100px){.g-row{grid-template-columns:repeat(3,1fr)}.g-kpis{grid-template-columns:repeat(6,1fr)}.g-kpis.small{grid-template-columns:repeat(5,1fr)}}
+/* three sections in the main nav: it scrolls sideways on a phone instead of spilling out */
+.a-nav{overflow-x:auto;scrollbar-width:none}.a-nav::-webkit-scrollbar{display:none}.a-nav button{flex:none}
+@media(max-width:560px){.a-nav button{padding:0 14px;font-size:13px}}
+.g-scroll{overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch}.g-scroll .g-table{min-width:420px}
+.admin-shell{overflow-x:hidden}
+.a-card .a-sub{text-transform:none;letter-spacing:normal;font-size:13px;line-height:1.5;color:#cbbbe8}

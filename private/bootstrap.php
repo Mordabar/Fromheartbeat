@@ -41,3 +41,6 @@ require_once BASE.'/catalog.php';
 require_once BASE.'/domain.php';
 require_once BASE.'/mail.php';
 require_once BASE.'/files.php';
+require_once BASE.'/growth.php';
+require_once BASE.'/marketing.php';
+require_once BASE.'/growth-api.php';
