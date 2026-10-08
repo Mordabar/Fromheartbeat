@@ -214,7 +214,7 @@ function mailLayoutHtml(array $m): string {
  else{$links[]=$a('Abrir el panel',appUrl('/admin.html'));}
  $help=[];foreach(array_chunk($links,2) as $row)$help[]=implode('',$row).'<br>';
  $mailto=$support!==''?$a($support,'mailto:'.$support):'';
- $foot=$team?'Aviso interno del estudio. No lo reenvíes fuera del equipo.':'Recibes este correo porque hiciste un pedido en Fromheartbeat. Tu enlace privado es personal: no lo compartas con nadie.';
+ $foot=$team?'Aviso interno del estudio. No lo reenvíes fuera del equipo.':'Recibes este correo porque hiciste un pedido en Fromheartbeat. Tu enlace privado es personal y abre todas tus canciones: no lo compartas. Para regalar una, usa «Compartir» dentro de tu sesión.';
  $fontCss='';if(mailHasAsset('fonts/cormorant-garamond.woff2')&&mailHasAsset('fonts/manrope.woff2')){
   $fu=str_replace(['"',')','\\',"'"],'',mailAsset('fonts/'));
   $fontCss='<!--[if !mso]><!--><style>@font-face{font-family:"Cormorant Garamond";src:url('.$fu.'cormorant-garamond.woff2) format("woff2");font-weight:300 700;font-style:normal;font-display:swap}@font-face{font-family:Manrope;src:url('.$fu.'manrope.woff2) format("woff2");font-weight:200 800;font-style:normal;font-display:swap}</style><!--<![endif]-->';
@@ -265,7 +265,7 @@ function mailLayoutText(array $m): string {
  if(($m['layout']??'')!=='team'){$out[]='Preguntas frecuentes: '.appUrl('/?ver=info');$out[]='Términos: '.appUrl('/?ver=terminos');$out[]='Privacidad: '.appUrl('/?ver=privacidad');}
  $s=mailSupport();if($s!=='')$out[]='Escríbenos: '.$s;
  if(!empty($m['reference']))$out[]='Referencia '.$m['reference'];
- $out[]=($m['layout']??'')==='team'?'Aviso interno del estudio.':'Tu enlace privado es personal: no lo compartas con nadie.';
+ $out[]=($m['layout']??'')==='team'?'Aviso interno del estudio.':'Tu enlace privado es personal y abre todas tus canciones: no lo compartas. Para regalar una, usa «Compartir» dentro de tu sesión.';
  return implode(PHP_EOL,$out).PHP_EOL;
 }
 

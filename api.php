@@ -38,12 +38,16 @@ try {
  }
  if($action==='recover'&&$method==='POST') {
   rate('recover',3,3600);$in=input();$email=strtolower(field($in,'email',5,254));
-  $orders=sql('SELECT o.* FROM orders o JOIN customers c ON o.customer_id=c.id WHERE c.email=? AND o.token_expires_at>UTC_TIMESTAMP() ORDER BY o.id DESC LIMIT 10',[$email])->fetchAll();
-  // One email, one link: the library opens with every song of that address.
-  if($orders){$latest=$orders[0];notifyJourney($latest,'recover',['orders'=>array_map(fn($x)=>['reference'=>$x['reference'],'product_name'=>$x['product_name'],'status'=>$x['status']],$orders)],'recover:'.$email.':'.intdiv(time(),3600));}
+  $orders=sql('SELECT o.* FROM orders o JOIN customers c ON o.customer_id=c.id WHERE c.email=? AND o.token_expires_at>UTC_TIMESTAMP() ORDER BY o.id DESC LIMIT 60',[$email])->fetchAll();
+  // One email, one link: the library opens with every paid song of that address. The link points at the newest paid order (an unpaid order anyone typed in with this address never leads the email).
+  if($orders){
+   $paid=array_values(array_filter($orders,fn($x)=>in_array($x['status'],['paid','in_production','review','completed'],true)));$list=array_slice($paid?:$orders,0,10);$latest=$list[0];
+   notifyJourney($latest,'recover',['orders'=>array_map(fn($x)=>['reference'=>$x['reference'],'product_name'=>$x['product_name'],'status'=>$x['status']],$list)],'recover:'.orderEmail($latest).':'.intdiv(time(),3600));
+  }
   jsonResponse(['message'=>'Si hay sesiones activas con ese correo, recibirás un enlace privado con todas tus canciones.']);
  }
- if($action==='order'&&$method==='GET'){$o=accessOrder((string)($_GET['reference']??''),true);$last=$_SESSION['synced'][$o['reference']]??0;$gift=!sessionIsOwner($o['reference']);if(!$gift&&in_array($o['status'],['created','payment_pending'],true)&&time()-$last>=4){$_SESSION['synced'][$o['reference']]=time();session_write_close();try{$o=syncPayments($o);}catch(Throwable $e){error_log('FHB sync '.$e->getMessage());}}jsonResponse(['order'=>$gift?giftView($o):orderView($o)]);}
+ if($action==='forget'&&$method==='POST'){unset($_SESSION['orders'],$_SESSION['emails'],$_SESSION['shared'],$_SESSION['synced']);session_regenerate_id(true);jsonResponse(['ok'=>true]);}
+ if($action==='order'&&$method==='GET'){$o=accessOrder((string)($_GET['reference']??''),true);$last=$_SESSION['synced'][$o['reference']]??0;$gift=!ownsOrder($o);if(!$gift&&in_array($o['status'],['created','payment_pending'],true)&&time()-$last>=4){$_SESSION['synced'][$o['reference']]=time();session_write_close();try{$o=syncPayments($o);}catch(Throwable $e){error_log('FHB sync '.$e->getMessage());}}jsonResponse(['order'=>$gift?giftView($o):orderView($o)]);}
  if($action==='my-orders'&&$method==='GET'){jsonResponse(['orders'=>myOrders()]);}
  if($action==='checkout'&&$method==='POST'){$in=input();jsonResponse(checkout(accessOrder(field($in,'reference',1,40))));}
  if($action==='reconcile'&&$method==='POST') {
@@ -107,7 +111,7 @@ try {
   $r=filesCommit($o,$isAdmin,$isAdmin?(string)($_POST['kind']??'delivery'):'source',$f['tmp_name'],(string)$f['name'],fn(string $dest)=>move_uploaded_file($f['tmp_name'],$dest));jsonResponse(['ok'=>true,'file'=>$r],201);
  }
  if($action==='file'&&$method==='GET') {
-  $f=sql('SELECT d.*,o.reference FROM deliverables d JOIN orders o ON o.id=d.order_id WHERE d.id=?',[(int)($_GET['id']??0)])->fetch();need((bool)$f,'Archivo no encontrado.',404);accessOrder($f['reference'],true);need($f['kind']==='delivery'||sessionIsOwner($f['reference']),'Archivo no encontrado.',404);$path=storage().'/'.$f['storage_name'];need(is_file($path),'Archivo no disponible.',404);
+  $f=sql('SELECT d.*,o.reference FROM deliverables d JOIN orders o ON o.id=d.order_id WHERE d.id=?',[(int)($_GET['id']??0)])->fetch();need((bool)$f,'El enlace no es válido o ha vencido.',404);accessOrder($f['reference'],true);need($f['kind']==='delivery'||sessionIsOwner($f['reference']),'Archivo no encontrado.',404);$path=storage().'/'.$f['storage_name'];need(is_file($path),'Archivo no disponible.',404);
   session_write_close();header('Content-Type: '.$f['mime']);header('Accept-Ranges: bytes');header("Content-Disposition: ".(isset($_GET['download'])?'attachment':'inline')."; filename*=UTF-8''".rawurlencode($f['original_name']));
   $size=filesize($path);$start=0;$end=$size-1;
   if(isset($_SERVER['HTTP_RANGE'])){need((bool)preg_match('/^bytes=(\d*)-(\d*)$/',$_SERVER['HTTP_RANGE'],$m),'Rango inválido.',416);if($m[1]===''){$start=max(0,$size-(int)$m[2]);}else{$start=(int)$m[1];if($m[2]!=='')$end=min($end,(int)$m[2]);}need($start<=$end&&$start<$size,'Rango inválido.',416);http_response_code(206);header("Content-Range: bytes $start-$end/$size");}

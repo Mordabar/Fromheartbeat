@@ -39,7 +39,7 @@ function accessOrder(string $reference,bool $viewOnly=false):array {
   if(isset($_SESSION['admin_id']))$ok=true;
   elseif(strtotime($o['token_expires_at'])>time()){
    // Owner access: this very link, or any link of the same email address opened in this browser.
-   $ok=isset($_SESSION['orders'][$reference])||(!empty($_SESSION['emails'])&&isset($_SESSION['emails'][orderEmail($o)]));
+   $ok=ownsOrder($o);
    if(!$ok&&$viewOnly)$ok=isset($_SESSION['shared'][$reference]);
   }
  }
@@ -52,19 +52,24 @@ function giftView(array $o):array {
   'brief'=>['recipient'=>$b['recipient']??'','occasion'=>$b['occasion']??'','genre'=>$b['genre']??'','mood'=>$b['mood']??''],
   'files'=>array_values(array_filter($v['files'],fn($f)=>$f['kind']==='delivery')),'history'=>[],'customer'=>['name'=>strtok((string)($v['customer']['name']??''),' ')?:'']];
 }
-function sessionIsOwner(string $reference):bool { return isset($_SESSION['admin_id'])||isset($_SESSION['orders'][$reference])||!empty($_SESSION['emails']); }
+// Owner of THIS order: its own link, or a link opened in this browser for the same email address (never "any email").
+function ownsOrder(array $o):bool { return isset($_SESSION['admin_id'])||isset($_SESSION['orders'][$o['reference']])||isset($_SESSION['emails'][orderEmail($o)]); }
+function sessionIsOwner(string $reference):bool { $o=sql('SELECT * FROM orders WHERE reference=?',[$reference])->fetch(); return $o&&ownsOrder($o); }
 // Every song the browser may open as its owner: orders of the granted email addresses plus the links opened directly.
+const PAID_STATES="'paid','in_production','review','completed'";
 function myOrders():array {
  sessionBoot(); $emails=array_keys($_SESSION['emails']??[]); $refs=array_keys($_SESSION['orders']??[]);$rows=[];
- if($emails)$rows=sql('SELECT o.id,o.reference,o.product_code,o.product_name,o.amount_in_cents,o.status,o.production_stage,o.created_at,o.brief FROM orders o JOIN customers c ON o.customer_id=c.id WHERE c.email IN ('.implode(',',array_fill(0,count($emails),'?')).') AND o.token_expires_at>UTC_TIMESTAMP() ORDER BY o.id DESC LIMIT 60',$emails)->fetchAll();
+ // By email only orders that were paid: anyone can type someone else's address when buying, so an unpaid order must not show up in a stranger's crate.
+ if($emails)$rows=sql('SELECT o.id,o.reference,o.product_code,o.product_name,o.amount_in_cents,o.status,o.production_stage,o.created_at,o.brief FROM orders o JOIN customers c ON o.customer_id=c.id WHERE c.email IN ('.implode(',',array_fill(0,count($emails),'?')).') AND o.status IN ('.PAID_STATES.') AND o.token_expires_at>UTC_TIMESTAMP() ORDER BY o.id DESC LIMIT 60',$emails)->fetchAll();
  $have=array_column($rows,'reference'); $more=array_values(array_diff($refs,$have));
  if($more)$rows=array_merge($rows,sql('SELECT id,reference,product_code,product_name,amount_in_cents,status,production_stage,created_at,brief FROM orders WHERE reference IN ('.implode(',',array_fill(0,count($more),'?')).') AND token_expires_at>UTC_TIMESTAMP()',$more)->fetchAll());
  usort($rows,fn($a,$b)=>$b['id']<=>$a['id']);
+ $files=[]; if($rows){$ids=array_column($rows,'id');foreach(sql("SELECT order_id,id,mime FROM deliverables WHERE kind='delivery' AND order_id IN (".implode(',',array_fill(0,count($ids),'?')).') ORDER BY id',$ids)->fetchAll() as $f)$files[$f['order_id']][]=$f;}
  foreach($rows as &$r){
   $b=json_decode((string)$r['brief'],true)?:[];
   $r['recipient']=(string)($b['recipient']??'');$r['occasion']=(string)($b['occasion']??'');$r['genre']=(string)($b['genre']??'');unset($r['brief']);
   $r['audio_id']=null;$r['cover_id']=null;$r['songs']=0;
-  foreach(sql("SELECT id,mime FROM deliverables WHERE order_id=? AND kind='delivery' ORDER BY id",[$r['id']])->fetchAll() as $f){
+  foreach($files[$r['id']]??[] as $f){
    if(str_starts_with((string)$f['mime'],'audio/')){$r['songs']++;$r['audio_id']??=(int)$f['id'];}
    elseif(str_starts_with((string)$f['mime'],'image/'))$r['cover_id']=(int)$f['id'];
   }
