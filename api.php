@@ -25,17 +25,26 @@ try {
  }
  if($action==='orders'&&$method==='POST'){rate('create',12,3600);$o=createOrder(input());jsonResponse(['order'=>orderView($o)],201);}
  if($action==='exchange'&&$method==='POST') {
-  rate('exchange',30,900);$in=input();$ref=field($in,'reference',1,40);$token=field($in,'token',64,64);$o=sql('SELECT * FROM orders WHERE reference=? AND token_expires_at > UTC_TIMESTAMP()',[$ref])->fetch();
-  need($o&&hash_equals($o['token_hash'],hash('sha256',$token)),'El enlace no es válido o ha vencido.',401);session_regenerate_id(true);$_SESSION['orders'][$ref]=true;jsonResponse(['ok'=>true]);
+  rate('exchange',30,900);$in=input();$ref=field($in,'reference',1,40);$token=field($in,'token',64,64);$share=($in['kind']??'')==='share';$o=sql('SELECT * FROM orders WHERE reference=? AND token_expires_at > UTC_TIMESTAMP()',[$ref])->fetch();
+  if($share){need($o&&hash_equals(shareToken($o),$token),'El enlace no es válido o ha vencido.',401);session_regenerate_id(true);$_SESSION['shared'][$ref]=true;jsonResponse(['ok'=>true,'shared'=>true]);}
+  need($o&&hash_equals($o['token_hash'],hash('sha256',$token)),'El enlace no es válido o ha vencido.',401);session_regenerate_id(true);$_SESSION['orders'][$ref]=true;
+  // Opening any private link also opens the library of that email address (all the songs the buyer requested).
+  $em=orderEmail($o);if($em!=='')$_SESSION['emails'][$em]=true;jsonResponse(['ok'=>true]);
+ }
+ if($action==='share'&&$method==='POST'){
+  rate('share',20,3600);$o=accessOrder(field(input(),'reference',1,40));need(sessionIsOwner($o['reference']),'Solo quien pidió la canción puede compartirla.',403);
+  need(in_array($o['status'],['review','completed'],true),'Podrás compartir la canción cuando esté lista.',409);
+  jsonResponse(['url'=>appUrl('/?session='.$o['reference'].'&share=1#token='.shareToken($o))]);
  }
  if($action==='recover'&&$method==='POST') {
   rate('recover',3,3600);$in=input();$email=strtolower(field($in,'email',5,254));
   $orders=sql('SELECT o.* FROM orders o JOIN customers c ON o.customer_id=c.id WHERE c.email=? AND o.token_expires_at>UTC_TIMESTAMP() ORDER BY o.id DESC LIMIT 10',[$email])->fetchAll();
-  foreach($orders as $o)notifyJourney($o,'recover',[],'recover:'.$o['reference'].':'.intdiv(time(),3600));
-  jsonResponse(['message'=>'Si hay sesiones activas con ese correo, recibirás sus enlaces privados.']);
+  // One email, one link: the library opens with every song of that address.
+  if($orders){$latest=$orders[0];notifyJourney($latest,'recover',['orders'=>array_map(fn($x)=>['reference'=>$x['reference'],'product_name'=>$x['product_name'],'status'=>$x['status']],$orders)],'recover:'.$email.':'.intdiv(time(),3600));}
+  jsonResponse(['message'=>'Si hay sesiones activas con ese correo, recibirás un enlace privado con todas tus canciones.']);
  }
- if($action==='order'&&$method==='GET'){$o=accessOrder((string)($_GET['reference']??''));$last=$_SESSION['synced'][$o['reference']]??0;if(in_array($o['status'],['created','payment_pending'],true)&&time()-$last>=4){$_SESSION['synced'][$o['reference']]=time();session_write_close();try{$o=syncPayments($o);}catch(Throwable $e){error_log('FHB sync '.$e->getMessage());}}jsonResponse(['order'=>orderView($o)]);}
- if($action==='my-orders'&&$method==='GET'){$refs=array_keys($_SESSION['orders']??[]);$rows=$refs?sql('SELECT reference,product_code,product_name,amount_in_cents,status,production_stage,created_at FROM orders WHERE reference IN ('.implode(',',array_fill(0,count($refs),'?')).') ORDER BY id DESC',$refs)->fetchAll():[];jsonResponse(['orders'=>$rows]);}
+ if($action==='order'&&$method==='GET'){$o=accessOrder((string)($_GET['reference']??''),true);$last=$_SESSION['synced'][$o['reference']]??0;$gift=!sessionIsOwner($o['reference']);if(!$gift&&in_array($o['status'],['created','payment_pending'],true)&&time()-$last>=4){$_SESSION['synced'][$o['reference']]=time();session_write_close();try{$o=syncPayments($o);}catch(Throwable $e){error_log('FHB sync '.$e->getMessage());}}jsonResponse(['order'=>$gift?giftView($o):orderView($o)]);}
+ if($action==='my-orders'&&$method==='GET'){jsonResponse(['orders'=>myOrders()]);}
  if($action==='checkout'&&$method==='POST'){$in=input();jsonResponse(checkout(accessOrder(field($in,'reference',1,40))));}
  if($action==='reconcile'&&$method==='POST') {
   rate('reconcile',30,900);$in=input();$o=accessOrder(field($in,'reference',1,40));session_write_close(); // the session lock must not wait for Wompi
@@ -98,7 +107,7 @@ try {
   $r=filesCommit($o,$isAdmin,$isAdmin?(string)($_POST['kind']??'delivery'):'source',$f['tmp_name'],(string)$f['name'],fn(string $dest)=>move_uploaded_file($f['tmp_name'],$dest));jsonResponse(['ok'=>true,'file'=>$r],201);
  }
  if($action==='file'&&$method==='GET') {
-  $f=sql('SELECT d.*,o.reference FROM deliverables d JOIN orders o ON o.id=d.order_id WHERE d.id=?',[(int)($_GET['id']??0)])->fetch();need((bool)$f,'Archivo no encontrado.',404);accessOrder($f['reference']);$path=storage().'/'.$f['storage_name'];need(is_file($path),'Archivo no disponible.',404);
+  $f=sql('SELECT d.*,o.reference FROM deliverables d JOIN orders o ON o.id=d.order_id WHERE d.id=?',[(int)($_GET['id']??0)])->fetch();need((bool)$f,'Archivo no encontrado.',404);accessOrder($f['reference'],true);need($f['kind']==='delivery'||sessionIsOwner($f['reference']),'Archivo no encontrado.',404);$path=storage().'/'.$f['storage_name'];need(is_file($path),'Archivo no disponible.',404);
   session_write_close();header('Content-Type: '.$f['mime']);header('Accept-Ranges: bytes');header("Content-Disposition: ".(isset($_GET['download'])?'attachment':'inline')."; filename*=UTF-8''".rawurlencode($f['original_name']));
   $size=filesize($path);$start=0;$end=$size-1;
   if(isset($_SERVER['HTTP_RANGE'])){need((bool)preg_match('/^bytes=(\d*)-(\d*)$/',$_SERVER['HTTP_RANGE'],$m),'Rango inválido.',416);if($m[1]===''){$start=max(0,$size-(int)$m[2]);}else{$start=(int)$m[1];if($m[2]!=='')$end=min($end,(int)$m[2]);}need($start<=$end&&$start<$size,'Rango inválido.',416);http_response_code(206);header("Content-Range: bytes $start-$end/$size");}

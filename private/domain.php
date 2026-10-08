@@ -26,9 +26,51 @@ function orderView(array $o,bool $isAdmin=false):array {
  if($isAdmin)$o['payments']=sql('SELECT * FROM payment_attempts WHERE order_id=? ORDER BY id DESC',[$o['id']])->fetchAll();
  return $o;
 }
-function accessOrder(string $reference):array {
+function orderEmail(array $o):string { return strtolower((string)(customerFor($o)['email']??'')); }
+function shareToken(array $order):string {
+ // Read-only gift link: a different secret from the owner link, so a forwarded gift never opens the buyer's other songs.
+ need(strlen(env('APP_KEY'))>=32,'Falta configurar la clave de la aplicación.',503);
+ return hash_hmac('sha256','share:'.$order['reference'],env('APP_KEY'));
+}
+function accessOrder(string $reference,bool $viewOnly=false):array {
  sessionBoot(); $o=sql('SELECT * FROM orders WHERE reference=?',[$reference])->fetch();
- need($o && (isset($_SESSION['admin_id']) || (isset($_SESSION['orders'][$reference]) && strtotime($o['token_expires_at'])>time())),'El enlace no es válido o ha vencido.',404); return $o;
+ $ok=false;
+ if($o){
+  if(isset($_SESSION['admin_id']))$ok=true;
+  elseif(strtotime($o['token_expires_at'])>time()){
+   // Owner access: this very link, or any link of the same email address opened in this browser.
+   $ok=isset($_SESSION['orders'][$reference])||(!empty($_SESSION['emails'])&&isset($_SESSION['emails'][orderEmail($o)]));
+   if(!$ok&&$viewOnly)$ok=isset($_SESSION['shared'][$reference]);
+  }
+ }
+ need($ok,'El enlace no es válido o ha vencido.',404); return $o;
+}
+// What a person with a gift link sees: the song and who it is for, nothing about the buyer, payment, history or private uploads.
+function giftView(array $o):array {
+ $v=orderView($o); $b=$v['brief']??[];
+ return ['reference'=>$v['reference'],'shared'=>true,'status'=>$v['status'],'production_stage'=>$v['production_stage'],'product_code'=>$v['product_code'],'product_name'=>$v['product_name'],'audience'=>$v['audience'],'product'=>$v['product'],
+  'brief'=>['recipient'=>$b['recipient']??'','occasion'=>$b['occasion']??'','genre'=>$b['genre']??'','mood'=>$b['mood']??''],
+  'files'=>array_values(array_filter($v['files'],fn($f)=>$f['kind']==='delivery')),'history'=>[],'customer'=>['name'=>strtok((string)($v['customer']['name']??''),' ')?:'']];
+}
+function sessionIsOwner(string $reference):bool { return isset($_SESSION['admin_id'])||isset($_SESSION['orders'][$reference])||!empty($_SESSION['emails']); }
+// Every song the browser may open as its owner: orders of the granted email addresses plus the links opened directly.
+function myOrders():array {
+ sessionBoot(); $emails=array_keys($_SESSION['emails']??[]); $refs=array_keys($_SESSION['orders']??[]);$rows=[];
+ if($emails)$rows=sql('SELECT o.id,o.reference,o.product_code,o.product_name,o.amount_in_cents,o.status,o.production_stage,o.created_at,o.brief FROM orders o JOIN customers c ON o.customer_id=c.id WHERE c.email IN ('.implode(',',array_fill(0,count($emails),'?')).') AND o.token_expires_at>UTC_TIMESTAMP() ORDER BY o.id DESC LIMIT 60',$emails)->fetchAll();
+ $have=array_column($rows,'reference'); $more=array_values(array_diff($refs,$have));
+ if($more)$rows=array_merge($rows,sql('SELECT id,reference,product_code,product_name,amount_in_cents,status,production_stage,created_at,brief FROM orders WHERE reference IN ('.implode(',',array_fill(0,count($more),'?')).') AND token_expires_at>UTC_TIMESTAMP()',$more)->fetchAll());
+ usort($rows,fn($a,$b)=>$b['id']<=>$a['id']);
+ foreach($rows as &$r){
+  $b=json_decode((string)$r['brief'],true)?:[];
+  $r['recipient']=(string)($b['recipient']??'');$r['occasion']=(string)($b['occasion']??'');$r['genre']=(string)($b['genre']??'');unset($r['brief']);
+  $r['audio_id']=null;$r['cover_id']=null;$r['songs']=0;
+  foreach(sql("SELECT id,mime FROM deliverables WHERE order_id=? AND kind='delivery' ORDER BY id",[$r['id']])->fetchAll() as $f){
+   if(str_starts_with((string)$f['mime'],'audio/')){$r['songs']++;$r['audio_id']??=(int)$f['id'];}
+   elseif(str_starts_with((string)$f['mime'],'image/'))$r['cover_id']=(int)$f['id'];
+  }
+  unset($r['id']);
+ } unset($r);
+ return $rows;
 }
 function validateBrief(array $in,string $audience):array {
  $brief=[]; foreach(['genre'=>[1,40],'mood'=>[1,40],'voice'=>[1,40],'recipient'=>[2,120],'occasion'=>[2,100],'story'=>[30,6000]] as $k=>$limit) $brief[$k]=field($in,$k,...$limit);

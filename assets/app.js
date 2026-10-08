@@ -8,7 +8,7 @@ import {GENRE_INFO, MOOD_INFO, OCCASIONS, buildContent} from './content.js';
 const $=(s)=>document.querySelector(s), esc=(s)=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money=n=>new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',maximumFractionDigits:0}).format(n/100);
 const root=$('#content'), audio=$('#sample-audio');
-let boot,view='lobby',lastView='lobby',currentOrder=null,playing=-1,studio,genreTab=null,flowView=null,myOrders=[];
+let boot,view='lobby',lastView='lobby',currentOrder=null,playing=-1,studio,genreTab=null,flowView=null,myOrders=[],mailDoor=false,libraryFocus=null;   // myOrders: every song the browser may open as owner (all orders of the emails whose link it opened) · mailDoor: the «send me my link» form was asked for
 let productPreview=1, modalReturnFocus=null, plainMode=false, sessionFocus='session', sessionPanel=null, customTrack=null;   // sessionFocus: corner of the 3D session room the camera is on · sessionPanel: the small panel (talk | files | full) opened from it
    // plainMode: the visitor chose the plain-text panels; it follows them from step to step
 const trail=[]; // screens visited, so "back" returns where the customer came from (e.g. About → the step they were on)
@@ -32,7 +32,7 @@ const STEPS={
  products:{title:'Elige tu experiencia',hint:'La misma historia, tres formas de entregarla.',zone:'Las experiencias',need:'Elige una experiencia.'},
  checkout:{title:'Tus datos y pago',hint:'Son dos minutos: revisa, dinos dónde enviártela y paga.',zone:'Tu sesión',need:'Completa tus datos y acepta los términos.'}
 };
-const ZONES={lobby:'Tu estudio',samples:'La pared de vinilos',info:'Información',about:'Nosotros',session:'Tu sesión',recover:'Tu sesión',terms:'Información',privacy:'Información'};
+const ZONES={lobby:'Tu estudio',samples:'La pared de vinilos',info:'Información',about:'Nosotros',session:'Tu sesión',recover:'Tu sesión',library:'Mis canciones',terms:'Información',privacy:'Información'};
 const catalogPerson=()=>boot.catalog.filter(p=>p.audience==='person');
 const selectedProduct=()=>catalogPerson().find(p=>p.code===draft.product)||catalogPerson().find(p=>p.code==='personalizada');
 
@@ -113,7 +113,7 @@ function wizardView(step){const body={genre:genreStep,mood:moodStep,voice:voiceS
 
 function recoverView(){
  const has=myOrders.length>0,mail=`<form id="recover-form"><label class="field"><span>El correo con el que hiciste tu pedido</span><input type="email" name="email" required autocomplete="email" placeholder="tucorreo@ejemplo.com"></label><p class="form-error" id="recover-result" role="status"></p><button class="secondary" type="submit">${ic('mail')} Enviarme mi enlace</button></form>`;
- const list=has?`<h2 class="s-h"><span>En este dispositivo</span><b>${myOrders.length} ${myOrders.length>1?'sesiones':'sesión'}</b></h2><div class="my-orders">${myOrders.map(o=>{const st=STATE[o.status]||STATE.created,stg=['created','payment_pending','cancelled'].includes(o.status)?'':o.status==='completed'?'Entregada':'Etapa '+(Number(o.production_stage)+1)+' de 6 · '+stageInfoFor(o)[Number(o.production_stage)||0][0];return `<button class="my-order tone-${st.tone}" data-order="${esc(o.reference)}"><span class="mo-badge" aria-hidden="true">${ic(st.icon)}</span><span class="mo-text"><b class="mo-state">${esc(st.label)}</b><strong>${esc(o.product_name)} · ${money(o.amount_in_cents)}</strong><small>${esc(stg||'Aún no empieza')} · ${esc(o.reference)}</small></span>${ic('arrow')}</button>`;}).join('')}</div><details class="s-card s-lost"><summary>${ic('mail')} ¿No ves tu sesión? Recíbela por correo</summary>${mail}</details>`:`<p class="s-says">No encontramos sesiones en este dispositivo. Escribe el correo de tu pedido y te enviamos tu enlace privado.</p>${mail}`;
+ const list=has?`<h2 class="s-h"><span>Tus canciones</span><b>${myOrders.length} ${myOrders.length>1?'sesiones':'sesión'}</b></h2><div class="my-orders">${myOrders.map(o=>{const st=STATE[o.status]||STATE.created,stg=['created','payment_pending','cancelled'].includes(o.status)?'':o.status==='completed'?'Entregada':'Etapa '+(Number(o.production_stage)+1)+' de 6 · '+stageInfoFor(o)[Number(o.production_stage)||0][0];return `<button class="my-order tone-${st.tone}" data-order="${esc(o.reference)}"><span class="mo-badge" aria-hidden="true">${ic(st.icon)}</span><span class="mo-text"><b class="mo-state">${esc(st.label)}</b><strong>${esc(o.recipient?`Para ${o.recipient}`:o.product_name)} · ${esc(o.product_name)}</strong><small>${esc(stg||'Aún no empieza')} · ${esc(o.reference)}</small></span>${ic('arrow')}</button>`;}).join('')}</div><details class="s-card s-lost"><summary>${ic('mail')} ¿Falta alguna? Recibe tu enlace por correo</summary>${mail}</details>`:`<p class="s-says">Escribe el correo de tu pedido y te enviamos un enlace privado que abre todas tus canciones.</p>${mail}`;
  return shell({cls:'session',head:`<div class="head-row"><button class="icon-btn" data-go="lobby" aria-label="Volver al inicio">${ic('back')}</button><span class="step-count">Mi sesión</span><span class="icon-spacer"></span></div>`,body:`<div class="s-wrap">${list}</div>`});}
 
 function sessionView(){const o=currentOrder;if(!o)return shell({head:simpleHead('Abriendo tu sesión…'),body:''});
@@ -132,7 +132,7 @@ const DRAWER_VIEWS=['about','terms','privacy','recover','checkout','story'];
 const announce=text=>{const l=$('#live');l.textContent='';requestAnimationFrame(()=>{l.textContent=text;});};
 let returnTo=null;
 const nextTarget=step=>returnTo&&step!=='checkout'?'checkout':step==='products'?(firstMissingBrief(draft)||'checkout'):FLOW[FLOW.indexOf(step)+1];
-function sync3D(){if(!studio)return;studio.setDraft(draft);studio.stations.session?.setOrder(currentOrder?{reference:currentOrder.reference,status:currentOrder.status,productName:currentOrder.product_name,stage:currentOrder.production_stage}:null);studio.stations.cockpit?.setOrder(currentOrder);renderHud();}
+function sync3D(){if(!studio)return;studio.setDraft(draft);if(studio.stations.session){studio.stations.session.focus=libraryFocus;studio.stations.session.setOrders(myOrders);}studio.stations.cockpit?.setOrder(currentOrder);renderHud();}
 function mountOptions(){const host=$('#mobile-content');if(root.parentElement!==host)host.append(root);document.body.classList.toggle('mobile-studio',isMobile());}
 function syncInert(){const k=$('#stage-keys');if(k)k.inert=optionsDialog.open&&(DRAWER_VIEWS.includes(view)||(view==='session'&&!!sessionPanel));}
 function openOptions(){mountOptions();if(!optionsDialog.open){modalReturnFocus=document.activeElement;optionsDialog.show();document.body.classList.add('options-open');$('#close-options').focus({preventScroll:true});}syncInert();renderHud();frameStudio();}
@@ -149,6 +149,7 @@ const KEY_LABEL=a=>{
   case'track':return`Escuchar la canción ${a.index+1}`;
   case'session-play':return'Escuchar mi canción';case'session-file':return`Descargar ${currentOrder?.files?.find(f=>f.id===a.id)?.original_name||'un archivo de la entrega'}`;case'session-pay':return'Ir al pago seguro';case'session-plain':return'Ver la sesión en texto';case'session-talk':return'Escribir al productor';case'session-files':return'Subir material';case'session-stage':return`Ver la etapa ${a.index+1}`;
   case'edit':return`Cambiar ${{genre:'el género',mood:'la emoción',voice:'la voz',story:'para quién es',products:'la experiencia'}[a.step]||a.step}`;
+  case'order':{const o=myOrders.find(x=>x.reference===a.ref);return o?`Abrir ${o.recipient?'la canción para '+o.recipient:o.product_name} (${o.reference})`:'Abrir una canción';}case'lib-page':return a.dir<0?'Ver canciones anteriores':'Ver más canciones';case'mail':return'Recibir mi enlace por correo';
   case'rec':return'Crear mi canción';case'listen':return'Escuchar canciones';case'library':return'Ver toda la colección';
   case'go':return{recover:'Abrir mi sesión',mood:'Elegir la emoción',terms:'Leer los términos',privacy:'Leer la privacidad'}[a.view]||`Ir a ${a.view}`;
   default:return'';
@@ -196,22 +197,24 @@ function renderHud(){
  let kicker='',title='';
  if(flow){kicker=`Paso ${i+1} de ${FLOW.length} · ${STEPS[view].zone}`;title=STEPS[view].title;}
  else if(view==='samples'){kicker='Fromheartbeat Originals';title='Historias que ya suenan';}
+ else if(view==='library'){kicker='Tu colección privada';title='Mis canciones';}
  else if(view==='info')title='Información del estudio';
  cap.hidden=!title||drawer||studio?.light;
  cap.innerHTML=title?`<p class="cap-kicker">${esc(kicker)}</p><h2 class="cap-title">${esc(title)}</h2>`:'';
  const show=view!=='lobby'&&!drawer&&!studio?.light;
  jr.hidden=!show;document.body.classList.toggle('journey-on',show);$('#lobby-hint').hidden=view!=='lobby'||drawer||!!studio?.light;
  if(!show){jr.innerHTML='';return;}
- const ok=flow&&valid(view),back=flow?(i?FLOW[i-1]:'lobby'):'lobby';
+ const ok=flow&&valid(view),back=flow?(i?FLOW[i-1]:'lobby'):view==='session'&&myOrders.length>1&&studio?.renderer&&!studio.light?'library':'lobby';
  let primary;
  if(flow&&['story','checkout'].includes(view)&&!ok)primary=`<button class="j-next primary" data-plain>${iconSvg('pen')}<span>${view==='story'?'Escribir mi historia':'Completar mis datos'}</span></button>`;
  else if(flow&&view==='checkout')primary=`<button class="j-next primary" data-plain>${iconSvg('lock')}<span>${esc(nextLabel('checkout'))}</span></button>`;
  else if(flow)primary=`<button class="j-next primary ${ok?'':'locked'}" id="j-next" data-next="${nextTarget(view)}" aria-disabled="${!ok}"><span>${esc(nextLabel(view))}</span>${iconSvg('arrow')}</button>`;
+ else if(view==='library')primary=`<button class="j-next primary" data-go="resume">${iconSvg('sparkle')}<span>Pedir otra canción</span></button>`;
  else if(view==='samples')primary=`<button class="j-next primary" data-go="resume"><span>Crear mi canción</span>${iconSvg('arrow')}</button>`;
  else if(view==='session'&&currentOrder){const p=sessionPrimary();primary=`<button class="j-next primary" data-session="${p.act}">${iconSvg(p.icon)}<span>${esc(p.label)}</span></button>`;}
  else primary=`<button class="j-next primary" data-plain><span>Abrir información</span>${iconSvg('lines')}</button>`;
  const steps=view==='session'&&currentOrder?`<ol class="j-steps">${SESSION_NAV.map(([v,icon,label])=>`<li><button class="j-step ${v===sessionFocus?'current':''}" data-focus="${v}" aria-label="${label}" ${v===sessionFocus?'aria-current="step"':''}>${iconSvg(icon)}</button></li>`).join('')}</ol>`:flow?`<ol class="j-steps">${FLOW.map((s,j)=>`<li><button class="j-step ${j===i?'current':valid(s)?'done':''}" data-go="${s}" aria-label="Paso ${j+1}: ${STEPS[s].zone}" ${j===i?'aria-current="step"':''}>${iconSvg(STEP_ICON[s])}</button></li>`).join('')}</ol>`:'';
- jr.innerHTML=`${steps}<div class="j-row"><button class="j-btn j-back" data-go="${back}" aria-label="${flow&&i?'Paso anterior':'Volver al estudio'}">${iconSvg('back')}</button>${primary}<button class="j-btn j-plain" data-plain aria-label="Ver en texto plano" title="Ver en texto plano">${iconSvg('lines')}</button></div>`;
+ jr.innerHTML=`${steps}<div class="j-row"><button class="j-btn j-back" data-go="${back}" aria-label="${flow&&i?'Paso anterior':back==='library'?'Volver a mis canciones':'Volver al estudio'}">${iconSvg('back')}</button>${primary}<button class="j-btn j-plain" data-plain aria-label="Ver en texto plano" title="Ver en texto plano">${iconSvg('lines')}</button></div>`;
 }
 
 // Tell the 3D camera which part of the screen is free of HUD and drawer: the subject is framed inside it.
@@ -229,12 +232,19 @@ function frameStudio(){
  studio.setFree([left,top,right,Math.max(top+120,bottom)]);
  const off=Math.abs(studio.rig.yaw)+Math.abs(studio.rig.pitch)+Math.abs(studio.rig.zoom-1)>0.03;$('#reset-view').hidden=!off;
 }
-function render(enter=true){mountOptions();const keepMsg=root.querySelector('#s-msg')?.value||'';const keepScroll=!enter?(root.querySelector('.panel-body')?.scrollTop||0):0;root.innerHTML=(FLOW.includes(view)?()=>wizardView(view):{lobby,info:aboutView,about:aboutView,samples:samplesView,recover:recoverView,session:sessionView,terms:()=>legalView(false),privacy:()=>legalView(true)}[view]||lobby)();const panel=root.querySelector('.panel');if(panel&&enter)panel.classList.add('enter');document.body.dataset.view=view;if(keepScroll){const pb=root.querySelector('.panel-body');if(pb)pb.scrollTop=keepScroll;}const msgBox=root.querySelector('#s-msg');if(msgBox&&keepMsg)msgBox.value=keepMsg;sync3D();mountUploads();requestAnimationFrame(frameStudio);}
+function render(enter=true){mountOptions();const keepMsg=root.querySelector('#s-msg')?.value||'';const keepScroll=!enter?(root.querySelector('.panel-body')?.scrollTop||0):0;root.innerHTML=(FLOW.includes(view)?()=>wizardView(view):{lobby,info:aboutView,about:aboutView,samples:samplesView,recover:recoverView,library:recoverView,session:sessionView,terms:()=>legalView(false),privacy:()=>legalView(true)}[view]||lobby)();const panel=root.querySelector('.panel');if(panel&&enter)panel.classList.add('enter');document.body.dataset.view=view;if(keepScroll){const pb=root.querySelector('.panel-body');if(pb)pb.scrollTop=keepScroll;}const msgBox=root.querySelector('#s-msg');if(msgBox&&keepMsg)msgBox.value=keepMsg;sync3D();mountUploads();requestAnimationFrame(frameStudio);}
 
 function mountUploads(){const el=root.querySelector('[data-uploader]');if(el&&currentOrder&&view==='session')mountUploader(el,{ref:currentOrder.reference,role:'customer',kind:'source',files:currentOrder.files,status:currentOrder.status});}
 async function refreshAfterUpload(ref){if(view!=='session'||currentOrder?.reference!==ref)return;const inUp=!!document.activeElement?.closest?.('#s-upload');try{currentOrder=(await api('order',null,'&reference='+encodeURIComponent(ref))).order;render(false);if(inUp)root.querySelector('[data-u-pick]')?.focus({preventScroll:true});}catch{}}
+// The library of songs: everything the browser may open as owner. Refreshed whenever the visitor walks up to it.
+async function refreshLibrary(){try{const r=await api('my-orders');myOrders=r.orders;}catch{return;}
+ if(view==='recover'&&!mailDoor&&myOrders.length&&studio?.renderer&&!studio.light)go('library');else if(view==='recover'||view==='library')render(false);}
 function go(next){
  if(!boot)return;
+ const has3D=!!studio?.renderer&&!studio.light;
+ mailDoor=next==='mail';if(next==='mail')next='recover';
+ if(next==='library'&&!has3D)next='recover';
+ if(next==='recover'&&!mailDoor&&has3D&&myOrders.length)next='library';
  const wasLegal=['terms','privacy'].includes(view),drawerWasOpen=optionsDialog.open;
  if(next==='lobby')plainMode=false;
  const keepPlain=plainMode&&FLOW.includes(next);
@@ -253,7 +263,7 @@ function go(next){
  if(next==='lobby')trail.length=0;else if(!back&&next!==view){trail.push(view);if(trail.length>20)trail.shift();}
  if(FLOW.includes(next))flowView=next;
  if(next==='checkout'||!FLOW.includes(next))returnTo=next==='terms'||next==='privacy'?returnTo:null;
- if(next==='recover')api('my-orders').then(r=>{myOrders=r.orders;if(view==='recover')render(false);}).catch(()=>{});
+ if(next==='recover'||next==='library')refreshLibrary();
  view=next;genreTab=null;
  if(draft.mood)studio?.tone(draft.mood);
  render();
@@ -289,6 +299,8 @@ function onAction(a){
  else if(a.type==='rec')go('resume');
  else if(a.type==='listen')go('samples');
  else if(a.type==='go')go(a.view);
+ else if(a.type==='order'){if(a.ref)loadOrder(a.ref).catch(e=>toast(e.message));}
+ else if(a.type==='mail')go('mail');
  else if(a.type==='edit'){returnTo='checkout';go(a.step);}
  else if(a.type==='session-play')playOrderAudio();
  else if(a.type==='session-file')location.assign(`api.php?action=file&id=${a.id}&download=1`);
@@ -422,7 +434,10 @@ async function refreshOrder(){if(!currentOrder)return;currentOrder=(await api('o
 async function loadOrder(ref){currentOrder=(await api('order',null,'&reference='+encodeURIComponent(ref))).order;go('session');}
 async function start(){try{boot=await api('bootstrap');configureUploads({getCsrf:()=>boot.csrf,setCsrf:t=>{boot.csrf=t;},config:boot.uploads,onBatchDone:refreshAfterUpload});if(Array.isArray(boot.tracks))tracks=boot.tracks;if(!catalogPerson().some(p=>p.code===draft.product))draft.product='personalizada';studio=new Studio($('#studio'));if(studio.light)document.body.classList.add('light-mode');studio.setContent(buildContent(boot,tracks,money));studio.stations.cockpit?.setCommerce(boot.commerceReady);if(boot.commerceReady)setTimeout(()=>loadWompi().catch(()=>{}),2500);onUploadStats(u=>{if(currentOrder&&u.ref===currentOrder.reference)studio?.stations.cockpit?.setUpload(u);});studio.setTracks(tracks);studio.setDraft(draft);if(draft.mood)studio.tone(draft.mood);hydrateIcons();render();frameStudio();if(studio.light)openOptions();
  if(new URLSearchParams(location.search).has('e2e'))window.__fhb={studio,go,draft:()=>draft,view:()=>view,onAction,order:()=>currentOrder,focus:()=>sessionFocus,panel:()=>sessionPanel};
- const params=new URLSearchParams(location.search);const ref=params.get('session');if(ref){const hash=new URLSearchParams(location.hash.slice(1));const token=hash.get('token');if(token){await api('exchange',{reference:ref,token});history.replaceState({},'',`?session=${encodeURIComponent(ref)}`);}if(params.get('id')){try{await api('reconcile',{reference:ref,transaction:params.get('id')});}catch(e){toast(e.message);}}await loadOrder(ref);}else{const map={terminos:'terms',privacidad:'privacy',info:'about'},k=params.get('ver'),v=Object.prototype.hasOwnProperty.call(map,k)?map[k]:null;if(v){history.replaceState({},'',location.pathname);go(v);}}}catch(e){if(boot){go('recover');toast(e.message);}else{root.innerHTML=shell({head:`<h1 id="panel-title">El estudio está <em>tomando aire.</em></h1>`,body:`<p class="lede">${esc(e.message)}</p>`,foot:`<button class="primary" id="retry-start">Volver a intentar ↻</button>`});mountOptions();openOptions();$('#retry-start').onclick=start;}}}
+ const params=new URLSearchParams(location.search);const ref=params.get('session');if(ref){const hash=new URLSearchParams(location.hash.slice(1));const token=hash.get('token');const gift=params.get('share')==='1';
+  if(token){await api('exchange',gift?{reference:ref,token,kind:'share'}:{reference:ref,token});history.replaceState({},'',`?session=${encodeURIComponent(ref)}${gift?'&share=1':''}`);}if(params.get('id')){try{await api('reconcile',{reference:ref,transaction:params.get('id')});}catch(e){toast(e.message);}}if(!gift){try{myOrders=(await api('my-orders')).orders;}catch{}}
+  // Several songs under the same email: the link opens the whole crate, with the one from this link ready to open.
+  if(!gift&&token&&!params.get('id')&&myOrders.length>1&&studio?.renderer&&!studio.light){libraryFocus=ref;history.replaceState({},'',location.pathname);go('library');}else await loadOrder(ref);}else{const map={terminos:'terms',privacidad:'privacy',info:'about'},k=params.get('ver'),v=Object.prototype.hasOwnProperty.call(map,k)?map[k]:null;if(v){history.replaceState({},'',location.pathname);go(v);}}}catch(e){if(boot){go('recover');toast(e.message);}else{root.innerHTML=shell({head:`<h1 id="panel-title">El estudio está <em>tomando aire.</em></h1>`,body:`<p class="lede">${esc(e.message)}</p>`,foot:`<button class="primary" id="retry-start">Volver a intentar ↻</button>`});mountOptions();openOptions();$('#retry-start').onclick=start;}}}
 start();
 // While a payment is open, check its result often (the server asks Wompi) and celebrate when it is approved.
 let lastOrderPoll=0;

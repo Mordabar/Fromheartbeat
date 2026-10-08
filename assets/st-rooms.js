@@ -1,61 +1,10 @@
-// Two quiet corners: the private terminal ("Mi sesión") and the information wall (about, terms, privacy).
+// The information wall (about, terms, privacy).
 import * as THREE from './vendor/three.module.js';
 import {Surface, textPlane, neonText, roundRect, fit, wrap, roundedSlab, glowSprite, damp, FONT} from './gfx.js';
 import {drawIcon} from './icons.js';
 import {stationGroup, AZIMUTH} from './layout.js';
 import {put, box, neonFrame, makeScreen, Pill} from './st-kit.js';
 
-import {STATE, STAGE_INFO} from './session-ui.js';
-const TONE = {pay: '#ffc857', make: '#c9a0ff', review: '#38e1ff', done: '#3dffc5', off: '#a79bb8'};
-const SHORT = ['Historia', 'Letra', 'Grabación', 'Producción', 'Mezcla', 'Entrega'];
-
-export function buildSession(s) {
-  const g = stationGroup(AZIMUTH.session); s.scene.add(g);
-  const m = s.m, st = {group: g, order: null};
-  put(g, new THREE.BoxGeometry(13, 12.6, 0.5), m.dark, 0, 6.3, -3);
-  const fr = new THREE.Group(); fr.position.set(0, 6.3, -2.7); g.add(fr); neonFrame(fr, 12.6, 12.2, m.neon, 0.06);
-  box(g, 10.4, 1.2, 3.4, m.panel, 0, 0.6, 1.2); box(g, 10.5, 0.06, 0.06, m.accent, 0, 1.22, 2.9);
-  box(g, 3.4, 0.08, 1.2, m.metal, 0, 1.28, 2.0);
-
-  st.screen = makeScreen(s, 9.2, 5.3, (c, w, h, state) => {
-    const bg = c.createLinearGradient(0, 0, w, h); bg.addColorStop(0, '#1e1040'); bg.addColorStop(1, '#0a0520'); c.fillStyle = bg; c.fillRect(0, 0, w, h);
-    c.fillStyle = 'rgba(160,110,255,.06)'; for (let y = 0; y < h; y += 6) c.fillRect(0, y, w, 1.5);
-    const px = w * 0.06, o = state?.order; c.textAlign = 'left'; c.textBaseline = 'middle';
-    c.fillStyle = '#a992d9'; c.font = `700 ${h * 0.05}px ${FONT.sans}`; c.fillText(o ? `TU SESIÓN · ${o.reference}` : 'FROMHEARTBEAT · SALA PRIVADA', px, h * 0.08);
-    if (!o) {
-      neonText(c, 'Mi sesión', px, h * 0.3, {size: h * 0.2, color: '#c9a8ff', align: 'left', blur: 20});
-      c.fillStyle = '#efe6ff'; c.font = `500 ${h * 0.07}px ${FONT.sans}`;
-      wrap(c, 'Sigue tu canción etapa por etapa y escúchala cuando esté lista. Entras con el enlace de tu pedido, sin crear cuenta.', w * 0.88).slice(0, 3).forEach((l, i) => c.fillText(l, px, h * 0.5 + i * h * 0.1));
-      c.fillStyle = '#b9a6e6'; c.font = `600 ${h * 0.058}px ${FONT.sans}`; c.fillText('Toca la pantalla para abrir tus pedidos ↗', px, h * 0.88);
-      return;
-    }
-    const look = STATE[o.status] || STATE.created, tone = TONE[look.tone], stage = ['review', 'completed'].includes(o.status) ? 5 : Number(o.stage ?? 0), pending = ['created', 'payment_pending', 'cancelled'].includes(o.status), finished = o.status === 'completed';
-    neonText(c, look.label, px, h * 0.24, {size: h * 0.15, color: tone, align: 'left', blur: 18, maxW: w * 0.88});
-    c.fillStyle = '#efe6ff'; c.font = `500 ${h * 0.058}px ${FONT.sans}`; c.textAlign = 'left';
-    const says = o.status === 'in_production' ? (stage === 5 ? 'Estamos en el último paso: preparamos la entrega.' : STAGE_INFO[stage][1]) : look.says;
-    wrap(c, says, w * 0.88).slice(0, 2).forEach((l, k) => c.fillText(l, px, h * 0.4 + k * h * 0.072));
-    // Six channels, like the faders of a console: full = done, lit = now, empty = soon.
-    const span = w - px * 2, col = span / 6, top = h * 0.57, bot = h * 0.82;
-    SHORT.forEach((label, k) => {
-      const cx = px + col * (k + 0.5), state = finished || (!pending && k < stage) ? 'done' : !pending && k === stage ? 'now' : 'next';
-      c.fillStyle = 'rgba(255,255,255,.1)'; roundRect(c, cx - col * 0.16, top, col * 0.32, bot - top, col * 0.08); c.fill();
-      const fill = state === 'done' ? 1 : state === 'now' ? 0.55 : 0;
-      if (fill) { c.fillStyle = state === 'done' ? '#3dffc5' : '#b57cff'; c.shadowColor = c.fillStyle; c.shadowBlur = state === 'now' ? 18 : 8; roundRect(c, cx - col * 0.16, bot - (bot - top) * fill, col * 0.32, (bot - top) * fill, col * 0.08); c.fill(); c.shadowBlur = 0; }
-      c.fillStyle = state === 'next' ? '#8f7cb8' : '#ffffff'; c.font = `${state === 'now' ? 800 : 600} ${h * 0.05}px ${FONT.sans}`; c.textAlign = 'center'; c.fillText(label, cx, h * 0.89, col * 0.96);
-      c.font = `700 ${h * 0.04}px ${FONT.sans}`; c.fillStyle = state === 'now' ? '#d9c0ff' : '#8f7cb8'; c.fillText(state === 'now' ? 'AHORA' : String(k + 1), cx, h * 0.945);
-    });
-  }, {px: 120});
-  st.screen.group.position.set(0, 6.4, -2.4); g.add(st.screen.group);
-  const hit = new THREE.Mesh(new THREE.PlaneGeometry(9.6, 5.7), m.hit); hit.position.set(0, 6.4, -2.2); hit.userData = {action: {type: 'go', view: 'recover'}, id: 'terminal', target: st.screen}; g.add(hit); s.pickables.push(hit);
-  st.pill = new Pill(s, {w: 5.4, h: 1.0, label: 'Abrir mi sesión', action: {type: 'go', view: 'recover'}, id: 'session-open', color: '#c6a2ff', icon: 'user'});
-  st.pill.group.position.set(0, 1.9, 3.2); st.pill.group.rotation.x = -0.4; g.add(st.pill.group);
-
-  st.setOrder = o => { st.order = o; st.screen.surface.redraw({order: o}); };
-  st.update = (dt, t, c) => { st.pill.update(dt, c.hovered); };
-  st.shot = portrait => ({focus: g.localToWorld(new THREE.Vector3(0, 5.2, 0)), az: AZIMUTH.session, pitch: 0.03, w: portrait ? 10.2 : 13, h: portrait ? 11.4 : 11.2, limits: {yaw: 26, pMin: -8, pMax: 12}});
-  s.stations.session = st; s.updaters.push(st.update);
-  return st;
-}
 
 export function buildAbout(s) {
   const g = stationGroup(AZIMUTH.about); s.scene.add(g);

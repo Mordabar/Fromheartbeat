@@ -9,7 +9,7 @@ import {RAD, ROOM_RADIUS} from './layout.js';
 export {MOODS};
 
 // Which station frames each view of the application.
-const STATION_OF = {lobby: 'stage', mood: 'stage', checkout: 'stage', genre: 'genre', voice: 'voice', story: 'story', products: 'products', samples: 'samples', session: 'cockpit', 'session-song': 'cockpit', 'session-talk': 'cockpit', 'session-files': 'cockpit', recover: 'session', info: 'about', about: 'about', terms: 'about', privacy: 'about'};
+const STATION_OF = {lobby: 'stage', mood: 'stage', checkout: 'stage', genre: 'genre', voice: 'voice', story: 'story', products: 'products', samples: 'samples', session: 'cockpit', 'session-song': 'cockpit', 'session-talk': 'cockpit', 'session-files': 'cockpit', recover: 'session', library: 'session', info: 'about', about: 'about', terms: 'about', privacy: 'about'};
 
 export class Studio {
   constructor(canvas) {

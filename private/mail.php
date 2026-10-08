@@ -393,10 +393,12 @@ function mailModel(string $kind,array $o,array $c,array $ctx=[]): array {
     ['cta'=>['label'=>'Escribir al estudio','url'=>'mailto:'.$support.'?subject='.rawurlencode('Sobre mi sesión cancelada · '.$ref)]]]));
    break;
   case 'recover':
-   $m+=['subject'=>'Vuelve a tu sesión · '.$ref,'preheader'=>'Aquí tienes tu acceso privado al estudio.','title'=>'Tu acceso *privado.*'];
-   $m['blocks']=[['lead'=>$lead('pediste volver a tu sesión. Con este botón entras directo, sin contraseña ni cuenta.')],
-    $summary('Tu sesión',[['Referencia',$ref],['Experiencia',$o['product_name']],['Estado',mailStatusLabel((string)$o['status'])]]),
-    ['cta'=>['label'=>'Abrir mi sesión','url'=>$url,'hint'=>'Si no fuiste tú, ignora este correo. Nadie puede entrar sin este enlace, así que no lo compartas.']]];
+   $all=array_values(array_filter((array)($ctx['orders']??[]),'is_array'));$many=count($all)>1;
+   $m+=['subject'=>$many?'Tus canciones en Fromheartbeat':'Vuelve a tu sesión · '.$ref,'preheader'=>$many?'Un solo enlace abre todas tus canciones.':'Aquí tienes tu acceso privado al estudio.','title'=>$many?'Todas tus *canciones.*':'Tu acceso *privado.*'];
+   $rows=$many?array_map(fn($x)=>[(string)$x['product_name'].' · '.$x['reference'],mailStatusLabel((string)$x['status'])],$all):[['Referencia',$ref],['Experiencia',$o['product_name']],['Estado',mailStatusLabel((string)$o['status'])]];
+   $m['blocks']=[['lead'=>$lead($many?'pediste volver a tus sesiones. Con este botón entras directo y encuentras en el estudio todas las canciones que has pedido, sin contraseña ni cuenta.':'pediste volver a tu sesión. Con este botón entras directo, sin contraseña ni cuenta.')],
+    $summary($many?'Tus canciones':'Tu sesión',$rows),
+    ['cta'=>['label'=>$many?'Abrir mis canciones':'Abrir mi sesión','url'=>$url,'hint'=>'Si no fuiste tú, ignora este correo. Nadie puede entrar sin este enlace, así que no lo compartas: para regalar una canción usa «Compartir» dentro de tu sesión.']]];
    break;
   default: // update
    $bq=json_decode((string)($o['brief']??''),true);$scoped=is_array($bq)&&!empty($bq['agreed_scope']);$canReply=in_array($o['status'],['in_production','review','completed'],true);
